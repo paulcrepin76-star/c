@@ -73,7 +73,7 @@ def parse_questions(path: Path) -> list[dict]:
 def set_user_password(password: str, with_salt: bool) -> None:
     salt = str(uuid.uuid4()) if with_salt else "default"
     material = (salt + password) if with_salt else password
-    hashed = bcrypt.hashpw(material.encode(), bcrypt.gensalt(10)).decode()
+    hashed = bcrypt.hashpw(material.encode(), bcrypt.gensalt(10, prefix=b"2a")).decode()
     conn = psycopg2.connect(
         host=PG["host"],
         port=PG["port"],
