@@ -155,7 +155,15 @@ tr.warn { background: var(--warn); }
   margin-right: 6px;
 }
 .dot.ready, .dot.connected { background: var(--ok); }
-.dot.manual, .dot.error { background: #c8892a; }
+.dot.manual, .dot.error, .dot.needs_reauth { background: #c8892a; }
+.dot.never_logged_in { background: var(--bad); }
+.vnc {
+  width: 100%;
+  height: 70vh;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #111;
+}
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 16px 0; }
 label { display: flex; flex-direction: column; gap: 6px; font-size: 0.9rem; }
 input, select {

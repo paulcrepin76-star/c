@@ -342,3 +342,31 @@ class CatalogItem(Base):
     supplier: Mapped[Supplier] = relationship()
 
     __table_args__ = (UniqueConstraint("supplier_id", "sku", "captured_on", name="uq_catalog_item_day"),)
+
+
+class CollectorRun(Base):
+    __tablename__ = "collector_runs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime)
+    checked: Mapped[int] = mapped_column(Integer, default=0)
+    updated: Mapped[int] = mapped_column(Integer, default=0)
+    unchanged: Mapped[int] = mapped_column(Integer, default=0)
+    unavailable: Mapped[int] = mapped_column(Integer, default=0)
+    needs_reauth: Mapped[str] = mapped_column(Text, default="")
+    sources_json: Mapped[str] = mapped_column(Text, default="[]")
+    notes: Mapped[str] = mapped_column(Text, default="")
+
+
+class CostSnapshot(Base):
+    __tablename__ = "cost_snapshots"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    captured_on: Mapped[date | None] = mapped_column(Date)
+    kind: Mapped[str] = mapped_column(String(20), default="recipe")
+    ref_id: Mapped[int] = mapped_column(Integer, default=0)
+    name: Mapped[str] = mapped_column(String(200), default="")
+    cost: Mapped[Decimal] = mapped_column(Money, default=0)
+
+    __table_args__ = (UniqueConstraint("captured_on", "kind", "ref_id", name="uq_cost_snapshot_day"),)

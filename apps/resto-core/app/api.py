@@ -12,7 +12,8 @@ from app.paperless_hook import ensure_paperless_sync_workflow, sync_paperless_no
 from app.purchasing import board_payload, purchasing_board
 from app.catalog import scan_catalogs
 from app.collector import ingest_collected_items
-from app.equivalents import watch_payload
+from app.equivalents import watch_payload, COLLECTOR_PRODUCT_CAP
+from app.intel import overnight_report, save_collector_run, set_browser_status
 from app.market import scan_external_prices
 from app.services import period_costing, wine_rows
 from app.sync import sync_all, sync_paperless
@@ -167,13 +168,82 @@ def prices_ping():
 
 
 @router.get("/prices/watch", dependencies=[Depends(require_key)])
-def prices_watch(db: Session = Depends(get_db)):
-    return watch_payload(db)
+def prices_watch(cap: int = 40, db: Session = Depends(get_db)):
+    limit = cap if cap > 0 else 40
+    if limit > COLLECTOR_PRODUCT_CAP:
+        limit = COLLECTOR_PRODUCT_CAP
+    return watch_payload(db, cap=limit)
 
 
 @router.post("/prices/collect", dependencies=[Depends(require_key)])
 def collect_prices(batch: CollectBatch, db: Session = Depends(get_db)):
     return ingest_collected_items(db, batch.model_dump())
+
+
+class CollectorAuthIn(BaseModel):
+    slug: str
+    status: str
+    error: str = ""
+
+
+class CollectorRunIn(BaseModel):
+    started_at: str = ""
+    finished_at: str = ""
+    checked: int = 0
+    updated: int = 0
+    unchanged: int = 0
+    unavailable: int = 0
+    needs_reauth: list[str] = Field(default_factory=list)
+    sources: list[dict] = Field(default_factory=list)
+
+
+@router.post("/collector/auth", dependencies=[Depends(require_key)])
+def collector_auth(body: CollectorAuthIn, db: Session = Depends(get_db)):
+    set_browser_status(db, body.slug, body.status, body.error)
+    return {"ok": True, "slug": body.slug, "status": body.status}
+
+
+@router.post("/collector/runs", dependencies=[Depends(require_key)])
+def collector_runs(body: CollectorRunIn, db: Session = Depends(get_db)):
+    run = save_collector_run(db, body.model_dump())
+    return {"ok": True, "id": run.id}
+
+
+@router.get("/collector/status", dependencies=[Depends(require_key)])
+def collector_status(db: Session = Depends(get_db)):
+    from app.intel import BROWSER_SOURCES, browser_status_for, latest_run
+
+    sources = [browser_status_for(db, slug) | {"label": label} for slug, label in BROWSER_SOURCES]
+    report = overnight_report(db)
+    run = latest_run(db)
+    return {
+        "sources": sources,
+        "needs_reauth": report["needs_reauth"],
+        "last_run": {
+            "checked": report["checked"],
+            "updated": report["updated"],
+            "unchanged": report["unchanged"],
+            "unavailable": report["unavailable"],
+            "finished_at": run.finished_at.isoformat() if run and run.finished_at else "",
+        },
+    }
+
+
+@router.post("/jobs/scan-browser", dependencies=[Depends(require_key)])
+def scan_browser_job():
+    if not settings.collector_url:
+        return {"ok": False, "status": "skipped", "reason": "collector_url is empty"}
+    import httpx
+
+    try:
+        with httpx.Client(timeout=15.0) as client:
+            response = client.post(
+                f"{settings.collector_url.rstrip('/')}/jobs/scan",
+                headers={"X-API-Key": settings.resto_api_key},
+            )
+            return {"ok": response.is_success, "collector": response.json()}
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error": str(exc)[:200]}
 
 
 @router.post("/jobs/scan-catalogs", dependencies=[Depends(require_key)])

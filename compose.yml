@@ -6,6 +6,8 @@
 #
 # Ports (host):
 #   8088  resto-core   wine cellar + costing
+#   8099  price-collector API
+#   7900  Unraid Chromium login (noVNC)
 #   8010  paperless    invoice archive
 #   9925  mealie       recipes
 #   3001  metabase     dashboards
@@ -233,12 +235,45 @@ services:
       OPEN_PRICES_ENABLED: ${OPEN_PRICES_ENABLED:-true}
       BLS_ENABLED: ${BLS_ENABLED:-true}
       USDA_MMN_API_KEY: ${USDA_MMN_API_KEY:-}
+      COLLECTOR_URL: http://price-collector:8099
+      COLLECTOR_VNC_URL: ${COLLECTOR_VNC_URL:-http://100.116.48.120:7900}
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
       interval: 20s
       timeout: 5s
       retries: 8
       start_period: 20s
+    networks: [resto]
+
+  price-collector:
+    build:
+      context: ./apps/price-collector
+    image: resto-price-collector:local
+    container_name: resto-price-collector
+    restart: unless-stopped
+    depends_on:
+      resto-core:
+        condition: service_healthy
+    ports:
+      - "8099:8099"
+      - "7900:7900"
+    volumes:
+      - ${APPDATA:-./appdata}/price-collector:/data
+    shm_size: "1gb"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      TZ: ${TZ}
+      RESTO_URL: http://resto-core:8080
+      RESTO_API_KEY: ${RESTO_API_KEY}
+      DATA_DIR: /data
+      DISPLAY: :99
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8099/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 8
+      start_period: 40s
     networks: [resto]
 
 networks:

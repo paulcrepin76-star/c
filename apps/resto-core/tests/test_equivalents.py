@@ -199,3 +199,67 @@ def test_discovery_keeps_unmatched_public_listing(monkeypatch):
             assert wax.product_id is None
     finally:
         db.close()
+
+
+def test_new_invoice_sku_joins_the_watch_list():
+    from app.models import Invoice, InvoiceLine
+    from app.purchasing import ensure_purchased_product, record_line
+
+    db = SessionLocal()
+    try:
+        chefs = db.query(Supplier).filter(Supplier.name == "Chef's Warehouse").one()
+        product = ensure_purchased_product(db, "BOIRON PASSION FRUIT PUREE 6 x 1 kg SKU 99112")
+        assert product is not None
+        assert "PASSION" in product.sku
+        invoice = Invoice(
+            supplier_id=chefs.id,
+            number="CW-PUREE",
+            invoice_type="food",
+            title="Chef's puree",
+        )
+        db.add(invoice)
+        db.flush()
+        line = InvoiceLine(
+            invoice_id=invoice.id,
+            raw_description="BOIRON PASSION FRUIT PUREE 6 x 1 kg SKU 99112",
+            qty=1,
+            unit="case",
+            unit_cost=Decimal("83.40"),
+            line_total=Decimal("83.40"),
+        )
+        db.add(line)
+        db.flush()
+        row = record_line(db, invoice, line)
+        assert row is not None
+        names = {item.sku for item in relevant_products(db, mode="refresh", limit=200)}
+        assert product.sku in names
+    finally:
+        db.close()
+
+
+def test_collector_auth_and_run_and_skipped_scan():
+    with TestClient(app) as client:
+        denied = client.post("/api/collector/auth", json={"slug": "sams-club", "status": "needs_reauth"})
+        assert denied.status_code == 401
+        auth = client.post(
+            "/api/collector/auth",
+            headers={"X-API-Key": "test"},
+            json={"slug": "sams-club", "status": "needs_reauth", "error": "login"},
+        )
+        assert auth.status_code == 200
+        run = client.post(
+            "/api/collector/runs",
+            headers={"X-API-Key": "test"},
+            json={"checked": 12, "updated": 9, "unchanged": 2, "unavailable": 1, "needs_reauth": ["sams-club"]},
+        )
+        assert run.status_code == 200
+        status = client.get("/api/collector/status", headers={"X-API-Key": "test"})
+        assert status.status_code == 200
+        body = status.json()
+        sams = next(row for row in body["sources"] if row["slug"] == "sams-club")
+        assert sams["status"] == "needs_reauth"
+        home = client.get("/")
+        assert "Purchasing intelligence" in home.text or "Overnight check" in home.text
+        skipped = client.post("/api/jobs/scan-browser", headers={"X-API-Key": "test"})
+        assert skipped.status_code == 200
+        assert skipped.json()["status"] == "skipped"

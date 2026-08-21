@@ -3,82 +3,75 @@
 {% block content %}
 <p class="eyebrow">{{ market }}</p>
 <h1>Price Collector</h1>
-<p class="lede">Four ways into the same table: official APIs, a full Chromium browser for public JavaScript sites, your own logged-in Chrome session, and Paperless receipts. We do not crawl Sam's or Costco, solve CAPTCHAs, or rotate proxies.</p>
+<p class="lede">Log in once in the Unraid Chromium browser. The server keeps that profile and checks only the products you already buy every night at 02:00. If a site asks for a password, CAPTCHA, or 2FA again, it stops and tells you. No stealth, no proxies.</p>
 {% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
 {% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
-{% if sams_connected %}
-<div class="flash ok">Sam's is connected for invoices. The cellar will not open samsclub.com. Stay logged in on this Mac, open butter/dairy (or any page you already shop), and click Send visible prices. Hidden JSON on that page is used when the site loads it.</div>
+{% if report and report.needs_reauth %}
+<div class="flash err">Needs a new login: {% for slug in report.needs_reauth %}{{ slug }}{% if not loop.last %}, {% endif %}{% endfor %}</div>
 {% endif %}
 
 <section class="kpis">
   <article>
-    <span>Priority 1</span>
-    <strong>0–{{ near }} miles</strong>
-    <em>Bonita Springs / Estero first</em>
+    <span>Unraid Chromium</span>
+    <strong>{% if collector_online %}Running{% else %}Offline{% endif %}</strong>
+    <em>Persistent profiles on this server</em>
   </article>
   <article>
-    <span>Priority 2–3</span>
-    <strong>to {{ far }} miles</strong>
-    <em>Fort Myers, then farther only if nothing local exists</em>
+    <span>Last overnight check</span>
+    <strong>{{ report.checked if report else 0 }}</strong>
+    <em>{{ report.updated if report else 0 }} updated · {{ report.unavailable if report else 0 }} missing</em>
   </article>
   <article>
-    <span>Playwright on this server</span>
-    <strong>{% if playwright_ready %}Installed{% else %}Not in this image{% endif %}</strong>
-    <em>Public JS sites can still use the Chrome extension</em>
+    <span>Watch list</span>
+    <strong>{{ relevant.count if relevant else 0 }}</strong>
+    <em>From invoices, Mealie, and past buys</em>
   </article>
 </section>
 
 <div class="card">
-  <h2>1 · Chrome extension (Sam’s, Costco, Chef’s, Gordon)</h2>
-  <p>Install <b>Restaurant Price Collector</b> in Chrome on the Mac you already shop from:</p>
-  <ol class="plain">
-    <li>Open <code>chrome://extensions</code></li>
-    <li>Turn on Developer mode</li>
-    <li>Load unpacked → <code>/mnt/user/appdata/resto/apps/resto-core/app/static/extension</code> on Unraid, or copy <a href="/static/extension/manifest.json">the extension folder</a> from this site</li>
-    <li>Open the extension options. Cellar URL must be <code>{{ cellar_url }}</code> (port <b>8088</b>, not n8n on 5678).</li>
-    <li>Paste this cellar key — not an n8n API key:
-      <p><code id="cellar-api-key">{{ cellar_api_key }}</code></p>
-    </li>
-    <li>Click <b>Test connection</b> in the extension. Then log in to Sam’s or Chef’s and click <b>Send visible prices</b> on the page you are already looking at. The extension does not click through the whole catalog.</li>
-  </ol>
-  <p class="muted">The extension only sends what this page already loaded (preferring the site's own JSON). Session cookies stay in Chrome. Treat the API key like a password.</p>
-  {% if relevant and relevant.products %}
-  <p class="muted">Daily watch list ({{ relevant.count }}): {% for item in relevant.products %}{{ item.name }}{% if not loop.last %}, {% endif %}{% endfor %}</p>
+  <h2>1 · Log in once (Unraid Chromium)</h2>
+  <p>This is a real browser running on the server, not the Chrome extension on your Mac. Complete 2FA if the site asks. Then click Done. Cookies stay under <code>/mnt/user/appdata/resto/price-collector/profiles</code>.</p>
+  {% if not collector_online %}
+  <p class="flash err">The collector container is not up. After deploy it listens on port 8099 (API) and 7900 (the login window).</p>
   {% endif %}
-</div>
-
-<div class="card">
-  <h2>2 · Official APIs (no login)</h2>
-  <p>Open Prices (crowdsourced, geo-filtered) and the US retail average (BLS) run with the nightly scan. USDA MyMarketNews wholesale waits on <code>USDA_MMN_API_KEY</code>. Instacart waits on their 30–40 day developer approval — the collector row is already there.</p>
-  <form method="post" action="/purchasing/scan">
-    <button type="submit" class="btn">Run API scan now</button>
-  </form>
-</div>
-
-<div class="card">
-  <h2>3 · Full browser for public JS (Publix, Target, Aldi)</h2>
-  <p>Those sites hide dollars until JavaScript runs. Playwright Chromium can render them <em>without logging in</em>. This cellar image does not bundle Chromium (it is huge). Use the extension today, or add a <code>collector</code> Compose profile later with the official Playwright image. We still will not fight PerimeterX on Sam’s or Costco that way.</p>
-</div>
-
-<div class="card">
-  <h2>4 · Receipts</h2>
-  <p>Paperless OCR remains the highest-confidence price. After Costco, drop the PDF or photograph the receipt. That pack is what you actually paid.</p>
-  <p><a class="btn" href="/invoices/scan">Photograph an invoice</a></p>
-</div>
-
-<div class="card">
-  <h2>Supplier connections</h2>
   <table class="wide">
-    <thead><tr><th>Source</th><th>Collector</th><th>How</th></tr></thead>
+    <thead><tr><th>Supplier</th><th>Browser</th><th></th></tr></thead>
     <tbody>
-    {% for source in collectors %}
+    {% for row in browsers %}
       <tr>
-        <td>{% if source.home %}<a href="{{ source.home }}" target="_blank" rel="noreferrer">{{ source.label }}</a>{% else %}{{ source.label }}{% endif %}</td>
-        <td>{{ source.adapter_title }}</td>
-        <td class="muted">{{ source.blurb }}</td>
+        <td>{{ row.label }}</td>
+        <td><span class="dot {{ row.status }}"></span> {{ row.status.replace('_', ' ') }}{% if row.error %} <span class="muted">{{ row.error }}</span>{% endif %}{% if row.success_at %} <span class="muted">last ok {{ row.success_at[:16] }}</span>{% endif %}</td>
+        <td>
+          <form method="post" action="/collector/login/{{ row.slug }}" class="inline">
+            <button type="submit" class="btn">{{ 'Reconnect' if row.status in ('ready', 'needs_reauth') else 'Log in' }}</button>
+          </form>
+        </td>
       </tr>
     {% endfor %}
     </tbody>
   </table>
+  <form method="post" action="/collector/scan" class="inline" style="margin-top:12px">
+    <button type="submit" class="btn secondary">Run tonight’s check now</button>
+    <span class="muted">Only the watch list — not the whole Costco or Sam’s catalog.</span>
+  </form>
+</div>
+
+<div class="card">
+  <h2>2 · Chrome extension (backup while you shop)</h2>
+  <p>If a nightly session expired, you can still send the page you are looking at from the Mac:</p>
+  <ol class="plain">
+    <li>Open <code>chrome://extensions</code> · Developer mode · Load unpacked → <code>/mnt/user/appdata/resto/apps/resto-core/app/static/extension</code></li>
+    <li>Options: cellar URL <code>{{ cellar_url }}</code> (port <b>8088</b>, not n8n).</li>
+    <li>Key: <code id="cellar-api-key">{{ cellar_api_key }}</code></li>
+  </ol>
+  {% if relevant and relevant.products %}
+  <p class="muted">Watch list: {% for item in relevant.products %}{{ item.name }}{% if not loop.last %}, {% endif %}{% endfor %}</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>3 · Receipts</h2>
+  <p>Paperless OCR is still the paid source of truth. A new Chef’s SKU on an invoice is added to tomorrow’s watch list automatically.</p>
+  <p><a class="btn" href="/invoices/scan">Photograph an invoice</a></p>
 </div>
 {% endblock %}

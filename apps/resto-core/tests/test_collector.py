@@ -105,12 +105,9 @@ def test_collector_page_and_ingest_api():
         page = client.get("/collector")
         assert page.status_code == 200
         assert "Price Collector" in page.text
-        assert "Restaurant Price Collector" in page.text
-        assert "BROWSER EXTENSION" in page.text
-        assert "Open Prices" in page.text
+        assert "Unraid Chromium" in page.text
         assert "not n8n" in page.text
         assert "8088" in page.text
-        assert "5678" in page.text
         assert 'id="cellar-api-key"' in page.text
         assert ">test<" in page.text
         ping_denied = client.get("/api/prices/ping")

@@ -166,6 +166,58 @@ def match_canonical_product(db: Session, description: str) -> tuple[Product | No
     return None, Decimal("0")
 
 
+SKIP_NEW_PRODUCT = (
+    "tax",
+    "subtotal",
+    "total",
+    "payment",
+    "visa",
+    "mastercard",
+    "change",
+    "cash",
+    "tip",
+    "deposit",
+    "fee",
+)
+
+
+def ensure_purchased_product(db: Session, description: str) -> Product | None:
+    """Create a watch-list product from a new invoice line the cafe actually bought."""
+    from app.ingest import clean_food_name, product_sku
+
+    text = str(description or "").strip()
+    lowered = text.lower()
+    if len(re.findall(r"[a-zA-Z]", text)) < 4:
+        return None
+    if any(_has_alias(lowered, word) for word in SKIP_NEW_PRODUCT):
+        return None
+    food = clean_food_name(re.sub(r"\b(?:sku|upc)\s*[:#]?\s*[A-Z0-9-]+\b", "", text, flags=re.I)) or text
+    food = food[:80].strip(" -")
+    if len(food) < 4:
+        return None
+    sku = product_sku(food)
+    existing = db.query(Product).filter(Product.sku == sku).first()
+    if existing:
+        return existing
+    named = db.query(Product).filter(Product.name.ilike(food)).first()
+    if named:
+        return named
+    pack_qty, pack_unit = parse_pack(text)
+    product = Product(
+        sku=sku,
+        name=food[:200],
+        category="food",
+        base_unit=pack_unit if pack_unit in {"g", "ml", "each", "lb"} else "g",
+        compare_unit=pack_unit or "lb",
+        purchasing_category="food",
+        is_active=True,
+    )
+    db.add(product)
+    db.flush()
+    db.add(ProductAlias(product_id=product.id, alias=food.lower()[:160], exclude=""))
+    return product
+
+
 def _is_purchasing_supplier(supplier: Supplier | None) -> bool:
     if supplier is None:
         return False
@@ -206,6 +258,9 @@ def record_line(db: Session, invoice: Invoice, line: InvoiceLine) -> PurchasePri
         confidence = Decimal("1")
     else:
         product, confidence = match_canonical_product(db, line.raw_description)
+        if product is None:
+            product = ensure_purchased_product(db, line.raw_description)
+            confidence = Decimal("0.7")
     if product is None:
         return None
     pack_qty, pack_unit = parse_pack(line.raw_description, line.qty, line.unit)

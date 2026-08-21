@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     home_lat: float = 26.3398
     home_lon: float = -81.7787
     price_gap_pct: float = 8.0
+    collector_url: str = ""
+    collector_vnc_url: str = "http://100.116.48.120:7900"
 
 
 settings = Settings()

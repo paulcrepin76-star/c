@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Log in {{ label }}{% endblock %}
+{% block content %}
+<p class="eyebrow">Unraid Chromium</p>
+<h1>Log in to {{ label }}</h1>
+<p class="lede">Use the window below. Complete 2FA if asked. Do not solve a CAPTCHA by automation — if the site blocks the server, click Done and we will ask you to reconnect later.</p>
+{% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
+<iframe class="vnc" title="{{ label }} login" src="{{ vnc_url }}/vnc.html?autoconnect=1&resize=remote"></iframe>
+<form method="post" action="/collector/login/{{ slug }}/done" class="inline" style="margin-top:16px">
+  <button type="submit" class="btn">I’m done — save this profile</button>
+  <a class="btn secondary" href="/collector">Cancel</a>
+</form>
+{% endblock %}

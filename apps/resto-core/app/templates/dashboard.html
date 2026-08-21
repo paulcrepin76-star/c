@@ -71,6 +71,52 @@
   </article>
 </section>
 
+{% if report and (report.opportunities or report.needs_reauth or report.run) %}
+<section class="kpis">
+  <article>
+    <span>Overnight check</span>
+    <strong>{{ report.checked }} products</strong>
+    <em>{{ report.updated }} updated · {{ report.unavailable }} unavailable</em>
+  </article>
+  <article>
+    <span>Estimated monthly saving</span>
+    <strong>{{ report.monthly_total | money }}</strong>
+    <em>{{ report.opportunities | length }} price opportunities · <a href="/purchasing">Buy</a></em>
+  </article>
+</section>
+<div class="card">
+  <h2>Purchasing intelligence</h2>
+  {% if report.needs_reauth %}
+  <p class="flash err">Log in again: {% for slug in report.needs_reauth %}{{ slug }}{% if not loop.last %}, {% endif %}{% endfor %} · <a href="/collector">Open Prices</a></p>
+  {% endif %}
+  {% if report.opportunities %}
+  <table class="wide">
+    <thead><tr><th>Item</th><th>You pay</th><th>Better</th><th>/month</th></tr></thead>
+    <tbody>
+    {% for row in report.opportunities %}
+      <tr>
+        <td>{{ row.product }}</td>
+        <td>{{ row.you_pay }}</td>
+        <td>{{ row.best }} · {{ row.gap_pct | pct }}</td>
+        <td>{{ row.monthly | money }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">No switch worth $25/month after the last check. <a href="/collector">Log suppliers in</a> so tonight can fill prices.</p>
+  {% endif %}
+  {% if report.recipes %}
+  <p class="muted">Mealie recipe cost moves:</p>
+  <ul class="plain">
+    {% for row in report.recipes %}
+    <li>{{ row.recipe }} <span>{{ row.yesterday | money }} → {{ row.today | money }}</span></li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</div>
+{% endif %}
+
 {% if counts.unmatched %}
 <p class="flash">Food cost stays near 0% until Square items attach to Mealie recipes. <a href="/costing/match">Match them now</a>.</p>
 {% endif %}

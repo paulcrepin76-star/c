@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.catalog import catalog_lexicon, scan_catalogs
 from app.collector import collector_rows, playwright_available, source_label
 from app.config import settings
+from app.intel import BROWSER_SOURCES, browser_status_for, overnight_report
 from app.equivalents import connection_status, relevant_products, watch_payload
 from app.geo import FAR_MILES, HOME_MARKET, NEAR_MILES
 from app.market import scan_external_prices
@@ -59,6 +60,7 @@ def dashboard(request: Request, days: int = DEFAULT_DAYS, db: Session = Depends(
     connectors = db.query(Connector).order_by(Connector.name).all()
     invoices = db.query(Invoice).order_by(Invoice.issued_on.desc()).limit(6).all()
     purchasing = purchasing_board(db)
+    report = overnight_report(db)
     return render(
         request,
         "dashboard.html",
@@ -69,6 +71,7 @@ def dashboard(request: Request, days: int = DEFAULT_DAYS, db: Session = Depends(
         connectors=connectors,
         invoices=invoices,
         purchasing=purchasing,
+        report=report,
         days=window,
         span=sales_span(db),
         counts=catalog_counts(db),
@@ -529,9 +532,32 @@ def purchasing_scan(request: Request, mode: str = Form("refresh"), db: Session =
     return RedirectResponse("/purchasing", status_code=303)
 
 
+def _collector_json(method: str, path: str, payload: dict | None = None, timeout: float = 20.0):
+    if not settings.collector_url:
+        return None, "The Unraid Chromium collector is not running."
+    try:
+        with httpx.Client(timeout=timeout) as client:
+            url = f"{settings.collector_url.rstrip('/')}{path}"
+            if method == "GET":
+                response = client.get(url)
+            else:
+                response = client.post(url, json=payload or {})
+            if not response.is_success:
+                return None, response.text[:200]
+            return response.json(), None
+    except Exception as exc:  # noqa: BLE001
+        return None, str(exc)[:200]
+
+
 @router.get("/collector")
 def collector_page(request: Request, db: Session = Depends(get_db)):
     ok, err = _pop_flash(request)
+    health, _health_err = _collector_json("GET", "/health", timeout=3.0)
+    browsers = []
+    for slug, label in BROWSER_SOURCES:
+        row = browser_status_for(db, slug)
+        row["label"] = label
+        browsers.append(row)
     return render(
         request,
         "collector.html",
@@ -540,12 +566,64 @@ def collector_page(request: Request, db: Session = Depends(get_db)):
         market=HOME_MARKET,
         near=NEAR_MILES,
         far=FAR_MILES,
-        playwright_ready=playwright_available(),
+        playwright_ready=bool(health and health.get("ok")),
         cellar_url=settings.resto_public_url,
         cellar_api_key=settings.resto_api_key,
         relevant=watch_payload(db),
         sams_connected=connection_status(db, "sams-club") == "connected",
+        browsers=browsers,
+        report=overnight_report(db),
+        collector_online=bool(health and health.get("ok")),
+        vnc_url=settings.collector_vnc_url,
         flash_ok=ok,
         flash_err=err,
     )
+
+
+@router.post("/collector/login/{slug}")
+def collector_login_start(slug: str, request: Request):
+    body, err = _collector_json("POST", "/login/start", {"slug": slug}, timeout=90.0)
+    if err or not (body or {}).get("ok"):
+        _flash(request, err=err or (body or {}).get("error") or "Could not open Chromium.")
+        return RedirectResponse("/collector", status_code=303)
+    return RedirectResponse(f"/collector/session/{slug}", status_code=303)
+
+
+@router.get("/collector/session/{slug}")
+def collector_session(slug: str, request: Request):
+    ok, err = _pop_flash(request)
+    label = next((name for key, name in BROWSER_SOURCES if key == slug), slug)
+    return render(
+        request,
+        "collector_session.html",
+        page="collector",
+        slug=slug,
+        label=label,
+        vnc_url=settings.collector_vnc_url,
+        flash_ok=ok,
+        flash_err=err,
+    )
+
+
+@router.post("/collector/login/{slug}/done")
+def collector_login_done(slug: str, request: Request, db: Session = Depends(get_db)):
+    from app.intel import set_browser_status
+
+    body, err = _collector_json("POST", "/login/finish", timeout=60.0)
+    if err:
+        _flash(request, err=err)
+        return RedirectResponse("/collector", status_code=303)
+    set_browser_status(db, slug, "ready" if (body or {}).get("profile") else "never_logged_in")
+    _flash(request, ok=f"{slug} browser profile saved. Nightly 02:00 will reuse it until the site asks you to log in again.")
+    return RedirectResponse("/collector", status_code=303)
+
+
+@router.post("/collector/scan")
+def collector_scan_now(request: Request):
+    body, err = _collector_json("POST", "/jobs/scan", timeout=15.0)
+    if err:
+        _flash(request, err=err)
+    else:
+        _flash(request, ok="Overnight check started. It only looks up products you already buy.")
+    return RedirectResponse("/collector", status_code=303)
 

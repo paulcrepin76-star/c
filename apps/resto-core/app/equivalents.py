@@ -27,6 +27,7 @@ SKU_RE = re.compile(
 SKIP_CATEGORIES = {"wine"}
 REFRESH_PRODUCT_CAP = 40
 DISCOVERY_PRODUCT_CAP = 80
+COLLECTOR_PRODUCT_CAP = 200
 NAME_KEYS = ("name", "title", "productName", "description", "alt")
 PRICE_KEYS = ("price", "salePrice", "currentPrice", "finalPrice", "listPrice", "amount", "lowPrice")
 SKU_KEYS = ("sku", "itemNumber", "itemId", "item_id", "productId", "product_id", "upc", "gtin", "gtin13")
@@ -135,7 +136,7 @@ def grocery_product(product: Product) -> bool:
     return category not in SKIP_CATEGORIES
 
 
-def relevant_products(db: Session, mode: str = "refresh") -> list[Product]:
+def relevant_products(db: Session, mode: str = "refresh", limit: int | None = None) -> list[Product]:
     """What the cafe actually buys: invoices, receipts, extension captures, Mealie lines."""
     ids: set[int] = set()
     for (product_id,) in db.query(InvoiceLine.product_id).filter(InvoiceLine.product_id.isnot(None)).distinct():
@@ -161,7 +162,7 @@ def relevant_products(db: Session, mode: str = "refresh") -> list[Product]:
         .all()
     )
     grocery = [product for product in products if grocery_product(product)]
-    cap = DISCOVERY_PRODUCT_CAP if mode == "discovery" else REFRESH_PRODUCT_CAP
+    cap = limit if limit is not None else (DISCOVERY_PRODUCT_CAP if mode == "discovery" else REFRESH_PRODUCT_CAP)
     return grocery[:cap]
 
 
@@ -301,8 +302,8 @@ def connection_status(db: Session, slug: str) -> str:
     return row.status if row else "not_connected"
 
 
-def watch_payload(db: Session) -> dict:
-    products = relevant_products(db, mode="refresh")
+def watch_payload(db: Session, cap: int | None = None) -> dict:
+    products = relevant_products(db, mode="refresh", limit=cap or REFRESH_PRODUCT_CAP)
     rows = []
     for product in products:
         aliases = [
@@ -315,10 +316,13 @@ def watch_payload(db: Session) -> dict:
             if token and token not in needles:
                 needles.append(token)
         supplier_skus = {}
+        supplier_urls = {}
         for equivalent in equivalents_for(db, product):
             if equivalent.sku and equivalent.supplier:
                 supplier_skus[equivalent.supplier.name] = equivalent.sku
                 needles.append(equivalent.sku.lower())
+            if equivalent.url and equivalent.supplier:
+                supplier_urls[equivalent.supplier.name] = equivalent.url
         rows.append(
             {
                 "id": product.id,
@@ -326,6 +330,7 @@ def watch_payload(db: Session) -> dict:
                 "name": product.name,
                 "needles": needles,
                 "supplier_skus": supplier_skus,
+                "supplier_urls": supplier_urls,
             }
         )
     return {"count": len(rows), "products": rows}
