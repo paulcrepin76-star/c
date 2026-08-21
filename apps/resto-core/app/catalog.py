@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from urllib.parse import quote_plus
 
@@ -61,7 +61,7 @@ CATALOGS: list[dict] = [
 
 WATCH = {
     "BUTTER": ("unsalted butter",),
-    "EGG": ("large shell eggs",),
+    "EGG": ("large eggs",),
     "MILK": ("whole milk",),
     "HEAVY-CREAM": ("heavy cream",),
     "SALMON": ("salmon fillet",),
@@ -248,16 +248,16 @@ def scan_source(db: Session, source: dict, product: Product, query: str, scanned
     supplier = _supplier_for(db, source["label"])
     if supplier is None:
         return {"status": "error", "error": "missing supplier", "quotes": 0}
-    recorded = 0
+    recorded = False
     for item in parser(html):
         matched, _score = match_canonical_product(db, item["description"])
         if matched is None or matched.id != product.id:
             continue
         if record_catalog_quote(db, product, supplier, item, scanned_on):
-            recorded += 1
+            recorded = True
     if recorded:
         db.commit()
-    return {"status": "ok", "http": status, "quotes": recorded, "url": url}
+    return {"status": "ok", "http": status, "quotes": int(recorded), "url": url}
 
 
 def scan_catalogs(db: Session) -> dict:
@@ -283,14 +283,21 @@ def scan_catalogs(db: Session) -> dict:
         if connector:
             connector.status = "ready" if source_quotes or not last_error else "error"
             connector.last_error = last_error[:300]
-            from datetime import UTC, datetime
-
             connector.last_run_at = datetime.now(UTC).replace(tzinfo=None)
         results.append({"source": source["label"], "quotes": source_quotes, "error": last_error})
     db.commit()
+    stored = (
+        db.query(PurchasePrice)
+        .filter(
+            PurchasePrice.source == "catalog",
+            PurchasePrice.purchased_on == scanned_on,
+        )
+        .count()
+    )
     return {
         "status": "ok",
-        "quotes": quotes,
+        "quotes": stored,
+        "matched": quotes,
         "sources": results,
         "lexicon": len(CATALOGS),
         "fetchable": len(fetchable),
