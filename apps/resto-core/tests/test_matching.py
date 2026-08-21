@@ -35,6 +35,35 @@ def test_parse_invoice_amount_prefers_dollar_and_total_labels():
     assert coerce_money(12.5) == Decimal("12.50")
 
 
+def test_parse_invoice_amount_skips_sams_cash_and_reads_receipt_total():
+    from app.ingest import should_replace_total
+
+    sams = """
+    SUBTOTAL 52.66
+    TOTAL 53.68
+    DEBIT TEND 53.68
+    CHANGE DUE 0.00
+    You earned $1.08 in Sam's Cash
+    """
+    assert parse_invoice_amount(sams) == Decimal("53.68")
+    depot = """
+    SUBTOTAL $239.39
+    TOTAL TAX $0.00
+    TOTAL $239 39
+    MASTERCARD $239.39
+    CHANGE
+    BALANCE $0.00
+    """
+    assert parse_invoice_amount(depot) == Decimal("239.39")
+    wine = "Subtotal USD 180.60 Sales Tax (0.0%) 0.00 Payment/Credit USD 0.00"
+    assert parse_invoice_amount(wine) == Decimal("180.60")
+    purchase = "14 6 .5 8 T O T A L P U R C H A S E"
+    assert parse_invoice_amount(purchase) == Decimal("146.58")
+    assert parse_invoice_amount("2% Milk 12.08  103.23\nTax 0.00\n103.23") == Decimal("103.23")
+    assert should_replace_total(Decimal("1.08"), Decimal("53.68")) is True
+    assert should_replace_total(Decimal("189.60"), Decimal("90.00")) is False
+
+
 def test_zero_invoice_is_updated_when_title_has_amount():
     with TestClient(app):
         db = SessionLocal()

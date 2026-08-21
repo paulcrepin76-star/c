@@ -4,25 +4,24 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-title" content="Resto">
-  <meta name="theme-color" content="#4c121a">
-  <title>{% block title %}Restaurant back office{% endblock %}</title>
-  <link rel="stylesheet" href="/static/style.css">
+  <meta name="apple-mobile-web-app-title" content="Survey">
+  <meta name="theme-color" content="#f6f5f2">
+  <title>{% block title %}Survey Cafe{% endblock %}</title>
+  <link rel="stylesheet" href="/static/style.css?v=2">
 </head>
 <body>
   <header class="top">
-    <a class="brand" href="/">Resto</a>
+    <a class="brand" href="/">Survey</a>
     <nav>
-      <a href="/" class="{% if page == 'dashboard' %}on{% endif %}">Dashboard</a>
-      <a href="/wines" class="{% if page == 'wines' %}on{% endif %}">Wine cellar</a>
-      <a href="/inventory" class="{% if page == 'inventory' %}on{% endif %}">Inventory</a>
-      <a href="/costing" class="{% if page == 'costing' %}on{% endif %}">Costing</a>
-      <a href="/purchasing" class="{% if page == 'purchasing' %}on{% endif %}">Purchasing</a>
-      <a href="/collector" class="{% if page == 'collector' %}on{% endif %}">Collector</a>
-      <a href="/invoices" class="{% if page == 'invoices' %}on{% endif %}">Invoices</a>
+      <a href="/" class="{% if page == 'dashboard' %}on{% endif %}">Home</a>
+      <a href="/wines" class="{% if page == 'wines' %}on{% endif %}">Cellar</a>
+      <a href="/inventory" class="{% if page == 'inventory' %}on{% endif %}">Stock</a>
+      <a href="/costing" class="{% if page == 'costing' %}on{% endif %}">Cost</a>
+      <a href="/purchasing" class="{% if page == 'purchasing' %}on{% endif %}">Buy</a>
+      <a href="/invoices" class="{% if page == 'invoices' %}on{% endif %}">Bills</a>
       <a href="/invoices/scan" class="{% if page == 'scan' %}on{% endif %}">Scan</a>
+      <a href="/collector" class="{% if page == 'collector' %}on{% endif %}">Prices</a>
       <a href="/connect" class="{% if page == 'connect' %}on{% endif %}">Connect</a>
-      <a href="/connectors" class="{% if page == 'connectors' %}on{% endif %}">Connectors</a>
     </nav>
   </header>
   <main>

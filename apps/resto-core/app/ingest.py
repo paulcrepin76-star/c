@@ -113,25 +113,130 @@ def extract_invoice_lines(content: str) -> list[dict]:
     return found
 
 
-_DOLLAR = re.compile(r"\$\s*(\d{1,3}(?:,\d{3})*(?:\.\d{2})|\d+\.\d{2})")
-_LABELED = re.compile(
-    r"(?:invoice\s+total|amount\s+due|balance\s+due|total\s+due|\btotal\b|\bamount\b|\bbalance\b)"
-    r"[^\d$]{0,24}(\d{1,3}(?:,\d{3})*\.\d{2}|\d+\.\d{2})",
+_MONEY = r"(\d{1,3}(?:,\d{3})*\.\d{2}|\d+\.\d{2})"
+_DOLLAR = re.compile(r"\$\s*" + _MONEY)
+_NOISE = re.compile(
+    r"cash today|sam'?s cash|you earned|instant savings|change due|\bchange\b|"
+    r"total tax|taxable|coupons?|promotion|unit\s*\$|items\s+(rung|sold)|"
+    r"units?\s+(entered|count)|cases?\s+entered|weighed goods|on account|"
+    r"previous balance|beginning balance|approval #|rack meter|cycles used",
     re.I,
+)
+_SKIP_TOTAL = re.compile(
+    r"total\s+(tax|taxable|units?|cases?|items?|count|rw|weighed|on account|promotion)",
+    re.I,
+)
+_LABELS = [
+    (re.compile(rf"total\s+purchase[^\d]{{0,40}}{_MONEY}|{_MONEY}[^\d]{{0,20}}total\s+purchase", re.I), 6),
+    (re.compile(rf"total\s+usd[^\d]{{0,40}}{_MONEY}|{_MONEY}[^\d]{{0,12}}total\s+usd", re.I), 6),
+    (re.compile(rf"invoice\s+total[^\d]{{0,40}}{_MONEY}", re.I), 6),
+    (re.compile(rf"(?:amount\s+due|balance\s+due|total\s+due)[^\d]{{0,40}}{_MONEY}", re.I), 5),
+    (re.compile(rf"subtotal\s+usd[^\d]{{0,40}}{_MONEY}", re.I), 4),
+    (re.compile(rf"(?<![a-z])total[^\d]{{0,24}}{_MONEY}", re.I), 3),
+    (re.compile(rf"subtotal[^\d]{{0,24}}{_MONEY}", re.I), 2),
+    (re.compile(rf"(?:mastercard|debit|visa)\s*(?:tend)?[^\d]{{0,24}}{_MONEY}", re.I), 2),
+]
+
+
+_OCR_WORDS = (
+    "PURCHASE",
+    "SUBTOTAL",
+    "MASTERCARD",
+    "INVOICE",
+    "BALANCE",
+    "AMOUNT",
+    "CREDIT",
+    "CHANGE",
+    "TOTAL",
+    "DEBIT",
+    "TEND",
+    "DUE",
+    "CASH",
+    "VISA",
+    "USD",
 )
 
 
+def _tighten_ocr(text: str) -> str:
+    blob = str(text or "").replace("\u00a0", " ")
+    for word in _OCR_WORDS:
+        spaced = r"\s+".join(re.escape(ch) for ch in word)
+        blob = re.sub(rf"\b{spaced}\b", word, blob, flags=re.I)
+    blob = re.sub(r"\$(\d{1,5})\s+(\d{2})(?!\d)", r"$\1.\2", blob)
+    blob = re.sub(r"(\d{1,5})\.\s+(\d{2})(?!\d)", r"\1.\2", blob)
+    blob = re.sub(
+        r"\b(\d+(?:\s+\d+){1,3})\s*\.\s*(\d+(?:\s+\d+)?)\b",
+        lambda match: match.group(1).replace(" ", "") + "." + match.group(2).replace(" ", ""),
+        blob,
+    )
+    blob = re.sub(r"\b(\d{2,4}),\s*(\d)\s+(\d)\b", r"\1.\2\3", blob)
+    return blob
+
+
+def _money_value(raw: str) -> Decimal:
+    return money(raw.replace(",", ""))
+
+
 def parse_invoice_amount(*parts) -> Decimal:
-    blob = " ".join(str(part or "") for part in parts)
+    """Prefer a labeled purchase total. Ignore Sam's Cash, tax, and change."""
+    blob = _tighten_ocr(" ".join(str(part or "") for part in parts))
     if not blob.strip():
         return Decimal("0")
-    dollars = _DOLLAR.findall(blob)
+    scored: list[tuple[int, Decimal]] = []
+    saw_zero_total = False
+    for pattern, weight in _LABELS:
+        for match in pattern.finditer(blob):
+            raw = next((group for group in match.groups() if group), "")
+            if not raw:
+                continue
+            window = blob[max(0, match.start() - 36) : match.end() + 24]
+            labeled = bool(re.search(r"total|purchase|usd|due|mastercard|debit|visa|subtotal", match.group(0), re.I))
+            if _SKIP_TOTAL.search(match.group(0)):
+                continue
+            if not labeled and _NOISE.search(window):
+                continue
+            amount = _money_value(raw)
+            if amount <= 0:
+                continue
+            if weight >= 3 and amount < Decimal("1"):
+                saw_zero_total = True
+                continue
+            scored.append((weight, amount))
+    if scored:
+        scored.sort(key=lambda item: (item[0], item[1]))
+        return scored[-1][1]
+    if saw_zero_total:
+        return Decimal("0")
+    dollars = []
+    for match in _DOLLAR.finditer(blob):
+        window = blob[max(0, match.start() - 28) : match.end() + 28]
+        if _NOISE.search(window):
+            continue
+        amount = _money_value(match.group(1))
+        if amount > 0:
+            dollars.append(amount)
     if dollars:
-        return money(dollars[-1].replace(",", ""))
-    labeled = _LABELED.findall(blob)
-    if labeled:
-        return money(labeled[-1].replace(",", ""))
+        return dollars[-1]
+    unlabeled = []
+    for match in re.finditer(_MONEY, blob):
+        window = blob[max(0, match.start() - 28) : match.end() + 28]
+        if _NOISE.search(window):
+            continue
+        amount = _money_value(match.group(1))
+        if amount >= Decimal("10"):
+            unlabeled.append(amount)
+    if unlabeled:
+        return unlabeled[-1]
     return Decimal("0")
+
+
+def should_replace_total(existing, incoming: Decimal) -> bool:
+    old = Decimal(existing or 0)
+    if incoming <= 0:
+        return False
+    if old <= 0:
+        return True
+    return old < Decimal("10") and incoming >= Decimal("10")
 
 
 def coerce_money(value) -> Decimal:
@@ -320,7 +425,7 @@ def ingest_paperless_doc(db: Session, doc: dict) -> dict:
     existing = db.query(Invoice).filter(Invoice.paperless_id == paperless_id).first()
     if existing:
         status = "duplicate"
-        if Decimal(existing.total or 0) == 0 and total > 0:
+        if should_replace_total(existing.total, total):
             existing.total = total
             status = "updated"
         if not existing.supplier_id:
