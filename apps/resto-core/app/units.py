@@ -64,6 +64,7 @@ _PACK = re.compile(
     r"(?P<qty>\d+(?:\.\d+)?)\s*(?P<unit>lbs?|pounds?|oz|ounces?|kg|g|grams?|gal|gallons?|qt|quarts?|ml|l|each|ea|ct|pc|dz|doz|dozen)\b",
     re.I,
 )
+_TRAIL_CASE = re.compile(r"[-–]\s*(?P<count>\d+)\s*/\s*(?:case|cs)\b", re.I)
 _QTY_SUFFIX = re.compile(r"\bQty\s+(\d+(?:\.\d+)?)\s*$", re.I)
 
 
@@ -128,15 +129,18 @@ def parse_pack(description: str, fallback_qty: Decimal | int | float = 0, fallba
     text = str(description or "")
     qty = ZERO
     unit = ""
+    used_case = False
     counted = _COUNT_PACK.search(text)
     if counted:
         qty = Decimal(counted.group("count")) * Decimal(counted.group("each"))
         unit = counted.group("unit")
+        used_case = True
     else:
         counted = _CASE_PACK.search(text)
         if counted:
             qty = Decimal(counted.group("each")) * Decimal(counted.group("count"))
             unit = counted.group("unit")
+            used_case = True
         else:
             counted = _EACH_CT.search(text)
             if counted:
@@ -151,6 +155,10 @@ def parse_pack(description: str, fallback_qty: Decimal | int | float = 0, fallba
                 elif fallback_qty and fallback_unit:
                     qty = Decimal(str(fallback_qty))
                     unit = fallback_unit
+    if not used_case and qty > 0:
+        trail = _TRAIL_CASE.search(text)
+        if trail:
+            qty *= Decimal(trail.group("count"))
     suffix = _QTY_SUFFIX.search(text)
     if suffix and qty > 0:
         qty *= Decimal(suffix.group(1))

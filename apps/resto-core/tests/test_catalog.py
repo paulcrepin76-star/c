@@ -127,6 +127,12 @@ def test_scan_catalogs_uses_fixture_html(monkeypatch):
             .count()
         )
         assert vegan_rows == 0
+        assert (
+            db.query(PurchasePrice)
+            .filter_by(source="catalog", product_id=butter.id)
+            .count()
+            == 1
+        )
     finally:
         db.close()
 

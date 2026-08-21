@@ -19,6 +19,7 @@ def test_pack_normalization_never_compares_sticker_price():
     assert parse_pack("Large Eggs 15 dozen Qty 3") == (Decimal("45"), "dozen")
     assert parse_pack("Member's Mark Vitamin D Whole Milk, 1 gal. Qty 3") == (Decimal("3"), "gal")
     assert parse_pack("Grassland Unsalted Grade AA Butter Solid - 1 lb. - 36/Case") == (Decimal("36"), "lb")
+    assert parse_pack("1 lb. Salted Grade AA Butter Stick Quarters - 18/Case") == (Decimal("18"), "lb")
     assert comparable_cost(Decimal("201.60"), Decimal("36"), "lb", "lb") == Decimal("5.60")
     assert comparable_cost(Decimal("19.96"), Decimal("4"), "lb", "lb") == Decimal("4.99")
     assert comparable_cost(Decimal("47.88"), Decimal("15"), "dozen", "each") == Decimal("0.266")
@@ -67,6 +68,8 @@ def test_peanut_butter_is_not_butter():
     assert veggies is None or veggies.sku != "EGG"
     yogurt, yogurt_score = match_canonical_product(db, "Member's Mark Honey Vanilla Whole Milk Greek Yogurt, 48 oz. Qty 6")
     assert yogurt is None or yogurt.sku != "MILK"
+    cashew, _score = match_canonical_product(db, "Bare Nut Butter Unsalted Cashew Butter 15 lb.")
+    assert cashew is None or cashew.sku != "BUTTER"
     db.close()
 
 

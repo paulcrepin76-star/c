@@ -188,7 +188,7 @@ def record_catalog_quote(db: Session, product: Product, supplier: Supplier, item
     qty_base = to_base(pack_qty, pack_unit, product.base_unit or compare_unit) or Decimal("0")
     unit_base = (pack_price / qty_base) if qty_base > 0 else Decimal("0")
     url = str(item.get("url") or "")[:400]
-    existing = (
+    existing_rows = (
         db.query(PurchasePrice)
         .filter(
             PurchasePrice.product_id == product.id,
@@ -196,9 +196,14 @@ def record_catalog_quote(db: Session, product: Product, supplier: Supplier, item
             PurchasePrice.source == "catalog",
             PurchasePrice.purchased_on == scanned_on,
         )
-        .first()
+        .order_by(PurchasePrice.unit_cost_compare.asc(), PurchasePrice.id.asc())
+        .all()
     )
+    existing = existing_rows[0] if existing_rows else None
+    for extra in existing_rows[1:]:
+        db.delete(extra)
     if existing and Decimal(str(existing.unit_cost_compare)) <= unit_compare:
+        db.flush()
         return existing
     row = existing or PurchasePrice(
         product_id=product.id,
@@ -219,6 +224,7 @@ def record_catalog_quote(db: Session, product: Product, supplier: Supplier, item
     row.url = url
     if existing is None:
         db.add(row)
+    db.flush()
     return row
 
 
@@ -227,6 +233,12 @@ def _fetch(url: str) -> tuple[int, str]:
     with httpx.Client(headers=headers, timeout=TIMEOUT, follow_redirects=True) as client:
         response = client.get(url)
         return response.status_code, response.text
+
+
+def _query_hits(description: str, query: str) -> bool:
+    text = description.lower()
+    words = [word for word in re.findall(r"[a-z0-9]+", query.lower()) if len(word) > 2]
+    return all(re.search(rf"(?<![a-z0-9]){re.escape(word)}", text) for word in words)
 
 
 def _search_url(source: dict, query: str) -> str:
@@ -250,6 +262,8 @@ def scan_source(db: Session, source: dict, product: Product, query: str, scanned
         return {"status": "error", "error": "missing supplier", "quotes": 0}
     recorded = False
     for item in parser(html):
+        if not _query_hits(item["description"], query):
+            continue
         matched, _score = match_canonical_product(db, item["description"])
         if matched is None or matched.id != product.id:
             continue

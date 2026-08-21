@@ -17,6 +17,11 @@ BUTTER_EXCLUDES = (
     "cocoa",
     "hazelnut",
     "almond",
+    "cashew",
+    "pecan",
+    "pistachio",
+    "walnut",
+    "nut butter",
     "espelette",
     "buttermilk",
     "butternut",
@@ -24,6 +29,11 @@ BUTTER_EXCLUDES = (
     "plant-based",
     "margarine",
     "clarified",
+    "lamination",
+    "whipped",
+    "portion",
+    "foiled",
+    "chip",
 )
 CATEGORIES = ("", "dairy", "food", "meat", "produce", "cleaning", "beverage", "wine")
 USAGE_DAYS = 30
@@ -86,8 +96,8 @@ CANONICAL_PRODUCTS = (
 )
 
 DEFAULT_ALIASES = (
-    ("Butter", "butter", "peanut,cacao,cocoa,hazelnut,almond,espelette,buttermilk,butternut,vegan,plant-based,margarine,clarified"),
-    ("Butter", "unsalted butter", "vegan,plant-based,clarified"),
+    ("Butter", "butter", "peanut,cacao,cocoa,hazelnut,almond,cashew,pecan,pistachio,walnut,nut butter,espelette,buttermilk,butternut,vegan,plant-based,margarine,clarified,lamination,whipped,portion,foiled,chip"),
+    ("Butter", "unsalted butter", "vegan,plant-based,clarified,nut butter,cashew,pecan,pistachio,lamination"),
     ("Eggs", "egg", "eggplant,egg wash"),
     ("Eggs", "eggs", "eggplant"),
     ("Milk", "milk", "almond,oat,coconut,buttermilk,condensed,yogurt"),
