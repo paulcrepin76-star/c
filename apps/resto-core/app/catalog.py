@@ -287,6 +287,15 @@ def scan_catalogs(db: Session) -> dict:
             product = db.query(Product).filter(Product.sku == sku).first()
             if product is None:
                 continue
+            supplier = _supplier_for(db, source["label"])
+            if supplier is not None:
+                db.query(PurchasePrice).filter(
+                    PurchasePrice.product_id == product.id,
+                    PurchasePrice.supplier_id == supplier.id,
+                    PurchasePrice.source == "catalog",
+                    PurchasePrice.purchased_on == scanned_on,
+                ).delete(synchronize_session=False)
+                db.flush()
             for query in queries:
                 outcome = scan_source(db, source, product, query, scanned_on)
                 source_quotes += int(outcome.get("quotes") or 0)
