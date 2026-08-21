@@ -43,7 +43,17 @@ def _vendor_cards(db: Session) -> list[dict]:
         filed = 0
         if supplier:
             filed = db.query(Invoice).filter(Invoice.supplier_id == supplier.id).count()
-        cards.append({**vendor, "connection": connection, "filed_count": filed, "login": extra_dict(connection).get("login", "")})
+        login = extra_dict(connection).get("login", "")
+        cards.append(
+            {
+                **vendor,
+                "connection": connection,
+                "filed_count": filed,
+                "login": login,
+                "e_bill_email": extra_dict(connection).get("e_bill_email") or vendor.get("e_bill_email") or login,
+                "business_statements": extra_dict(connection).get("business_statements") or vendor.get("business_statements"),
+            }
+        )
     return cards
 
 
@@ -332,15 +342,42 @@ def connect_vendor(
     if not login or not password:
         _flash(request, err=f"Enter the same email and password you use to log in to {vendor['label']}.")
         return _redirect_connect()
+    extra = {"login": login, "connector_name": vendor["label"]}
+    if vendor["slug"] == "fpl":
+        extra["business_statements"] = vendor.get("business_statements") or 24
+        extra["e_bill_email"] = login if "@" in login else (vendor.get("e_bill_email") or "")
+        extra["personal_unattached"] = True
     mark_connected(
         db,
         vendor["slug"],
         password,
-        login=login,
-        connector_name=vendor["label"],
+        **extra,
     )
     _ensure_paperless_correspondent(db, vendor)
-    _flash(request, ok=f"{vendor['label']} is connected. Paperless will file their invoices.")
+    if vendor["slug"] == "fpl":
+        _flash(
+            request,
+            ok=(
+                f"{vendor['label']} is connected. Business account: "
+                f"{extra.get('business_statements')} monthly statements. "
+                f"Two personal FPL accounts are not on this login — e-bill those to {extra.get('e_bill_email') or 'your Gmail'}."
+            ),
+        )
+    else:
+        _flash(request, ok=f"{vendor['label']} is connected. Paperless will file their invoices.")
+    return _redirect_connect()
+
+
+@router.post("/connect/vendor/fpl/ebill")
+def save_fpl_ebill(request: Request, email: str = Form(""), db: Session = Depends(get_db)):
+    row = get_connection(db, "fpl")
+    address = email.strip()
+    if "@" not in address:
+        _flash(request, err="Enter the Gmail that should receive the two personal FPL e-bills.")
+        return _redirect_connect()
+    set_extra(row, e_bill_email=address, personal_unattached=True, business_statements=24)
+    db.commit()
+    _flash(request, ok=f"Personal FPL e-bills should go to {address}. Open those two existing accounts and turn on paperless/email there.")
     return _redirect_connect()
 
 

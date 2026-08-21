@@ -150,6 +150,14 @@ def test_vendor_connect_uses_the_same_login_you_already_have():
         )
         assert page.status_code == 200
         assert "FPL Bonita Springs is connected" in unescape(page.text)
+        assert "24 monthly statements" in unescape(page.text)
+        assert "surveycafedowntown@gmail.com" in unescape(page.text)
+        ebill = client.post(
+            "/connect/vendor/fpl/ebill",
+            data={"email": "surveycafedowntown@gmail.com"},
+            follow_redirects=True,
+        )
+        assert "e-bill" in unescape(ebill.text).lower()
         warehouse = client.post(
             "/connect/vendor/chefs-warehouse",
             data={"username": "survey-cafe", "password": "secret"},

@@ -17,32 +17,46 @@ from app.models import (
     Supplier,
     WineProfile,
 )
+from app.vendors import vendor_names
 
 CONNECTION_NAMES = ("square", "mealie", "paperless")
 
 
+def _fold_alias_suppliers(db: Session, vendor: dict, canonical: Supplier) -> None:
+    exact = {name.lower() for name in vendor_names(vendor)}
+    needles = [str(item).lower() for item in (vendor.get("match_needles") or [])]
+    others = db.query(Supplier).filter(Supplier.id != canonical.id).all()
+    for other in others:
+        lowered = other.name.lower()
+        if lowered not in exact and not any(needle and needle in lowered for needle in needles):
+            continue
+        db.query(Invoice).filter(Invoice.supplier_id == other.id).update({"supplier_id": canonical.id})
+        db.delete(other)
+
+
 def ensure_vendors(db: Session) -> None:
     from app.connections import get_connection
-    from app.vendors import VENDORS, vendor_names
+    from app.vendors import VENDORS
 
     for vendor in VENDORS:
         names = vendor_names(vendor)
         supplier = db.query(Supplier).filter(Supplier.name.in_(names)).first()
         if supplier is None:
-            db.add(
-                Supplier(
-                    name=vendor["label"],
-                    category=vendor["kind"],
-                    email_domain=vendor["email_domain"],
-                    default_invoice_type=vendor["invoice_type"],
-                )
+            supplier = Supplier(
+                name=vendor["label"],
+                category=vendor["kind"],
+                email_domain=vendor["email_domain"],
+                default_invoice_type=vendor["invoice_type"],
             )
+            db.add(supplier)
+            db.flush()
         else:
             supplier.name = vendor["label"]
             supplier.category = vendor["kind"]
             supplier.default_invoice_type = vendor["invoice_type"]
             if vendor["email_domain"]:
                 supplier.email_domain = vendor["email_domain"]
+        _fold_alias_suppliers(db, vendor, supplier)
 
         connector = db.query(Connector).filter(Connector.name.in_(names)).first()
         if connector is None:
@@ -63,8 +77,21 @@ def ensure_vendors(db: Session) -> None:
             legacy = db.query(Connection).filter(Connection.name.in_(vendor.get("legacy_slugs") or [])).first()
             if legacy:
                 legacy.name = vendor["slug"]
+                canonical = legacy
             else:
-                get_connection(db, vendor["slug"])
+                canonical = get_connection(db, vendor["slug"])
+        if vendor["slug"] == "fpl" and canonical is not None:
+            from app.connections import extra_dict, set_extra
+
+            extra = extra_dict(canonical)
+            if not extra.get("business_statements"):
+                login = str(extra.get("login") or "")
+                set_extra(
+                    canonical,
+                    business_statements=vendor.get("business_statements") or 24,
+                    personal_unattached=True,
+                    e_bill_email=extra.get("e_bill_email") or (login if "@" in login else vendor.get("e_bill_email") or ""),
+                )
     db.commit()
 
 

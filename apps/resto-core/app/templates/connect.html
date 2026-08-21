@@ -111,6 +111,17 @@
     {% endif %}
     {% if vendor.connection.status == 'connected' %}
       <p class="muted">Linked as {{ vendor.login or "connected" }}.</p>
+      {% if vendor.slug == 'fpl' %}
+        <p><b>Business account on this login:</b> {{ vendor.business_statements or 24 }} monthly statements. Codex pulls that history next. PDFs go into Paperless consume <code>FPL-business</code>.</p>
+        <p><b>Two personal FPL lines are not on this login.</b> Opening one shows an existing account. Finish those with e-bill to this email — Paperless already watches Gmail:</p>
+        <form method="post" action="/connect/vendor/fpl/ebill" class="stack-form">
+          <label>E-bill email <input name="email" type="email" value="{{ vendor.e_bill_email }}" autocomplete="email"></label>
+          <button type="submit" class="btn">Save e-bill email</button>
+        </form>
+      {% endif %}
+      {% if vendor.slug == 'chefs-warehouse' %}
+        <p class="muted">Chef's archive is complete (Codex). New invoices still file through Paperless.</p>
+      {% endif %}
       <form method="post" action="/connect/{{ vendor.slug }}/disconnect">
         <button type="submit" class="btn secondary">Disconnect</button>
       </form>

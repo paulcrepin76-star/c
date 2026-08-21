@@ -6,7 +6,25 @@ from app.db import SessionLocal
 from app.ingest import coerce_money, ingest_paperless_doc, ingest_recipes, ingest_sales, parse_invoice_amount
 from app.main import app
 from app.matching import match_sellables, name_score, normalize_menu_name
-from app.models import SellableItem
+from app.models import Invoice, SellableItem
+
+
+def test_chefs_florida_llc_maps_to_chefs_warehouse():
+    with TestClient(app):
+        db = SessionLocal()
+        ingest_paperless_doc(
+            db,
+            {
+                "id": "cw-fl-1",
+                "title": "Weekly produce $88.10",
+                "correspondent": "The Chefs' Warehouse of Florida, LLC",
+                "total": "88.10",
+            },
+        )
+        invoice = db.query(Invoice).filter(Invoice.paperless_id == "cw-fl-1").one()
+        assert invoice.supplier is not None
+        assert invoice.supplier.name == "Chef's Warehouse"
+        db.close()
 
 
 def test_parse_invoice_amount_prefers_dollar_and_total_labels():
