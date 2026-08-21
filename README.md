@@ -73,17 +73,13 @@ One Compose stack, one Postgres, these containers:
 | metabase | 3001 | Dashboards |
 | postgres | 5433 | Shared database server |
 
-On the MacBook, create a key first if `ssh-copy-id` says **No identities found**, then deploy:
+On Unraid (`ssh root@100.116.48.120`, you should see `root@lerouxfamily`) Paperless is already running. Install the rest **next to it**:
 
 ```bash
-ssh-keygen -t ed25519 -N "" -f ~/.ssh/id_ed25519
-ssh-copy-id -i ~/.ssh/id_ed25519.pub root@100.116.48.120
-git clone https://github.com/paulcrepin76-star/c.git resto-backoffice
-cd resto-backoffice
-./scripts/deploy-unraid.sh root@100.116.48.120
+curl -fsSL https://raw.githubusercontent.com/paulcrepin76-star/c/main/scripts/on-unraid-install.sh | bash
 ```
 
-Open `http://100.116.48.120:8088` for the cellar. Paperless files invoices under `Survey Cafe/{year}/{supplier}/{type}/`. Details: [docs/SSH.md](docs/SSH.md).
+Open `http://100.116.48.120:8088` for the cellar. Do not start a second Paperless. Details: [docs/SSH.md](docs/SSH.md).
 
 ## What you do on day one
 
