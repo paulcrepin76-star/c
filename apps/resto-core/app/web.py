@@ -453,7 +453,7 @@ async def invoices_scan_upload(
         _flash(request, err="Could not reach Paperless. Check Connect, then try again.")
         return RedirectResponse("/invoices/scan", status_code=303)
     if sent and not errors:
-        _flash(request, ok=f"Sent {sent} photo(s) to Paperless. Shoot the next pile, then Sync now after OCR.")
+        _flash(request, ok=f"Sent {sent} photo(s) to Paperless. Shoot the next pile — costing will catch them.")
     elif sent:
         _flash(request, ok=f"Sent {sent}. Could not send {len(errors)}.", err="Some photos did not upload.")
     else:

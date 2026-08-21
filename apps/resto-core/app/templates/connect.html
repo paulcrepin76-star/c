@@ -78,7 +78,7 @@
       {% if paperless.status == 'connected' %}Connected{% elif paperless.status == 'error' %}Needs attention{% else %}Not connected{% endif %}
     </p>
     {% if paperless.status == 'connected' %}
-      <p class="muted">Filed invoices will copy into costing.</p>
+      <p class="muted">New invoices from email, the drop folder, or your iPhone copy into costing by themselves.</p>
       <form method="post" action="/connect/paperless/disconnect">
         <button type="submit" class="btn secondary">Disconnect</button>
       </form>
@@ -131,7 +131,7 @@
 
 <div class="card">
   <h2>Pull everything now</h2>
-  <p class="muted">n8n will do this every night by itself. Use this button if you want to see data today. Paper invoices in a drawer: photograph them on your iPhone at <a href="/invoices/scan">Scan</a>.</p>
+  <p class="muted">n8n will do this every night by itself. New Paperless invoices also sync when they arrive. Use this button if you want Square or Mealie right now.</p>
   <form method="post" action="/connect/sync">
     <button type="submit" class="btn big">Sync now</button>
   </form>

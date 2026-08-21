@@ -244,12 +244,13 @@ def _ingest_paperless_result(db: Session, doc: dict, correspondents: dict, types
     return str(result.get("status") or "")
 
 
-def sync_paperless(db: Session) -> dict:
+def sync_paperless(db: Session, max_pages: int = 15) -> dict:
     token = access_token_for(db, "paperless")
     if not token:
         return {"status": "skipped", "reason": "not connected"}
     base = settings.paperless_base_url.rstrip("/")
     headers = {"Authorization": f"Token {token}"}
+    pages = max(1, min(int(max_pages or 15), 15))
     try:
         created = 0
         updated = 0
@@ -257,7 +258,7 @@ def sync_paperless(db: Session) -> dict:
         with httpx.Client(timeout=TIMEOUT) as client:
             correspondents, types, fields = _paperless_maps(client, base, headers)
             page = 1
-            while page <= 15:
+            while page <= pages:
                 response = client.get(
                     f"{base}/api/documents/",
                     headers=headers,

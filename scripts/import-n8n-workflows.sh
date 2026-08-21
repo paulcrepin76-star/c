@@ -17,11 +17,11 @@ else
 fi
 docker exec resto-n8n n8n list:workflow || true
 
-# Activate the nightly sync. Logins live on resto-core /connect, not here.
+# Activate nightly Square/Mealie/Paperless, plus the 15-minute Paperless backup.
 docker exec resto-postgres psql -U resto -d n8n -c \
-  "UPDATE workflow_entity SET active = false WHERE name IN ('Mealie recipes → cellar', 'Paperless invoices → cellar');" || true
+  "UPDATE workflow_entity SET active = false WHERE name IN ('Mealie recipes → cellar');" || true
 docker exec resto-postgres psql -U resto -d n8n -c \
-  "UPDATE workflow_entity SET active = true WHERE name = 'Square sales → cellar';" || true
+  "UPDATE workflow_entity SET active = true WHERE name IN ('Square sales → cellar', 'Paperless invoices → cellar');" || true
 
 echo
 echo "Open http://100.116.48.120:8088/connect and log in to Square, Mealie, Paperless."

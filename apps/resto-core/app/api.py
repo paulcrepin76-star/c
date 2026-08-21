@@ -8,8 +8,9 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.db import get_db
 from app.ingest import ingest_paperless_doc, ingest_recipes, ingest_sales
+from app.paperless_hook import ensure_paperless_sync_workflow, sync_paperless_now
 from app.services import period_costing, wine_rows
-from app.sync import sync_all
+from app.sync import sync_all, sync_paperless
 
 router = APIRouter(prefix="/api")
 
@@ -106,6 +107,21 @@ def import_recipes(batch: RecipesBatch, db: Session = Depends(get_db)):
 @router.post("/jobs/sync-all", dependencies=[Depends(require_key)])
 def sync_all_job(db: Session = Depends(get_db)):
     return sync_all(db)
+
+
+@router.post("/jobs/sync-paperless")
+def sync_paperless_job(
+    db: Session = Depends(get_db),
+    x_api_key: str | None = Header(default=None, alias="X-API-Key"),
+    token: str | None = None,
+    recent: bool = True,
+):
+    offered = x_api_key or token
+    if not offered or offered != settings.resto_api_key:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+    if recent:
+        return sync_paperless_now(db, max_pages=3)
+    return sync_paperless(db, max_pages=15)
 
 
 @router.post("/jobs/nightly", dependencies=[Depends(require_key)])

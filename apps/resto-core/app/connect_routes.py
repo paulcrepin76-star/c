@@ -23,6 +23,7 @@ from app.connections import (
 )
 from app.db import get_db
 from app.models import Invoice, Supplier
+from app.paperless_hook import ensure_paperless_sync_workflow
 from app.sync import sync_all
 from app.vendors import VENDORS, vendor_by_slug
 from app.web import render
@@ -305,7 +306,11 @@ def connect_paperless(
             )
             check.raise_for_status()
         mark_connected(db, "paperless", token, login=username.strip())
-        _flash(request, ok="Paperless is connected. Invoices will copy into costing.")
+        hook = ensure_paperless_sync_workflow(db)
+        if hook.get("status") == "ok":
+            _flash(request, ok="Paperless is connected. New invoices copy into costing by themselves.")
+        else:
+            _flash(request, ok="Paperless is connected. Invoices will copy into costing.")
     except Exception:  # noqa: BLE001
         mark_error(db, "paperless", "login failed")
         _flash(request, err="Paperless login failed. Use the same username and password as on Paperless.")

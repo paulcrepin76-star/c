@@ -11,8 +11,8 @@
       "position": [0, 200],
       "parameters": {
         "width": 460,
-        "height": 180,
-        "content": "## Credentials live on the cellar site\nhttp://100.116.48.120:8088/connect\n\nThis extra timer is optional. The nightly Square workflow already syncs Paperless."
+        "height": 200,
+        "content": "## Backup timer, not the main path\nPaperless already pings the cellar when a new invoice lands.\nThis 15-minute pass catches OCR amounts and anything the webhook missed.\nLogins live at http://100.116.48.120:8088/connect"
       }
     },
     {
@@ -37,13 +37,13 @@
     },
     {
       "id": "p3",
-      "name": "Sync all",
+      "name": "Sync new Paperless invoices",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [280, 40],
       "parameters": {
         "method": "POST",
-        "url": "http://resto-core:8080/api/jobs/sync-all",
+        "url": "http://resto-core:8080/api/jobs/sync-paperless",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -56,10 +56,10 @@
   ],
   "connections": {
     "Every 15 minutes": {
-      "main": [[{ "node": "Sync all", "type": "main", "index": 0 }]]
+      "main": [[{ "node": "Sync new Paperless invoices", "type": "main", "index": 0 }]]
     },
     "Test now": {
-      "main": [[{ "node": "Sync all", "type": "main", "index": 0 }]]
+      "main": [[{ "node": "Sync new Paperless invoices", "type": "main", "index": 0 }]]
     }
   }
 }

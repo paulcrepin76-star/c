@@ -3,7 +3,7 @@
 {% block content %}
 <p class="eyebrow">iPhone camera → Paperless</p>
 <h1>Photograph paper invoices</h1>
-<p class="lede">Open this page on your iPhone, on Tailscale. Shoot the bill. It goes straight into Paperless. After OCR, Sync now copies the dollars into costing. No extra App Store app required.</p>
+<p class="lede">Open this page on your iPhone, on Tailscale. Shoot the bill. It goes straight into Paperless, and costing picks it up on its own.</p>
 {% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
 {% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
 
@@ -31,12 +31,12 @@
     <li>Share → Add to Home Screen. It opens like an app, camera and all.</li>
     <li>For a pile: photograph them in Camera first, then <b>pick several from Photos</b>.</li>
     <li>For one bill in your hand: <b>take one photo now</b>, then Upload.</li>
-    <li>Give Paperless a minute to read it. On Connect, tap Sync now.</li>
+    <li>Give Paperless a minute to read it. Costing updates by itself — no Sync now needed.</li>
   </ol>
 </div>
 
 <div class="card">
   <h2>If you want a dedicated Paperless app</h2>
-  <p>Optional: <a href="https://apps.apple.com/app/swift-paperless/id6448602002">Swift Paperless</a> on the App Store, pointed at <code>{{ paperless_url }}</code> on Tailscale. Same archive. This scan page is enough for dumping a stack of paper into costing.</p>
+  <p>Optional: <a href="https://apps.apple.com/us/app/swift-paperless/id6448698521">Swift Paperless</a> on the App Store, pointed at <code>{{ paperless_url }}</code> on Tailscale. Same archive. New scans still sync into costing automatically.</p>
 </div>
 {% endblock %}
