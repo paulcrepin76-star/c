@@ -69,44 +69,28 @@ EXISTING_MEALIE="$(detect_container mealie resto-mealie)"
 PAPERLESS_PORT="8010"
 MEALIE_PORT="9925"
 COMPOSE_PROFILES_VALUE=""
-PAPERLESS_BASE="http://paperless:8000"
-MEALIE_BASE="http://mealie:9000"
-
-append_profile() {
-  if [ -z "$COMPOSE_PROFILES_VALUE" ]; then
-    COMPOSE_PROFILES_VALUE="$1"
-  else
-    COMPOSE_PROFILES_VALUE="${COMPOSE_PROFILES_VALUE},$1"
-  fi
-}
+PAPERLESS_BASE="http://host.docker.internal:8000"
+MEALIE_BASE="http://host.docker.internal:9000"
 
 if [ -n "${EXISTING_PAPERLESS:-}" ]; then
   PAPERLESS_PORT="$(detect_port "$EXISTING_PAPERLESS" 8000 8000)"
   PAPERLESS_BASE="http://host.docker.internal:${PAPERLESS_PORT}"
   echo "Found existing Paperless: ${EXISTING_PAPERLESS} (port ${PAPERLESS_PORT})"
-  echo "Will NOT start a second Paperless."
-  if docker ps -a --format '{{.Names}}' | grep -qx resto-paperless; then
-    echo "Removing leftover resto-paperless container."
-    docker rm -f resto-paperless >/dev/null 2>&1 || true
-  fi
 else
-  append_profile paperless
-  mkdir -p "$APPDATA/paperless/data" "$APPDATA/paperless/media" "$APPDATA/paperless/export"
+  echo "No Paperless container detected. Using ${PAPERLESS_BASE}"
+  echo "This stack will NOT install Paperless — keep the one you already have."
 fi
+docker rm -f resto-paperless >/dev/null 2>&1 || true
 
 if [ -n "${EXISTING_MEALIE:-}" ]; then
   MEALIE_PORT="$(detect_port "$EXISTING_MEALIE" 9000 9000)"
   MEALIE_BASE="http://host.docker.internal:${MEALIE_PORT}"
   echo "Found existing Mealie: ${EXISTING_MEALIE} (port ${MEALIE_PORT})"
-  echo "Will NOT start a second Mealie."
-  if docker ps -a --format '{{.Names}}' | grep -qx resto-mealie; then
-    echo "Removing leftover resto-mealie container."
-    docker rm -f resto-mealie >/dev/null 2>&1 || true
-  fi
 else
-  append_profile mealie
-  mkdir -p "$APPDATA/mealie"
+  echo "No Mealie container detected. Using ${MEALIE_BASE}"
+  echo "This stack will NOT install Mealie — keep the one you already have."
 fi
+docker rm -f resto-mealie >/dev/null 2>&1 || true
 
 if [ -f "$ROOT/.env" ]; then
   echo ".env already exists — keeping passwords, updating service URLs."
