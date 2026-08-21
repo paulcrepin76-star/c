@@ -1,0 +1,157 @@
+{
+  "name": "Square sales → cellar",
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "nodes": [
+    {
+      "id": "s0",
+      "name": "Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [0, 240],
+      "parameters": {
+        "width": 520,
+        "height": 280,
+        "content": "## Your part\n1. Credentials → Header Auth named **Square Access Token**\n   Header: `Authorization`  Value: `Bearer YOUR_SQUARE_TOKEN`\n2. Open this node **Square settings** and paste Location ID.\n3. Save, then toggle **Active**.\n\nThe token never goes in git. This workflow runs at 02:10 and also when you click Test."
+      }
+    },
+    {
+      "id": "s1",
+      "name": "Every night 02:10",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0],
+      "parameters": {
+        "rule": {
+          "interval": [
+            { "field": "days", "daysInterval": 1, "triggerAtHour": 2, "triggerAtMinute": 10 }
+          ]
+        }
+      }
+    },
+    {
+      "id": "s2",
+      "name": "Test now",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [0, 120],
+      "parameters": {}
+    },
+    {
+      "id": "s3",
+      "name": "Square settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [280, 40],
+      "parameters": {
+        "mode": "manual",
+        "duplicateItem": false,
+        "assignments": {
+          "assignments": [
+            { "id": "loc", "name": "location_id", "value": "PASTE_SQUARE_LOCATION_ID", "type": "string" },
+            { "id": "env", "name": "square_host", "value": "https://connect.squareup.com", "type": "string" }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "s4",
+      "name": "Search Square orders",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [560, 40],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.square_host }}/v2/orders/search",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Square-Version", "value": "2025-01-23" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ location_ids: [$json.location_id], query: { filter: { date_time_filter: { closed_at: { start_at: $now.minus({ days: 2 }).toISO(), end_at: $now.toISO() } }, state_filter: { states: ['COMPLETED'] } } } }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "Square Access Token"
+        }
+      }
+    },
+    {
+      "id": "s5",
+      "name": "Map tickets to cellar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [840, 40],
+      "parameters": {
+        "jsCode": "const orders = $input.first().json.orders || [];\nconst sales = [];\nfor (const order of orders) {\n  for (const line of (order.line_items || [])) {\n    const name = String(line.name || '');\n    const lower = name.toLowerCase();\n    let group = 'food';\n    if (/wine|sauvignon|pinot|champagne|cabernet|chardonnay|merlot|prosecco|rose|blanc|noir/.test(lower)) group = 'wine';\n    else if (/beer|ipa|lager|stout|cider/.test(lower)) group = 'beer';\n    else if (/coffee|espresso|juice|soda|cocktail|sangria|spritz/.test(lower)) group = 'beverage';\n    sales.push({\n      sold_at: order.closed_at || order.created_at,\n      name,\n      qty: Number(line.quantity || 1),\n      unit_price: Number(line.base_price_money?.amount || 0) / 100,\n      revenue: Number(line.total_money?.amount || 0) / 100,\n      square_order_id: order.id || '',\n      square_line_id: line.uid || name,\n      square_item_id: line.catalog_object_id || '',\n      costing_group: group\n    });\n  }\n}\nreturn [{ json: { sales } }];"
+      }
+    },
+    {
+      "id": "s6",
+      "name": "Send sales to cellar",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 40],
+      "parameters": {
+        "method": "POST",
+        "url": "http://resto-core:8080/api/sales/import",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-API-Key", "value": "={{ $env.RESTO_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "s7",
+      "name": "Nightly costing",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1400, 40],
+      "parameters": {
+        "method": "POST",
+        "url": "http://resto-core:8080/api/jobs/nightly",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-API-Key", "value": "={{ $env.RESTO_API_KEY }}" }
+          ]
+        },
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Every night 02:10": {
+      "main": [[{ "node": "Square settings", "type": "main", "index": 0 }]]
+    },
+    "Test now": {
+      "main": [[{ "node": "Square settings", "type": "main", "index": 0 }]]
+    },
+    "Square settings": {
+      "main": [[{ "node": "Search Square orders", "type": "main", "index": 0 }]]
+    },
+    "Search Square orders": {
+      "main": [[{ "node": "Map tickets to cellar", "type": "main", "index": 0 }]]
+    },
+    "Map tickets to cellar": {
+      "main": [[{ "node": "Send sales to cellar", "type": "main", "index": 0 }]]
+    },
+    "Send sales to cellar": {
+      "main": [[{ "node": "Nightly costing", "type": "main", "index": 0 }]]
+    }
+  }
+}

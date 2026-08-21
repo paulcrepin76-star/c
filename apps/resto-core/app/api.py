@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.db import get_db
-from app.models import Invoice, InvoiceLine, Product, Sale, SellableItem, StockMove, Supplier
+from app.models import Invoice, InvoiceLine, Product, Recipe, RecipeLine, Sale, SellableItem, StockMove, Supplier
 from app.services import period_costing, wine_rows
 
 router = APIRouter(prefix="/api")
@@ -194,6 +194,64 @@ def paperless_webhook(doc: PaperlessDocument, db: Session = Depends(get_db)):
         )
     db.commit()
     return {"status": "created", "invoice_id": invoice.id}
+
+
+class RecipesBatch(BaseModel):
+    recipes: list[dict]
+
+
+@router.post("/recipes/import", dependencies=[Depends(require_key)])
+def import_recipes(batch: RecipesBatch, db: Session = Depends(get_db)):
+    created = 0
+    updated = 0
+    for incoming in batch.recipes:
+        name = str(incoming.get("name") or "").strip()
+        if not name:
+            continue
+        mealie_id = str(incoming.get("mealie_id") or "")
+        recipe = None
+        if mealie_id:
+            recipe = db.query(Recipe).filter(Recipe.mealie_id == mealie_id).first()
+        if recipe is None:
+            recipe = db.query(Recipe).filter(Recipe.name.ilike(name)).first()
+        if recipe is None:
+            recipe = Recipe(name=name, mealie_id=mealie_id, yield_qty=incoming.get("yield_qty") or 1, yield_unit=incoming.get("yield_unit") or "portion")
+            db.add(recipe)
+            db.flush()
+            created += 1
+        else:
+            recipe.name = name
+            recipe.mealie_id = mealie_id or recipe.mealie_id
+            recipe.yield_qty = incoming.get("yield_qty") or recipe.yield_qty
+            updated += 1
+            db.query(RecipeLine).filter(RecipeLine.recipe_id == recipe.id).delete()
+        for line in incoming.get("lines") or []:
+            food = str(line.get("name") or line.get("food") or "").strip()
+            if not food:
+                continue
+            product = db.query(Product).filter(Product.name.ilike(food)).first()
+            if product is None:
+                product = Product(sku=food.upper().replace(" ", "-")[:70], name=food, category="food", base_unit=str(line.get("unit") or "g"))
+                db.add(product)
+                db.flush()
+            db.add(
+                RecipeLine(
+                    recipe_id=recipe.id,
+                    product_id=product.id,
+                    qty=line.get("qty") or 0,
+                    unit=str(line.get("unit") or "g"),
+                )
+            )
+        price = incoming.get("selling_price")
+        if price is not None:
+            item = db.query(SellableItem).filter(SellableItem.recipe_id == recipe.id).first()
+            if item is None:
+                item = SellableItem(recipe_id=recipe.id, name=name, costing_group=incoming.get("costing_group") or "food")
+                db.add(item)
+            item.selling_price = price
+            item.name = name
+    db.commit()
+    return {"created": created, "updated": updated}
 
 
 @router.post("/jobs/nightly", dependencies=[Depends(require_key)])

@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Setup{% endblock %}
+{% block content %}
+<p class="eyebrow">You only log in. n8n does the rest.</p>
+<h1>Connect Square, Mealie and Paperless</h1>
+<p class="lede">The workflows are already in n8n. Open n8n, add three credentials, then turn the workflows on. Do not paste those tokens here.</p>
+
+<ol class="stack">
+  <li>
+    <b>Open n8n</b> — <a href="http://100.116.48.120:5678" target="_blank" rel="noreferrer">http://100.116.48.120:5678</a>
+    Log in with the Survey Cafe owner account you already created.
+  </li>
+  <li>
+    <b>Credentials → Add credential → Header Auth</b>
+    Create these three names exactly:
+    <ul>
+      <li><code>Square Access Token</code> — Header name <code>Authorization</code>, value <code>Bearer YOUR_SQUARE_TOKEN</code></li>
+      <li><code>Mealie API</code> — Header name <code>Authorization</code>, value <code>Bearer YOUR_MEALIE_TOKEN</code></li>
+      <li><code>Paperless Token</code> — Header name <code>Authorization</code>, value <code>Token YOUR_PAPERLESS_TOKEN</code></li>
+    </ul>
+  </li>
+  <li>
+    <b>Open workflow “Square sales → cellar”</b>
+    Click the red node “Square settings”. Put your Square Location ID there. Save. Toggle Active.
+  </li>
+  <li>
+    <b>Activate</b> “Mealie recipes → cellar” and “Paperless invoices → cellar”.
+  </li>
+  <li>
+    Click <b>Test workflow</b> on “Check cellar connection”. It should say resto-core is ok.
+  </li>
+</ol>
+
+<div class="card">
+  <h2>Where to get the tokens</h2>
+  <p><b>Square:</b> Developer Dashboard → Applications → Production → Access token, and Locations for the Location ID.</p>
+  <p><b>Mealie:</b> your Mealie user menu → API tokens → generate.</p>
+  <p><b>Paperless:</b> Paperless → your user → API tokens → generate. Paperless is at port 8011.</p>
+</div>
+{% endblock %}

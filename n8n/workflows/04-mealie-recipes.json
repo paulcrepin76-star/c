@@ -1,0 +1,103 @@
+{
+  "name": "Mealie recipes → cellar",
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "nodes": [
+    {
+      "id": "m0",
+      "name": "Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [0, 200],
+      "parameters": {
+        "width": 480,
+        "height": 220,
+        "content": "## Your part\nKeep using the Mealie you already have.\n\nCredentials → Header Auth named **Mealie API**\nHeader: `Authorization`  Value: `Bearer YOUR_MEALIE_TOKEN`\n\nCreate the token in Mealie (port 9925) → your profile → API tokens.\nThen toggle this workflow **Active**."
+      }
+    },
+    {
+      "id": "m1",
+      "name": "Every morning 05:30",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0],
+      "parameters": {
+        "rule": {
+          "interval": [
+            { "field": "days", "daysInterval": 1, "triggerAtHour": 5, "triggerAtMinute": 30 }
+          ]
+        }
+      }
+    },
+    {
+      "id": "m2",
+      "name": "Test now",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [0, 100],
+      "parameters": {}
+    },
+    {
+      "id": "m3",
+      "name": "List Mealie recipes",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [280, 40],
+      "parameters": {
+        "method": "GET",
+        "url": "http://host.docker.internal:9925/api/recipes?perPage=200",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": { "name": "Mealie API" }
+      }
+    },
+    {
+      "id": "m4",
+      "name": "Map recipes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [560, 40],
+      "parameters": {
+        "jsCode": "const payload = $input.first().json;\nconst items = payload.items || payload || [];\nconst recipes = (Array.isArray(items) ? items : []).map((r) => ({\n  mealie_id: String(r.id || r.slug || ''),\n  name: r.name || r.slug,\n  yield_qty: r.recipeYield || r.yield || 1,\n  yield_unit: 'portion',\n  costing_group: /sangria|cocktail|drink/.test(String(r.name || '').toLowerCase()) ? 'beverage' : 'food',\n  lines: (r.recipeIngredient || []).map((ing) => ({\n    name: (ing.food && ing.food.name) || ing.display || ing.note || '',\n    qty: ing.quantity || 0,\n    unit: (ing.unit && (ing.unit.abbreviation || ing.unit.name)) || 'g'\n  })).filter((line) => line.name)\n}));\nreturn [{ json: { recipes } }];"
+      }
+    },
+    {
+      "id": "m5",
+      "name": "Send recipes to cellar",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [840, 40],
+      "parameters": {
+        "method": "POST",
+        "url": "http://resto-core:8080/api/recipes/import",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-API-Key", "value": "={{ $env.RESTO_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Every morning 05:30": {
+      "main": [[{ "node": "List Mealie recipes", "type": "main", "index": 0 }]]
+    },
+    "Test now": {
+      "main": [[{ "node": "List Mealie recipes", "type": "main", "index": 0 }]]
+    },
+    "List Mealie recipes": {
+      "main": [[{ "node": "Map recipes", "type": "main", "index": 0 }]]
+    },
+    "Map recipes": {
+      "main": [[{ "node": "Send recipes to cellar", "type": "main", "index": 0 }]]
+    }
+  }
+}

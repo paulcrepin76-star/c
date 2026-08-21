@@ -1,0 +1,65 @@
+{
+  "name": "Check cellar connection",
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "nodes": [
+    {
+      "id": "a1",
+      "name": "When you click Test",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [0, 0],
+      "parameters": {}
+    },
+    {
+      "id": "a2",
+      "name": "Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [0, 180],
+      "parameters": {
+        "width": 420,
+        "height": 180,
+        "content": "## You do not edit this workflow\nClick **Test workflow**. If resto-core answers, n8n can talk to the wine cellar.\nThen add Square / Mealie / Paperless credentials and turn the other workflows on."
+      }
+    },
+    {
+      "id": "a3",
+      "name": "Ping cellar",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [280, 0],
+      "parameters": {
+        "method": "GET",
+        "url": "http://resto-core:8080/health",
+        "options": {}
+      }
+    },
+    {
+      "id": "a4",
+      "name": "Costing summary",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [560, 0],
+      "parameters": {
+        "method": "GET",
+        "url": "http://resto-core:8080/api/costing/summary",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-API-Key", "value": "={{ $env.RESTO_API_KEY }}" }
+          ]
+        },
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "When you click Test": {
+      "main": [[{ "node": "Ping cellar", "type": "main", "index": 0 }]]
+    },
+    "Ping cellar": {
+      "main": [[{ "node": "Costing summary", "type": "main", "index": 0 }]]
+    }
+  }
+}

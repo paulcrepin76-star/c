@@ -154,6 +154,9 @@ services:
     volumes:
       - ${APPDATA:-./appdata}/n8n:/home/node/.n8n
       - ${CONSUME_DIR:-./appdata/invoices-inbox}:/files/invoices-inbox
+      - ./n8n/workflows:/files/workflows:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       TZ: ${TZ}
       GENERIC_TIMEZONE: ${TZ}
@@ -163,6 +166,10 @@ services:
       N8N_PROTOCOL: ${N8N_PROTOCOL:-http}
       N8N_SECURE_COOKIE: "false"
       WEBHOOK_URL: ${N8N_URL:-http://localhost:5678}
+      RESTO_API_KEY: ${RESTO_API_KEY}
+      MEALIE_PUBLIC_URL: ${MEALIE_URL:-http://host.docker.internal:9925}
+      PAPERLESS_PUBLIC_URL: ${PAPERLESS_URL:-http://host.docker.internal:8011}
+      TZ: ${TZ}
       DB_TYPE: postgresdb
       DB_POSTGRESDB_HOST: postgres
       DB_POSTGRESDB_PORT: 5432
