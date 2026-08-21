@@ -52,14 +52,14 @@ The consume folder is enough when you download a PDF yourself. Share `invoices-i
 
 During setup, Metabase uses its own `metabase` database.
 
-Add another database connection:
+On Unraid, after the cellar is syncing:
 
-- Engine: PostgreSQL
-- Host: `postgres` (from another container) or `TOWER` port `5433`
-- Database: `resto`
-- User / password: the values in `.env`
+```bash
+cd /mnt/user/appdata/resto
+./scripts/setup-metabase.sh
+```
 
-Paste the queries in `metabase/questions.sql`. Pin food cost %, wine cost %, cellar value, and below-par wines on one dashboard.
+That adds the `resto` Postgres database, the questions in `metabase/questions.sql`, and a **Survey Cafe** dashboard. Sign in at `http://100.116.48.120:3001` with the Metabase user you already created.
 
 ## RAM
 

@@ -86,7 +86,7 @@ Open `http://100.116.48.120:8088` for the cellar. This will not start a second P
 1. Keep using your existing Paperless and Mealie.
 2. Open `http://100.116.48.120:8088/connect`. Click Connect on Square, Mealie, and Paperless, and log in with the accounts you already use.
 3. In resto-core, add your real wines (or edit the demo list).
-4. In Metabase, add a second data source pointing at database `resto`, then paste queries from `metabase/questions.sql`.
+4. Open Metabase at `http://100.116.48.120:3001` and sign in with the account you already created. After `./scripts/setup-metabase.sh`, the **Survey Cafe** dashboard is already there.
 5. Drop any PDF you still download by hand into `/mnt/user/documents/invoices-inbox`.
 
 You do **not** put tokens into n8n. n8n only runs the nightly sync after you have connected on that page.
