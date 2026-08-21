@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import time
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 import httpx
 
@@ -185,7 +185,7 @@ def run_scan() -> dict:
     if not lock.acquire(blocking=False):
         return {"ok": False, "error": "browser is busy"}
     _running = True
-    started = datetime.now(UTC).replace(tzinfo=None)
+    started = datetime.now(timezone.utc).replace(tzinfo=None)
     sources = []
     try:
         watch = cellar_get("/api/prices/watch?cap=200")
@@ -198,7 +198,7 @@ def run_scan() -> dict:
         needs = [row["slug"] for row in sources if row["status"] == "needs_reauth"]
         payload = {
             "started_at": started.isoformat(),
-            "finished_at": datetime.now(UTC).replace(tzinfo=None).isoformat(),
+            "finished_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
             "checked": checked,
             "updated": updated,
             "unchanged": max(checked - updated - unavailable, 0),
