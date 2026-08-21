@@ -12,14 +12,15 @@ VENDORS: list[dict] = [
         "legacy_names": ["FPL"],
     },
     {
-        "slug": "greatest-spring-water",
-        "label": "The Greatest Spring Water",
+        "slug": "bonita-springs-water",
+        "label": "Bonita Springs Water",
         "kind": "utility",
         "invoice_type": "utility",
-        "email_domain": "",
-        "login_url": "",
-        "blurb": "Water delivery. Paperless files the invoice; no line-item matching needed.",
-        "legacy_names": ["Water"],
+        "email_domain": "bsu.us",
+        "login_url": "https://bsu.us/",
+        "blurb": "Water for the Bonita Springs cafe. Paperless files the emailed bill.",
+        "legacy_names": ["The Greatest Spring Water", "Water", "Bonita Springs Utilities"],
+        "legacy_slugs": ["greatest-spring-water"],
     },
     {
         "slug": "chefs-warehouse",
@@ -66,7 +67,8 @@ VENDORS: list[dict] = [
 
 def vendor_by_slug(slug: str) -> dict | None:
     for vendor in VENDORS:
-        if vendor["slug"] == slug:
+        aliases = [vendor["slug"], *(vendor.get("legacy_slugs") or [])]
+        if slug in aliases:
             return vendor
     return None
 

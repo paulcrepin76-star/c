@@ -64,7 +64,7 @@ def test_connect_page_is_the_login_door():
         assert "Connect Paperless" in text
         assert "FPL Bonita Springs" in text
         assert "Chef's Warehouse" in text
-        assert "The Greatest Spring Water" in text
+        assert "Bonita Springs Water" in text
         assert "Sam's Club" in text
         assert "Costco" in text
         assert "Gordon Food Service" in text

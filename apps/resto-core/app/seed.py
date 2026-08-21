@@ -58,7 +58,13 @@ def ensure_vendors(db: Session) -> None:
             connector.name = vendor["label"]
             connector.notes = vendor["blurb"] or connector.notes
 
-        get_connection(db, vendor["slug"])
+        canonical = db.query(Connection).filter(Connection.name == vendor["slug"]).first()
+        if canonical is None:
+            legacy = db.query(Connection).filter(Connection.name.in_(vendor.get("legacy_slugs") or [])).first()
+            if legacy:
+                legacy.name = vendor["slug"]
+            else:
+                get_connection(db, vendor["slug"])
     db.commit()
 
 
