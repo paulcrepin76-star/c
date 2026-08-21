@@ -464,6 +464,7 @@ def ensure_purchasing(db: Session) -> None:
             .first()
         )
         if exists:
+            exists.exclude = exclude
             continue
         db.add(ProductAlias(product_id=product.id, alias=alias, exclude=exclude))
     db.commit()
