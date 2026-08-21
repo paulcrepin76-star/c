@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Restaurant Price Collector",
-  "version": "0.1.0",
-  "description": "Send visible grocery and supplier prices to the Survey Cafe cellar. No passwords leave Chrome.",
+  "version": "0.2.0",
+  "description": "Send visible grocery and supplier prices to the Survey Cafe cellar on port 8088. Not n8n.",
   "permissions": ["storage", "activeTab"],
   "host_permissions": [
     "http://100.116.48.120:8088/*",

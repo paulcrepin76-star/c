@@ -156,6 +156,11 @@ class CollectBatch(BaseModel):
     items: list[CollectItem] = Field(default_factory=list)
 
 
+@router.get("/prices/ping", dependencies=[Depends(require_key)])
+def prices_ping():
+    return {"ok": True, "app": "cellar"}
+
+
 @router.post("/prices/collect", dependencies=[Depends(require_key)])
 def collect_prices(batch: CollectBatch, db: Session = Depends(get_db)):
     return ingest_collected_items(db, batch.model_dump())

@@ -535,6 +535,7 @@ def collector_page(request: Request, db: Session = Depends(get_db)):
         far=FAR_MILES,
         playwright_ready=playwright_available(),
         cellar_url=settings.resto_public_url,
+        cellar_api_key=settings.resto_api_key,
         flash_ok=ok,
         flash_err=err,
     )

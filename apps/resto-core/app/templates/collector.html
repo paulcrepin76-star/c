@@ -32,8 +32,11 @@
     <li>Open <code>chrome://extensions</code></li>
     <li>Turn on Developer mode</li>
     <li>Load unpacked → <code>/mnt/user/appdata/resto/apps/resto-core/app/static/extension</code> on Unraid, or copy <a href="/static/extension/manifest.json">the extension folder</a> from this site</li>
-    <li>Open the extension options. Cellar URL: <code>{{ cellar_url }}</code>. Paste the same API key as n8n (<code>RESTO_API_KEY</code>).</li>
-    <li>Log in to Sam’s or Chef’s yourself, search butter, click <b>Send visible prices</b>.</li>
+    <li>Open the extension options. Cellar URL must be <code>{{ cellar_url }}</code> (port <b>8088</b>, not n8n on 5678).</li>
+    <li>Paste this cellar key — not an n8n API key:
+      <p><code id="cellar-api-key">{{ cellar_api_key }}</code></p>
+    </li>
+    <li>Click <b>Test connection</b> in the extension. Then log in to Sam’s or Chef’s and click <b>Send visible prices</b>.</li>
   </ol>
   <p class="muted">The extension only sends what you can already see. Session cookies stay in Chrome. Treat the API key like a password.</p>
 </div>

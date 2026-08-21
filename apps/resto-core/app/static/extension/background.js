@@ -1,6 +1,6 @@
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || message.type !== "send") return;
-  chrome.storage.sync.get(["cellarUrl", "apiKey"], async (config) => {
+  chrome.storage.local.get(["cellarUrl", "apiKey"], async (config) => {
     const base = (config.cellarUrl || "http://100.116.48.120:8088").replace(/\/$/, "");
     const key = config.apiKey || "";
     try {

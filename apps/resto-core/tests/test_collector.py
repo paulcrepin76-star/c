@@ -108,6 +108,16 @@ def test_collector_page_and_ingest_api():
         assert "Restaurant Price Collector" in page.text
         assert "BROWSER EXTENSION" in page.text
         assert "Open Prices" in page.text
+        assert "not n8n" in page.text
+        assert "8088" in page.text
+        assert "5678" in page.text
+        assert 'id="cellar-api-key"' in page.text
+        assert ">test<" in page.text
+        ping_denied = client.get("/api/prices/ping")
+        assert ping_denied.status_code == 401
+        ping_ok = client.get("/api/prices/ping", headers={"X-API-Key": "test"})
+        assert ping_ok.status_code == 200
+        assert ping_ok.json() == {"ok": True, "app": "cellar"}
         denied = client.post("/api/prices/collect", json={"supplier": "Sam's Club", "items": []})
         assert denied.status_code == 401
         ok = client.post(
