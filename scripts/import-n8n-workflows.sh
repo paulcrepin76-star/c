@@ -3,7 +3,11 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-USER_ID="${N8N_USER_ID:-6e5cd921-5d93-4a39-8fc5-569959b48edc}"
+USER_ID="$(
+  docker exec resto-postgres psql -U resto -d n8n -tAc \
+    "SELECT id FROM \"user\" WHERE email='surveycafedowntown@gmail.com' LIMIT 1;"
+)"
+USER_ID="${USER_ID:-6e5cd921-5d93-4a39-8fc5-569959b48edc}"
 
 docker cp "$ROOT/n8n/workflows/." resto-n8n:/tmp/resto-workflows
 docker exec resto-n8n n8n import:workflow --separate --input=/tmp/resto-workflows --userId="$USER_ID"

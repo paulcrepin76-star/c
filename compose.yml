@@ -169,7 +169,6 @@ services:
       RESTO_API_KEY: ${RESTO_API_KEY}
       MEALIE_PUBLIC_URL: ${MEALIE_URL:-http://host.docker.internal:9925}
       PAPERLESS_PUBLIC_URL: ${PAPERLESS_URL:-http://host.docker.internal:8011}
-      TZ: ${TZ}
       DB_TYPE: postgresdb
       DB_POSTGRESDB_HOST: postgres
       DB_POSTGRESDB_PORT: 5432
