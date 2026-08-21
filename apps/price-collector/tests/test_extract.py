@@ -1,11 +1,24 @@
 from app.extract import classify_wall, matches_watch, products_from_html, search_url, walk_products
 from app.suppliers import supplier_by_slug
+from app import browser as browser_mod
 
 
 def test_chefs_login_uses_public_site():
     source = supplier_by_slug("chefs-warehouse")
     assert source["login_url"].startswith("https://www.chefswarehouse.com/")
     assert "shop.chefswarehouse.com" not in source["login_url"]
+
+
+def test_stale_chromium_locks_are_removed(tmp_path, monkeypatch):
+    monkeypatch.setattr(browser_mod.settings, "data_dir", str(tmp_path))
+    profile = tmp_path / "profiles" / "chefs-warehouse"
+    profile.mkdir(parents=True)
+    lock = profile / "SingletonLock"
+    lock.symlink_to("deadhost-99999")
+    (profile / "SingletonCookie").write_text("x")
+    browser_mod._clear_stale_profile_locks("chefs-warehouse")
+    assert not lock.exists()
+    assert not (profile / "SingletonCookie").exists()
 
 
 def test_captcha_and_login_walls_are_detected():

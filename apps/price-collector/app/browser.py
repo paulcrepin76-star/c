@@ -28,6 +28,16 @@ def profile_ready(slug: str) -> bool:
     return any(path.iterdir())
 
 
+def _clear_stale_profile_locks(slug: str) -> None:
+    path = profile_dir(slug)
+    for name in ("SingletonLock", "SingletonCookie", "SingletonSocket"):
+        lock = path / name
+        try:
+            lock.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
 def lock_path() -> Path:
     return data_root() / "locks" / "browser.lock"
 
@@ -90,6 +100,7 @@ def start_login(slug: str) -> dict:
     if source is None:
         return {"ok": False, "error": "unknown supplier"}
     stop_login()
+    _clear_stale_profile_locks(slug)
     from playwright.sync_api import sync_playwright
 
     playwright = sync_playwright().start()
@@ -143,6 +154,7 @@ def login_active() -> str | None:
 def open_scan_context(slug: str):
     from playwright.sync_api import sync_playwright
 
+    _clear_stale_profile_locks(slug)
     playwright = sync_playwright().start()
     context = playwright.chromium.launch_persistent_context(
         str(profile_dir(slug)),
