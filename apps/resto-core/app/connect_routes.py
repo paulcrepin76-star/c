@@ -368,13 +368,22 @@ def sync_now(request: Request, db: Session = Depends(get_db)):
             continue
         status = payload.get("status")
         if status == "ok":
-            parts.append(name.title())
+            if name == "square":
+                parts.append(f"Square {payload.get('created', 0)} new sales")
+            elif name == "mealie":
+                parts.append(f"Mealie {payload.get('created', 0)} new recipes")
+            elif name == "paperless":
+                parts.append(f"Paperless {payload.get('created', 0)} new invoices")
+            else:
+                parts.append(name.title())
         elif status == "error":
             errors.append(f"{name}: {payload.get('error')}")
+        elif status == "skipped":
+            continue
     if parts and not errors:
-        _flash(request, ok="Synced " + ", ".join(parts) + ".")
+        _flash(request, ok="Synced: " + "; ".join(parts) + ".")
     elif parts:
-        _flash(request, ok="Synced " + ", ".join(parts) + ".", err="; ".join(errors))
+        _flash(request, ok="Synced: " + "; ".join(parts) + ".", err="; ".join(errors))
     elif errors:
         _flash(request, err="; ".join(errors))
     else:

@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.connections import access_token_for, extra_dict, get_connection, mark_error, set_extra, square_host
 from app.ingest import clean_food_name, ingest_paperless_doc, ingest_recipes, ingest_sales
+from app.models import Sale
 
 TIMEOUT = httpx.Timeout(30.0, connect=10.0)
 
@@ -38,13 +39,25 @@ def infer_invoice_type(title: str, doc_type: str = "") -> str:
     return "food"
 
 
-def sync_square(db: Session, days: int = 2) -> dict:
+def _square_lookback_days(db: Session, days: int | None) -> int:
+    if days is not None:
+        return days
+    real = (
+        db.query(Sale)
+        .filter(Sale.square_order_id != "", ~Sale.square_order_id.like("demo-%"))
+        .count()
+    )
+    return 365 if real == 0 else 7
+
+
+def sync_square(db: Session, days: int | None = None) -> dict:
     token = access_token_for(db, "square")
     if not token:
         return {"status": "skipped", "reason": "not connected"}
     extra = extra_dict(get_connection(db, "square"))
     location_id = str(extra.get("location_id") or settings.square_location_id or "")
     host = square_host()
+    lookback = _square_lookback_days(db, days)
     headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
@@ -65,7 +78,7 @@ def sync_square(db: Session, days: int = 2) -> dict:
                 set_extra(row, location_id=location_id)
                 db.commit()
             end = datetime.now(UTC)
-            start = end - timedelta(days=days)
+            start = end - timedelta(days=lookback)
             sales: list[dict] = []
             cursor = None
             while True:
@@ -113,7 +126,7 @@ def sync_square(db: Session, days: int = 2) -> dict:
         row.last_error = ""
         row.updated_at = _now()
         db.commit()
-        return {"status": "ok", "orders_lines": len(sales), **result}
+        return {"status": "ok", "days": lookback, "orders_lines": len(sales), **result}
     except Exception as exc:  # noqa: BLE001 — surface any API failure on the Connect page
         mark_error(db, "square", str(exc))
         return {"status": "error", "error": str(exc)}
@@ -202,6 +215,33 @@ def _paperless_maps(client: httpx.Client, base: str, headers: dict) -> tuple[dic
     return correspondents, types, fields
 
 
+def _ingest_paperless_result(db: Session, doc: dict, correspondents: dict, types: dict, fields: dict) -> str:
+    title = str(doc.get("title") or "")
+    correspondent_id = doc.get("correspondent")
+    correspondent = correspondents.get(str(correspondent_id), "") if correspondent_id else ""
+    doc_type = types.get(str(doc.get("document_type") or ""), "")
+    custom_values = {}
+    for entry in doc.get("custom_fields") or []:
+        field_id = str(entry.get("field") or "")
+        custom_values[fields.get(field_id, field_id).lower()] = entry.get("value")
+    invoice_number = custom_values.get("invoice number") or doc.get("archive_serial_number") or doc.get("id")
+    total = custom_values.get("invoice total") or 0
+    result = ingest_paperless_doc(
+        db,
+        {
+            "id": doc.get("id"),
+            "title": title,
+            "correspondent": correspondent or None,
+            "created": doc.get("created") or doc.get("added"),
+            "invoice_number": str(invoice_number or ""),
+            "total": total or 0,
+            "invoice_type": infer_invoice_type(title, doc_type),
+            "lines": [],
+        },
+    )
+    return str(result.get("status") or "")
+
+
 def sync_paperless(db: Session) -> dict:
     token = access_token_for(db, "paperless")
     if not token:
@@ -213,40 +253,25 @@ def sync_paperless(db: Session) -> dict:
         skipped = 0
         with httpx.Client(timeout=TIMEOUT) as client:
             correspondents, types, fields = _paperless_maps(client, base, headers)
-            response = client.get(
-                f"{base}/api/documents/",
-                headers=headers,
-                params={"page_size": 80, "ordering": "-added"},
-            )
-            response.raise_for_status()
-            for doc in response.json().get("results") or []:
-                title = str(doc.get("title") or "")
-                correspondent_id = doc.get("correspondent")
-                correspondent = correspondents.get(str(correspondent_id), "") if correspondent_id else ""
-                doc_type = types.get(str(doc.get("document_type") or ""), "")
-                custom_values = {}
-                for entry in doc.get("custom_fields") or []:
-                    field_id = str(entry.get("field") or "")
-                    custom_values[fields.get(field_id, field_id).lower()] = entry.get("value")
-                invoice_number = custom_values.get("invoice number") or doc.get("archive_serial_number") or doc.get("id")
-                total = custom_values.get("invoice total") or 0
-                result = ingest_paperless_doc(
-                    db,
-                    {
-                        "id": doc.get("id"),
-                        "title": title,
-                        "correspondent": correspondent or None,
-                        "created": doc.get("created") or doc.get("added"),
-                        "invoice_number": str(invoice_number or ""),
-                        "total": total or 0,
-                        "invoice_type": infer_invoice_type(title, doc_type),
-                        "lines": [],
-                    },
+            page = 1
+            while page <= 15:
+                response = client.get(
+                    f"{base}/api/documents/",
+                    headers=headers,
+                    params={"page_size": 100, "ordering": "-added", "page": page},
                 )
-                if result.get("status") == "created":
-                    created += 1
-                else:
-                    skipped += 1
+                response.raise_for_status()
+                docs = response.json().get("results") or []
+                if not docs:
+                    break
+                for doc in docs:
+                    if _ingest_paperless_result(db, doc, correspondents, types, fields) == "created":
+                        created += 1
+                    else:
+                        skipped += 1
+                if not response.json().get("next"):
+                    break
+                page += 1
         row = get_connection(db, "paperless")
         row.last_error = ""
         row.updated_at = _now()
