@@ -2,6 +2,9 @@ FROM mcr.microsoft.com/playwright/python:v1.50.0-jammy
 
 WORKDIR /app
 
+ENV DEBIAN_FRONTEND=noninteractive \
+    TZ=America/New_York
+
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         xvfb \
