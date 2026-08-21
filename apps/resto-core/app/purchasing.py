@@ -41,7 +41,7 @@ CANONICAL_PRODUCTS = (
         "base_unit": "ml",
         "compare_unit": "gal",
         "purchasing_category": "dairy",
-        "excludes": ("almond", "oat", "coconut", "buttermilk", "condensed"),
+        "excludes": ("almond", "oat", "coconut", "buttermilk", "condensed", "yogurt"),
     },
     {
         "sku": "HEAVY-CREAM",
@@ -59,7 +59,7 @@ DEFAULT_ALIASES = (
     ("Butter", "unsalted butter", ""),
     ("Eggs", "egg", "eggplant,egg wash"),
     ("Eggs", "eggs", "eggplant"),
-    ("Milk", "milk", "almond,oat,coconut,buttermilk,condensed"),
+    ("Milk", "milk", "almond,oat,coconut,buttermilk,condensed,yogurt"),
     ("Heavy cream", "heavy cream", "ice cream,creamer,sour cream"),
     ("Heavy cream", "whipping cream", ""),
 )
@@ -105,16 +105,42 @@ def match_canonical_product(db: Session, description: str) -> tuple[Product | No
         name = product.name.lower().strip()
         if len(name) < 4 or not _has_alias(text, name):
             continue
+        related = [alias for alias in aliases if alias.product_id == product.id]
+        if any(
+            _excluded(text, [part.strip() for part in (alias.exclude or "").split(",") if part.strip()])
+            for alias in related
+        ):
+            continue
         if "butter" in name and _excluded(text, BUTTER_EXCLUDES):
             continue
         return product, Decimal("0.6")
     return None, Decimal("0")
 
 
+def _is_purchasing_supplier(supplier: Supplier | None) -> bool:
+    if supplier is None:
+        return False
+    from app.vendors import VENDORS, vendor_names
+
+    name = supplier.name.lower()
+    for vendor in VENDORS:
+        if vendor.get("invoice_type") not in ("food", "wine"):
+            continue
+        aliases = [item.lower() for item in vendor_names(vendor)]
+        if name in aliases or any(alias and alias in name for alias in aliases):
+            return True
+        if any(needle and needle in name for needle in vendor.get("match_needles") or []):
+            return True
+    return False
+
+
 def record_line(db: Session, invoice: Invoice, line: InvoiceLine) -> PurchasePrice | None:
     if not invoice.supplier_id:
         return None
     if invoice.invoice_type not in ("food", "wine"):
+        return None
+    supplier = invoice.supplier or db.get(Supplier, invoice.supplier_id)
+    if not _is_purchasing_supplier(supplier):
         return None
     if "+$" in str(line.raw_description or ""):
         return None
@@ -130,8 +156,6 @@ def record_line(db: Session, invoice: Invoice, line: InvoiceLine) -> PurchasePri
         product, confidence = match_canonical_product(db, line.raw_description)
     if product is None:
         return None
-    if line.id and db.query(PurchasePrice).filter(PurchasePrice.invoice_line_id == line.id).first():
-        return None
     pack_qty, pack_unit = parse_pack(line.raw_description, line.qty, line.unit)
     if pack_qty <= 0:
         return None
@@ -141,6 +165,21 @@ def record_line(db: Session, invoice: Invoice, line: InvoiceLine) -> PurchasePri
     unit_base = (pack_price / qty_base) if qty_base > 0 else Decimal("0")
     if unit_compare is None:
         return None
+    existing = (
+        db.query(PurchasePrice).filter(PurchasePrice.invoice_line_id == line.id).first() if line.id else None
+    )
+    if existing:
+        existing.pack_qty = pack_qty
+        existing.pack_unit = pack_unit
+        existing.pack_price = pack_price
+        existing.qty_base = qty_base
+        existing.unit_cost_base = unit_base
+        existing.compare_qty = to_base(pack_qty, pack_unit, compare_unit) or Decimal("0")
+        existing.unit_cost_compare = unit_compare
+        existing.raw_description = str(line.raw_description or "")[:240]
+        existing.confidence = confidence
+        product.current_cost = unit_base
+        return existing
     row = PurchasePrice(
         product_id=product.id,
         supplier_id=invoice.supplier_id,

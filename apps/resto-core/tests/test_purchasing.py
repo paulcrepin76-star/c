@@ -15,6 +15,9 @@ def test_pack_normalization_never_compares_sticker_price():
     assert parse_pack("Butter 4 lb pack") == (Decimal("4"), "lb")
     assert parse_pack("BUTTER UNSLT 36/1 LB 5.600 201.60") == (Decimal("36"), "lb")
     assert parse_pack("Member's Mark Unsalted Sweet Cream Butter Block, 1 lb., 4 ct.") == (Decimal("4"), "lb")
+    assert parse_pack("Member's Mark Unsalted Sweet Cream Butter Block, 1 lb., 4 ct. Qty 4") == (Decimal("16"), "lb")
+    assert parse_pack("Large Eggs 15 dozen Qty 3") == (Decimal("45"), "dozen")
+    assert parse_pack("Member's Mark Vitamin D Whole Milk, 1 gal. Qty 3") == (Decimal("3"), "gal")
     assert comparable_cost(Decimal("201.60"), Decimal("36"), "lb", "lb") == Decimal("5.60")
     assert comparable_cost(Decimal("19.96"), Decimal("4"), "lb", "lb") == Decimal("4.99")
     assert comparable_cost(Decimal("47.88"), Decimal("15"), "dozen", "each") == Decimal("0.266")
@@ -61,7 +64,8 @@ def test_peanut_butter_is_not_butter():
         "Veggies: Caramelized onions, spinach, tomato, roasted pepper, grilled mushrooms +$1.50 each",
     )
     assert veggies is None or veggies.sku != "EGG"
-    assert veg_score == 0 or (veggies and veggies.sku != "EGG")
+    yogurt, yogurt_score = match_canonical_product(db, "Member's Mark Honey Vanilla Whole Milk Greek Yogurt, 48 oz. Qty 6")
+    assert yogurt is None or yogurt.sku != "MILK"
     db.close()
 
 

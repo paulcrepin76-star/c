@@ -60,6 +60,7 @@ _PACK = re.compile(
     r"(?P<qty>\d+(?:\.\d+)?)\s*(?P<unit>lbs?|pounds?|oz|ounces?|kg|g|grams?|gal|gallons?|qt|quarts?|ml|l|each|ea|ct|pc|dz|doz|dozen)\b",
     re.I,
 )
+_QTY_SUFFIX = re.compile(r"\bQty\s+(\d+(?:\.\d+)?)\s*$", re.I)
 
 
 def norm_unit(unit: str) -> str:
@@ -121,21 +122,30 @@ def to_base(qty: Decimal | int | float | str, unit: str, base_unit: str) -> Deci
 
 def parse_pack(description: str, fallback_qty: Decimal | int | float = 0, fallback_unit: str = "") -> tuple[Decimal, str]:
     text = str(description or "")
+    qty = ZERO
+    unit = ""
     counted = _COUNT_PACK.search(text)
     if counted:
         qty = Decimal(counted.group("count")) * Decimal(counted.group("each"))
-        return qty, norm_unit(counted.group("unit"))
-    counted = _EACH_CT.search(text)
-    if counted:
-        qty = Decimal(counted.group("each")) * Decimal(counted.group("count"))
-        return qty, norm_unit(counted.group("unit"))
-    matches = list(_PACK.finditer(text))
-    if matches:
-        chosen = matches[-1]
-        return Decimal(chosen.group("qty")), norm_unit(chosen.group("unit"))
-    if fallback_qty and fallback_unit:
-        return Decimal(str(fallback_qty)), norm_unit(fallback_unit)
-    return ZERO, norm_unit(fallback_unit)
+        unit = counted.group("unit")
+    else:
+        counted = _EACH_CT.search(text)
+        if counted:
+            qty = Decimal(counted.group("each")) * Decimal(counted.group("count"))
+            unit = counted.group("unit")
+        else:
+            matches = list(_PACK.finditer(text))
+            if matches:
+                chosen = matches[-1]
+                qty = Decimal(chosen.group("qty"))
+                unit = chosen.group("unit")
+            elif fallback_qty and fallback_unit:
+                qty = Decimal(str(fallback_qty))
+                unit = fallback_unit
+    suffix = _QTY_SUFFIX.search(text)
+    if suffix and qty > 0:
+        qty *= Decimal(suffix.group(1))
+    return qty, norm_unit(unit or fallback_unit)
 
 
 def unit_money(value) -> Decimal:
