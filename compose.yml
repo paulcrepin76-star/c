@@ -233,8 +233,6 @@ services:
       OPEN_PRICES_ENABLED: ${OPEN_PRICES_ENABLED:-true}
       BLS_ENABLED: ${BLS_ENABLED:-true}
       USDA_MMN_API_KEY: ${USDA_MMN_API_KEY:-}
-      HOME_LAT: ${HOME_LAT:-26.3398}
-      HOME_LON: ${HOME_LON:-"-81.7787"}
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
       interval: 20s
