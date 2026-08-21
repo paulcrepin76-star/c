@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Connectors{% endblock %}
+{% block content %}
+<p class="eyebrow">Do not put supplier passwords in git</p>
+<h1>How invoices get in</h1>
+<p class="lede">Use email PDFs first, official APIs second, and a portal login only if there is no other way. n8n stores credentials. This page is just the status board.</p>
+<table class="wide">
+  <thead>
+    <tr><th>Supplier / system</th><th>Method</th><th>Status</th><th>Why</th><th></th></tr>
+  </thead>
+  <tbody>
+  {% for connector in connectors %}
+    <tr>
+      <td>{{ connector.name }}</td>
+      <td>{{ connector.kind }}</td>
+      <td><span class="dot {{ connector.status }}"></span> {{ connector.status.replace('_', ' ') }}</td>
+      <td>{{ connector.notes }}</td>
+      <td>
+        <form method="post" action="/connectors/{{ connector.id }}/status" class="inline">
+          <select name="status">
+            <option value="ready" {% if connector.status == 'ready' %}selected{% endif %}>ready</option>
+            <option value="not_connected" {% if connector.status == 'not_connected' %}selected{% endif %}>not connected</option>
+            <option value="manual" {% if connector.status == 'manual' %}selected{% endif %}>manual drop folder</option>
+          </select>
+          <button type="submit">Save</button>
+        </form>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+<div class="card">
+  <h2>Unraid drop folder</h2>
+  <p>Any PDF you download yourself (FPL, Sam's Club, a wine invoice) can be dropped into <code>/mnt/user/documents/invoices-inbox</code>. Paperless files it. n8n can then POST the document to <code>/api/webhooks/paperless</code>.</p>
+</div>
+{% endblock %}

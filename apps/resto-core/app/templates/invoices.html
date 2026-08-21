@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Invoices{% endblock %}
+{% block content %}
+<p class="eyebrow">Paperless is the filing cabinet</p>
+<h1>Invoices and receipts</h1>
+<p class="lede">This app does not rebuild a document library. Paperless stores the PDF. We only keep the amounts and line items needed for food and wine cost.</p>
+{% for invoice in invoices %}
+<div class="card">
+  <div class="row-head">
+    <h2>{{ invoice.title or invoice.number or "Invoice" }}</h2>
+    <span>{{ invoice.issued_on or "" }} · {{ invoice.invoice_type }} · {{ invoice.total | money }}</span>
+  </div>
+  <p class="muted">{{ invoice.supplier.name if invoice.supplier else "Unknown supplier" }} · {{ invoice.status }}</p>
+  {% if invoice.lines %}
+  <table>
+    <thead><tr><th>Line</th><th>Qty</th><th>Unit cost</th><th>Total</th><th>Matched product</th></tr></thead>
+    <tbody>
+    {% for line in invoice.lines %}
+      <tr>
+        <td>{{ line.raw_description }}</td>
+        <td>{{ line.qty }} {{ line.unit }}</td>
+        <td>{{ line.unit_cost | money }}</td>
+        <td>{{ line.line_total | money }}</td>
+        <td>{{ line.product.name if line.product else "—" }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</div>
+{% endfor %}
+{% endblock %}

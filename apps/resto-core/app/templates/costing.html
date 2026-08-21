@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Costing{% endblock %}
+{% block content %}
+<p class="eyebrow">Last 7 days</p>
+<h1>Food, wine and beverage cost</h1>
+<section class="kpis">
+  {% for key in ['food','wine','beverage','beer'] %}
+  <article>
+    <span>{{ key }} cost</span>
+    <strong>{{ costing.groups[key].cost_pct | pct }}</strong>
+    <em>{{ costing.groups[key].sales | money }} sales · {{ costing.groups[key].margin | money }} margin</em>
+  </article>
+  {% endfor %}
+</section>
+
+<div class="card">
+  <h2>Wine usage vs sales</h2>
+  <table class="wide">
+    <thead>
+      <tr>
+        <th>Wine</th>
+        <th>ml used</th>
+        <th>Bottles</th>
+        <th>Sales</th>
+        <th>Cost</th>
+        <th>Cost %</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for wine in costing.wines %}
+      <tr>
+        <td>{{ wine.name }}</td>
+        <td>{{ wine.ml }}</td>
+        <td>{{ wine.bottles | bottles }}</td>
+        <td>{{ wine.sales | money }}</td>
+        <td>{{ wine.cost | money }}</td>
+        <td>{{ wine.cost_pct | pct }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <h2>By-the-glass list</h2>
+  <table class="wide">
+    <thead>
+      <tr>
+        <th>Wine</th>
+        <th>Pour</th>
+        <th>Cost / glass</th>
+        <th>Sell</th>
+        <th>Cost %</th>
+        <th>Bottle cost</th>
+        <th>Bottle sell</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for row in wines %}
+      <tr>
+        <td>{{ row.product.name }} {{ row.profile.vintage }}</td>
+        <td>{{ row.profile.glass_pour_ml }} ml</td>
+        <td>{{ row.glass_cost | money }}</td>
+        <td>{{ row.glass_price | money }}</td>
+        <td>{{ row.glass_cost_pct | pct }}</td>
+        <td>{{ row.bottle_cost | money }}</td>
+        <td>{{ row.bottle_price | money }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

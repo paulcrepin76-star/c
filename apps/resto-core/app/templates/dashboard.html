@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<section class="hero">
+  <div>
+    <p class="eyebrow">Unraid restaurant back office</p>
+    <h1>Square sells. Mealie knows the recipes. Paperless files the bills. This cellar tells you what each glass actually costs.</h1>
+  </div>
+</section>
+
+<section class="kpis">
+  <article>
+    <span>Food cost</span>
+    <strong>{{ costing.groups.food.cost_pct | pct }}</strong>
+    <em>{{ costing.groups.food.sales | money }} sales</em>
+  </article>
+  <article>
+    <span>Wine cost</span>
+    <strong>{{ costing.groups.wine.cost_pct | pct }}</strong>
+    <em>{{ costing.groups.wine.sales | money }} sales · last 7 days</em>
+  </article>
+  <article>
+    <span>Beverage cost</span>
+    <strong>{{ costing.groups.beverage.cost_pct | pct }}</strong>
+    <em>Cocktails, juice, coffee</em>
+  </article>
+  <article>
+    <span>Cellar value</span>
+    <strong>{{ cellar_value | money }}</strong>
+    <em>{{ wines | length }} labels in stock</em>
+  </article>
+</section>
+
+<section class="grid-2">
+  <div class="card">
+    <h2>Wine below par</h2>
+    {% if below_par %}
+    <ul class="plain">
+      {% for row in below_par %}
+      <li>
+        <a href="/wines/{{ row.product.id }}">{{ row.product.name }}</a>
+        <span>{{ row.on_hand_bottles | bottles }} / {{ row.profile.par_bottles | bottles }} btls · bin {{ row.profile.bin_location }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted">Every wine is at or above par.</p>
+    {% endif %}
+  </div>
+  <div class="card">
+    <h2>How the stack fits</h2>
+    <ol class="stack">
+      <li><b>Paperless</b> archives invoice PDFs from email or a drop folder.</li>
+      <li><b>n8n</b> talks to Square and Mealie. No supplier passwords in code.</li>
+      <li><b>This app</b> matches purchase prices, recipes, glasses and bottles.</li>
+      <li><b>Metabase</b> is the TV dashboard for food cost, wine cost and margin.</li>
+    </ol>
+  </div>
+</section>
+
+<section class="grid-2">
+  <div class="card">
+    <h2>Recent invoices</h2>
+    <table>
+      <thead><tr><th>Date</th><th>Invoice</th><th>Type</th><th>Total</th></tr></thead>
+      <tbody>
+      {% for invoice in invoices %}
+        <tr>
+          <td>{{ invoice.issued_on or "—" }}</td>
+          <td>{{ invoice.title or invoice.number }}</td>
+          <td>{{ invoice.invoice_type }}</td>
+          <td>{{ invoice.total | money }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="card">
+    <h2>Connectors</h2>
+    <ul class="plain">
+      {% for connector in connectors %}
+      <li>
+        <span class="dot {{ connector.status }}"></span>
+        {{ connector.name }}
+        <span>{{ connector.kind }} · {{ connector.status.replace('_', ' ') }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    <p><a class="btn" href="/connectors">Manage connectors</a></p>
+  </div>
+</section>
+{% endblock %}

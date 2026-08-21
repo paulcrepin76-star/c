@@ -1,0 +1,16 @@
+.env
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+appdata/
+*.log
+.DS_Store
+n8n/local-files/
+apps/resto-core/.pytest_cache/

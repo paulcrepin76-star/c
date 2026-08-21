@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Inventory{% endblock %}
+{% block content %}
+<p class="eyebrow">Physical count</p>
+<h1>Wine inventory</h1>
+<p class="lede">Count full bottles. Open bottles can be entered as a decimal (0.4 = about 300 ml left in a 750 ml bottle). Saving a count adjusts theoretical stock so variance is visible.</p>
+<form method="post" action="/inventory/count">
+  <div class="form-grid">
+    <label>Location
+      <select name="location">
+        <option>cellar</option>
+        <option>bar</option>
+        <option>cooler</option>
+      </select>
+    </label>
+    <label>Note <input name="notes" placeholder="Sunday close"></label>
+  </div>
+  <table class="wide">
+    <thead>
+      <tr>
+        <th>Wine</th>
+        <th>Bin</th>
+        <th>System</th>
+        <th>Par</th>
+        <th>Counted bottles</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for row in wines %}
+      <tr>
+        <td>{{ row.profile.producer }} {{ row.product.name }} {{ row.profile.vintage }}</td>
+        <td>{{ row.profile.bin_location }}</td>
+        <td>{{ row.on_hand_bottles | bottles }}</td>
+        <td>{{ row.profile.par_bottles | bottles }}</td>
+        <td><input name="count_{{ row.product.id }}" value="{{ row.on_hand_bottles | bottles }}"></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p><button type="submit">Save count</button></p>
+</form>
+{% endblock %}

@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}{{ row.product.name }}{% endblock %}
+{% block content %}
+<p class="eyebrow"><a href="/wines">Wine cellar</a> · {{ row.profile.color }}</p>
+<div class="row-head">
+  <h1>{{ row.profile.producer }} {{ row.product.name }} {{ row.profile.vintage }}</h1>
+  <a class="btn secondary" href="/wines/{{ row.product.id }}/edit">Edit</a>
+</div>
+<p class="muted">{{ row.profile.appellation or row.profile.region }} · {{ row.profile.grape }} · bin {{ row.profile.bin_location }}</p>
+
+<section class="kpis">
+  <article>
+    <span>On hand</span>
+    <strong>{{ row.on_hand_bottles | bottles }}</strong>
+    <em>par {{ row.profile.par_bottles | bottles }} bottles</em>
+  </article>
+  <article>
+    <span>Bottle cost</span>
+    <strong>{{ row.bottle_cost | money }}</strong>
+    <em>{{ row.bottle_price | money }} on the list · {{ row.bottle_cost_pct | pct }}</em>
+  </article>
+  <article>
+    <span>Glass cost</span>
+    <strong>{{ row.glass_cost | money }}</strong>
+    <em>{{ row.profile.glass_pour_ml }} ml pour · sell {{ row.glass_price | money }}</em>
+  </article>
+  <article>
+    <span>Wine cost %</span>
+    <strong>{{ row.glass_cost_pct | pct }}</strong>
+    <em>cellar value {{ row.cellar_value | money }}</em>
+  </article>
+</section>
+
+<section class="grid-2">
+  <div class="card">
+    <h2>Receive bottles</h2>
+    <form method="post" action="/wines/{{ row.product.id }}/receive" class="form compact">
+      <label>Bottles <input name="bottles" required placeholder="12"></label>
+      <label>Cost per bottle <input name="unit_cost" value="{{ row.bottle_cost }}"></label>
+      <label>Location
+        <select name="location">
+          <option>cellar</option>
+          <option>bar</option>
+          <option>cooler</option>
+        </select>
+      </label>
+      <label>Note <input name="notes" placeholder="Invoice W-1042"></label>
+      <button type="submit">Add to cellar</button>
+    </form>
+  </div>
+  <div class="card">
+    <h2>By-the-glass math</h2>
+    <p>{{ row.profile.bottle_size_ml }} ml bottle ÷ {{ row.profile.glass_pour_ml }} ml pour = <b>{{ (row.profile.bottle_size_ml / row.profile.glass_pour_ml) | round(2) }}</b> theoretical glasses.</p>
+    <p>If Square sells 40 glasses, expected usage is 6,000 ml — exactly 8 bottles of 750 ml. Count what is left. The gap is over-pouring, comps, spills, breakage or missing bottles.</p>
+  </div>
+</section>
+
+<div class="card">
+  <h2>Stock movement</h2>
+  <table>
+    <thead><tr><th>When</th><th>Reason</th><th>Location</th><th>ml</th><th>Note</th></tr></thead>
+    <tbody>
+    {% for move in moves %}
+      <tr>
+        <td>{{ move.occurred_at.strftime("%Y-%m-%d %H:%M") }}</td>
+        <td>{{ move.reason }}</td>
+        <td>{{ move.location }}</td>
+        <td>{{ move.qty_base }}</td>
+        <td>{{ move.notes }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

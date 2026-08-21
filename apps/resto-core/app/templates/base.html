@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Restaurant back office{% endblock %}</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="/">Resto</a>
+    <nav>
+      <a href="/" class="{% if page == 'dashboard' %}on{% endif %}">Dashboard</a>
+      <a href="/wines" class="{% if page == 'wines' %}on{% endif %}">Wine cellar</a>
+      <a href="/inventory" class="{% if page == 'inventory' %}on{% endif %}">Inventory</a>
+      <a href="/costing" class="{% if page == 'costing' %}on{% endif %}">Costing</a>
+      <a href="/invoices" class="{% if page == 'invoices' %}on{% endif %}">Invoices</a>
+      <a href="/connectors" class="{% if page == 'connectors' %}on{% endif %}">Connectors</a>
+    </nav>
+  </header>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

@@ -1,0 +1,226 @@
+# Restaurant back-office stack for Unraid
+#
+# Put this folder in /mnt/user/appdata/resto/ (or clone there) and:
+#   cp .env.example .env
+#   docker compose up -d
+#
+# Ports (host):
+#   8088  resto-core   wine cellar + costing
+#   8010  paperless    invoice archive
+#   9925  mealie       recipes
+#   3001  metabase     dashboards
+#   5678  n8n          Square / Mealie / email glue
+#   5433  postgres     optional, for a GUI client
+#
+# Internal-only: redis, tika, gotenberg.
+
+name: resto
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: resto-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      TZ: ${TZ}
+    volumes:
+      - ${APPDATA:-./appdata}/postgres:/var/lib/postgresql/data
+      - ./docker/postgres/init-databases.sql:/docker-entrypoint-initdb.d/01-init-databases.sql:ro
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks: [resto]
+
+  redis:
+    image: redis:7-alpine
+    container_name: resto-redis
+    restart: unless-stopped
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    volumes:
+      - ${APPDATA:-./appdata}/redis:/data
+    networks: [resto]
+
+  gotenberg:
+    image: gotenberg/gotenberg:8
+    container_name: resto-gotenberg
+    restart: unless-stopped
+    command:
+      - gotenberg
+      - --chromium-disable-javascript=true
+      - --chromium-allow-list=file:///tmp/.*
+    networks: [resto]
+
+  tika:
+    image: apache/tika:latest
+    container_name: resto-tika
+    restart: unless-stopped
+    networks: [resto]
+
+  paperless:
+    image: ghcr.io/paperless-ngx/paperless-ngx:latest
+    container_name: resto-paperless
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      gotenberg:
+        condition: service_started
+      tika:
+        condition: service_started
+    ports:
+      - "8010:8000"
+    volumes:
+      - ${APPDATA:-./appdata}/paperless/data:/usr/src/paperless/data
+      - ${APPDATA:-./appdata}/paperless/media:/usr/src/paperless/media
+      - ${APPDATA:-./appdata}/paperless/export:/usr/src/paperless/export
+      - ${CONSUME_DIR:-./appdata/invoices-inbox}:/usr/src/paperless/consume
+    environment:
+      USERMAP_UID: ${PUID:-99}
+      USERMAP_GID: ${PGID:-100}
+      TZ: ${TZ}
+      PAPERLESS_SECRET_KEY: ${PAPERLESS_SECRET_KEY}
+      PAPERLESS_URL: ${PAPERLESS_URL:-http://localhost:8010}
+      PAPERLESS_TIME_ZONE: ${TZ}
+      PAPERLESS_OCR_LANGUAGE: eng
+      PAPERLESS_REDIS: redis://redis:6379
+      PAPERLESS_DBENGINE: postgresql
+      PAPERLESS_DBHOST: postgres
+      PAPERLESS_DBPORT: 5432
+      PAPERLESS_DBNAME: paperless
+      PAPERLESS_DBUSER: ${POSTGRES_USER}
+      PAPERLESS_DBPASS: ${POSTGRES_PASSWORD}
+      PAPERLESS_TIKA_ENABLED: 1
+      PAPERLESS_TIKA_ENDPOINT: http://tika:9998
+      PAPERLESS_TIKA_GOTENBERG_ENDPOINT: http://gotenberg:3000
+      PAPERLESS_FILENAME_FORMAT: "{created_year}/{correspondent}/{title}"
+      PAPERLESS_CONSUMER_RECURSIVE: "true"
+      PAPERLESS_CONSUMER_DELETE_DUPLICATES: "true"
+      PAPERLESS_POST_CONSUME_SCRIPT: ""
+    networks: [resto]
+
+  mealie:
+    image: ghcr.io/mealie-recipes/mealie:latest
+    container_name: resto-mealie
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "9925:9000"
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+    volumes:
+      - ${APPDATA:-./appdata}/mealie:/app/data
+    environment:
+      ALLOW_SIGNUP: "true"
+      PUID: ${PUID:-99}
+      PGID: ${PGID:-100}
+      TZ: ${TZ}
+      BASE_URL: ${MEALIE_URL:-http://localhost:9925}
+      DB_ENGINE: postgres
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_SERVER: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: mealie
+    networks: [resto]
+
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:latest
+    container_name: resto-n8n
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "5678:5678"
+    volumes:
+      - ${APPDATA:-./appdata}/n8n:/home/node/.n8n
+      - ${CONSUME_DIR:-./appdata/invoices-inbox}:/files/invoices-inbox
+    environment:
+      TZ: ${TZ}
+      GENERIC_TIMEZONE: ${TZ}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
+      N8N_HOST: ${N8N_HOST:-localhost}
+      N8N_PORT: 5678
+      N8N_PROTOCOL: ${N8N_PROTOCOL:-http}
+      N8N_SECURE_COOKIE: "false"
+      WEBHOOK_URL: ${N8N_URL:-http://localhost:5678}
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: postgres
+      DB_POSTGRESDB_PORT: 5432
+      DB_POSTGRESDB_DATABASE: n8n
+      DB_POSTGRESDB_USER: ${POSTGRES_USER}
+      DB_POSTGRESDB_PASSWORD: ${POSTGRES_PASSWORD}
+    networks: [resto]
+
+  metabase:
+    image: metabase/metabase:latest
+    container_name: resto-metabase
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "3001:3000"
+    volumes:
+      - ${APPDATA:-./appdata}/metabase:/metabase-data
+    environment:
+      MB_DB_TYPE: postgres
+      MB_DB_DBNAME: metabase
+      MB_DB_PORT: 5432
+      MB_DB_USER: ${POSTGRES_USER}
+      MB_DB_PASS: ${POSTGRES_PASSWORD}
+      MB_DB_HOST: postgres
+      JAVA_TIMEZONE: ${TZ}
+    networks: [resto]
+
+  resto-core:
+    build:
+      context: ./apps/resto-core
+    image: resto-core:local
+    container_name: resto-core
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8088:8080"
+    volumes:
+      - ${APPDATA:-./appdata}/resto-core:/data
+    environment:
+      TZ: ${TZ}
+      SECRET_KEY: ${SECRET_KEY}
+      RESTO_API_KEY: ${RESTO_API_KEY}
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      MEALIE_BASE_URL: ${MEALIE_BASE_URL:-http://mealie:9000}
+      MEALIE_API_TOKEN: ${MEALIE_API_TOKEN:-}
+      SQUARE_ACCESS_TOKEN: ${SQUARE_ACCESS_TOKEN:-}
+      SQUARE_ENVIRONMENT: ${SQUARE_ENVIRONMENT:-production}
+      SQUARE_LOCATION_ID: ${SQUARE_LOCATION_ID:-}
+      PAPERLESS_BASE_URL: ${PAPERLESS_BASE_URL:-http://paperless:8000}
+      PAPERLESS_API_TOKEN: ${PAPERLESS_API_TOKEN:-}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-}
+      PAPERLESS_PUBLIC_URL: ${PAPERLESS_URL:-http://localhost:8010}
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 8
+      start_period: 20s
+    networks: [resto]
+
+networks:
+  resto:
+    name: resto

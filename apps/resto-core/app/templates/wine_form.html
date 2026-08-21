@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}{{ "Edit wine" if wine else "Add wine" }}{% endblock %}
+{% block content %}
+<p class="eyebrow"><a href="/wines">Wine cellar</a></p>
+<h1>{{ "Edit wine" if wine else "Add a wine" }}</h1>
+<form method="post" class="form">
+  <div class="form-grid">
+    <label>Wine name <input name="name" required value="{{ wine.product.name if wine else '' }}"></label>
+    <label>Producer <input name="producer" value="{{ wine.profile.producer if wine else '' }}"></label>
+    <label>Vintage <input name="vintage" value="{{ wine.profile.vintage if wine else '' }}" placeholder="2024 or NV"></label>
+    <label>Color
+      <select name="color">
+        {% set color = wine.profile.color if wine else 'red' %}
+        {% for option in ['red','white','rose','sparkling','fortified','orange'] %}
+        <option value="{{ option }}" {% if color == option %}selected{% endif %}>{{ option }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Country <input name="country" value="{{ wine.profile.country if wine else '' }}"></label>
+    <label>Region <input name="region" value="{{ wine.profile.region if wine else '' }}"></label>
+    <label>Appellation <input name="appellation" value="{{ wine.profile.appellation if wine else '' }}"></label>
+    <label>Grape <input name="grape" value="{{ wine.profile.grape if wine else '' }}"></label>
+    <label>Bin <input name="bin_location" value="{{ wine.profile.bin_location if wine else '' }}"></label>
+    <label>List
+      <select name="list_type">
+        {% set list_type = wine.profile.list_type if wine else 'both' %}
+        {% for option in ['both','glass','bottle','cellar'] %}
+        <option value="{{ option }}" {% if list_type == option %}selected{% endif %}>{{ option }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Bottle size (ml) <input type="number" name="bottle_size_ml" value="{{ wine.profile.bottle_size_ml if wine else 750 }}"></label>
+    <label>Glass pour (ml) <input type="number" name="glass_pour_ml" value="{{ wine.profile.glass_pour_ml if wine else 150 }}"></label>
+    <label>Par (bottles) <input name="par_bottles" value="{{ wine.profile.par_bottles if wine else 6 }}"></label>
+    <label>Bottle cost $ <input name="bottle_cost" value="{{ wine.bottle_cost if wine else '' }}"></label>
+    <label>Glass sell $ <input name="glass_price" value="{{ wine.glass_price if wine else '' }}"></label>
+    <label>Bottle sell $ <input name="bottle_price" value="{{ wine.bottle_price if wine else '' }}"></label>
+  </div>
+  <button type="submit">Save wine</button>
+</form>
+{% endblock %}
