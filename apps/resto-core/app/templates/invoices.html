@@ -1,29 +1,34 @@
 {% extends "base.html" %}
-{% block title %}Invoices{% endblock %}
+{% block title %}Orders{% endblock %}
 {% block content %}
-<p class="eyebrow">Paperless is the filing cabinet</p>
-<h1>Invoices and receipts</h1>
-<p class="lede">This app does not rebuild a document library. Paperless stores the PDF or photo. We only keep the amounts needed for food and wine cost.</p>
+<div class="page-head">
+  <div>
+    <p class="eyebrow">Paperless holds the PDF · this list is the coded order</p>
+    <h1>Orders</h1>
+    <p class="lede">Invoices, credits and receipts. Photograph invoices on iPhone, or let Paperless file the PDF. Survey Cafe keeps vendor, date, category and total for food cost.</p>
+  </div>
+  <a class="btn" href="/invoices/scan">Scan invoice</a>
+</div>
 {% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
 {% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
-<p>
-  <a class="btn" href="/invoices/scan">Photograph invoices on iPhone</a>
-  <span class="muted"> {{ total_count }} filed · {{ counts.invoices_with_total }} with dollars · {{ filed_total | money }} read so far</span>
-</p>
+<p class="muted">{{ total_count }} filed · {{ counts.invoices_with_total }} with dollars · {{ filed_total | money }} read so far</p>
+<div class="card">
 <table class="wide">
-  <thead><tr><th>Date</th><th>Supplier</th><th>Invoice</th><th>Type</th><th>Total</th></tr></thead>
+  <thead><tr><th>Date</th><th>Vendor</th><th>Invoice</th><th>Category</th><th>Status</th><th>Total</th></tr></thead>
   <tbody>
   {% for invoice in invoices %}
     <tr>
       <td>{{ invoice.issued_on or "—" }}</td>
       <td>{{ invoice.supplier.name if invoice.supplier else "Unknown" }}</td>
       <td>{{ invoice.title or invoice.number or "Invoice" }}</td>
-      <td>{{ invoice.invoice_type }}</td>
+      <td><span class="pill">{{ invoice.invoice_type }}</span></td>
+      <td>{{ invoice.status }}</td>
       <td>{{ invoice.total | money }}</td>
     </tr>
   {% endfor %}
   </tbody>
 </table>
+</div>
 {% if pages > 1 %}
 <nav class="period" aria-label="Invoice pages">
   {% if page_number > 1 %}<a href="/invoices?p={{ page_number - 1 }}">Previous</a>{% endif %}

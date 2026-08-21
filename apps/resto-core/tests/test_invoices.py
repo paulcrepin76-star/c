@@ -35,7 +35,7 @@ def test_pages_show_period_picker_and_scan_door():
     with TestClient(app) as client:
         home = client.get("/")
         assert home.status_code == 200
-        assert "Square sales" in home.text
+        assert "Net sales" in home.text
         assert "/invoices/scan" in home.text
         assert "90 days" in home.text
         costing = client.get("/costing?days=365")

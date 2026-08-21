@@ -10,6 +10,9 @@ def test_core_pages_render_demo_wines():
         assert "Wine cost" in home.text
         assert 'href="/connect"' in home.text
         assert 'href="/invoices/scan"' in home.text
+        assert 'id="sales-chart"' in home.text
+        assert "Net sales" in home.text
+        assert "Sales vs invoice spend" in home.text
         purchasing = client.get("/purchasing")
         assert purchasing.status_code == 200
         assert "Supplier price comparison" in purchasing.text
@@ -24,3 +27,24 @@ def test_core_pages_render_demo_wines():
         summary = client.get("/api/costing/summary", headers={"X-API-Key": "test"})
         assert summary.status_code == 200
         assert "wine" in summary.json()["groups"]
+
+
+def test_dashboard_series_includes_seed_sales():
+    from datetime import UTC, datetime, timedelta
+
+    from app.db import SessionLocal
+    from app.services import daily_activity, dashboard_charts, period_costing
+
+    db = SessionLocal()
+    try:
+        end = datetime.now(UTC).replace(tzinfo=None)
+        start = end - timedelta(days=90)
+        activity = daily_activity(db, start, end)
+        costing = period_costing(db, start, end)
+        charts = dashboard_charts(costing, activity)
+        assert len(activity["labels"]) >= 7
+        assert sum(activity["sales"]) > 0
+        assert charts["mix"]
+        assert charts["theoretical_pct"] >= 0
+    finally:
+        db.close()

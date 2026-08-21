@@ -4,28 +4,41 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-title" content="Survey">
-  <meta name="theme-color" content="#f6f5f2">
+  <meta name="apple-mobile-web-app-title" content="Survey Cafe">
+  <meta name="theme-color" content="#0f3b3e">
   <title>{% block title %}Survey Cafe{% endblock %}</title>
-  <link rel="stylesheet" href="/static/style.css?v=3">
+  <link rel="stylesheet" href="/static/style.css?v=4">
 </head>
-<body>
-  <header class="top">
-    <a class="brand" href="/">Survey</a>
+<body class="app">
+  <aside class="sidebar">
+    <a class="brand" href="/">
+      <span class="mark">SC</span>
+      <span class="brand-copy">
+        <strong>Survey Cafe</strong>
+        <em>Bonita Springs</em>
+      </span>
+    </a>
     <nav>
-      <a href="/" class="{% if page == 'dashboard' %}on{% endif %}">Home</a>
-      <a href="/wines" class="{% if page == 'wines' %}on{% endif %}">Cellar</a>
-      <a href="/inventory" class="{% if page == 'inventory' %}on{% endif %}">Stock</a>
-      <a href="/costing" class="{% if page == 'costing' %}on{% endif %}">Cost</a>
-      <a href="/purchasing" class="{% if page == 'purchasing' %}on{% endif %}">Buy</a>
-      <a href="/invoices" class="{% if page == 'invoices' %}on{% endif %}">Bills</a>
-      <a href="/invoices/scan" class="{% if page == 'scan' %}on{% endif %}">Scan</a>
-      <a href="/collector" class="{% if page == 'collector' %}on{% endif %}">Prices</a>
-      <a href="/connect" class="{% if page == 'connect' %}on{% endif %}">Connect</a>
+      <p class="nav-label">Performance</p>
+      <a href="/" class="{% if page == 'dashboard' %}on{% endif %}">Dashboard</a>
+      <a href="/costing" class="{% if page == 'costing' %}on{% endif %}">Recipes &amp; cost</a>
+      <p class="nav-label">Purchasing</p>
+      <a href="/invoices" class="{% if page == 'invoices' %}on{% endif %}">Orders</a>
+      <a href="/invoices/scan" class="{% if page == 'scan' %}on{% endif %}">Scan invoice</a>
+      <a href="/purchasing" class="{% if page == 'purchasing' %}on{% endif %}">Price compare</a>
+      <a href="/collector" class="{% if page == 'collector' %}on{% endif %}">Vendor logins</a>
+      <p class="nav-label">House</p>
+      <a href="/inventory" class="{% if page == 'inventory' %}on{% endif %}">Inventory</a>
+      <a href="/wines" class="{% if page == 'wines' %}on{% endif %}">Wine cellar</a>
+      <p class="nav-label">Setup</p>
+      <a href="/connect" class="{% if page == 'connect' %}on{% endif %}">Connections</a>
     </nav>
-  </header>
-  <main>
-    {% block content %}{% endblock %}
-  </main>
+  </aside>
+  <div class="shell">
+    <main>
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+  {% block scripts %}{% endblock %}
 </body>
 </html>

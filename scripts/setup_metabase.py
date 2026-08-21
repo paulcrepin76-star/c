@@ -207,14 +207,70 @@ def ensure_collection(session: str) -> int:
     return int(created["id"])
 
 
-def viz_settings(display: str) -> dict:
+def viz_for(display: str, cols: list[dict] | None = None) -> dict:
+    names = [str(col.get("name") or "") for col in cols or []]
+    numbers = [
+        str(col.get("name"))
+        for col in cols or []
+        if str(col.get("base_type") or "").endswith(("Integer", "Decimal", "Float", "BigInteger", "Number"))
+        or "type/Integer" in str(col.get("base_type"))
+        or "type/Decimal" in str(col.get("base_type"))
+        or "type/Float" in str(col.get("base_type"))
+    ]
+    dates = [
+        str(col.get("name"))
+        for col in cols or []
+        if "Date" in str(col.get("base_type") or "") or "Time" in str(col.get("base_type") or "")
+    ]
+    texts = [name for name in names if name not in numbers and name not in dates]
     if display == "scalar":
-        return {"scalar.field": None}
+        field = numbers[0] if numbers else (names[0] if names else None)
+        return {"scalar.field": field} if field else {}
     if display == "line":
-        return {"graph.dimensions": ["day"], "graph.metrics": ["sales"]}
+        dim = dates[0] if dates else (texts[0] if texts else None)
+        metric = numbers[0] if numbers else None
+        settings = {}
+        if dim:
+            settings["graph.dimensions"] = [dim]
+        if metric:
+            settings["graph.metrics"] = [metric]
+        return settings
     if display == "bar":
-        return {}
+        dim = texts[0] if texts else (dates[0] if dates else None)
+        metric = numbers[0] if numbers else None
+        settings = {}
+        if dim:
+            settings["graph.dimensions"] = [dim]
+        if metric:
+            settings["graph.metrics"] = [metric]
+        return settings
     return {}
+
+
+def finish_card(session: str, card_id: int, display: str) -> None:
+    result = api(session, "POST", f"/api/card/{card_id}/query")
+    cols = ((result.get("data") or {}).get("cols")) or []
+    card = api(session, "GET", f"/api/card/{card_id}")
+    payload = {
+        "name": card.get("name"),
+        "display": display,
+        "dataset_query": card.get("dataset_query"),
+        "visualization_settings": viz_for(display, cols),
+        "collection_id": card.get("collection_id"),
+    }
+    if cols:
+        payload["result_metadata"] = [
+            {
+                "name": col.get("name"),
+                "display_name": col.get("display_name") or col.get("name"),
+                "base_type": col.get("base_type"),
+                "effective_type": col.get("effective_type") or col.get("base_type"),
+                "semantic_type": col.get("semantic_type"),
+                "field_ref": col.get("field_ref"),
+            }
+            for col in cols
+        ]
+    api(session, "PUT", f"/api/card/{card_id}", payload)
 
 
 def ensure_card(session: str, db_id: int, collection_id: int, question: dict) -> int:
@@ -229,14 +285,19 @@ def ensure_card(session: str, db_id: int, collection_id: int, question: dict) ->
             "native": {"query": question["sql"]},
             "database": db_id,
         },
-        "visualization_settings": viz_settings(question["display"]),
+        "visualization_settings": {},
     }
+    card_id = None
     for row in rows:
         if row.get("name") == question["name"] and row.get("collection_id") == collection_id:
             api(session, "PUT", f"/api/card/{row['id']}", payload)
-            return int(row["id"])
-    created = api(session, "POST", "/api/card", payload)
-    return int(created["id"])
+            card_id = int(row["id"])
+            break
+    if card_id is None:
+        created = api(session, "POST", "/api/card", payload)
+        card_id = int(created["id"])
+    finish_card(session, card_id, question["display"])
+    return card_id
 
 
 def ensure_dashboard(session: str, collection_id: int, card_ids: list[tuple[str, int, str]]) -> int:
@@ -322,6 +383,15 @@ def ensure_dashboard(session: str, collection_id: int, card_ids: list[tuple[str,
     return dash_id
 
 
+def set_homepage(session: str, dash_id: int) -> None:
+    try:
+        api(session, "PUT", "/api/setting/custom-homepage", True)
+        api(session, "PUT", "/api/setting/custom-homepage-dashboard", dash_id)
+        log(f"homepage set to dashboard {dash_id}")
+    except Exception as exc:  # noqa: BLE001
+        log(f"homepage skipped: {exc}")
+
+
 def main() -> int:
     wait_health()
     questions = parse_questions(QUESTIONS)
@@ -337,6 +407,7 @@ def main() -> int:
         card_ids.append((question["name"], card_id, question["display"]))
         log(f"card {question['name']}")
     dash_id = ensure_dashboard(api_key, collection_id, card_ids)
+    set_homepage(api_key, dash_id)
     log(f"dashboard {DASHBOARD} id={dash_id} cards={len(card_ids)}")
     log(f"open {os.environ.get('METABASE_PUBLIC_URL', 'http://100.116.48.120:3001')}")
     log(f"log in as the Metabase user you already created (paulcrepin76@gmail.com)")

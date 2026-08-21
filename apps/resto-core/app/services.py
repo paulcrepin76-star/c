@@ -1,11 +1,11 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.costing import coefficient, cost_per_pour, cost_percent, money, recipe_cost
-from app.models import Invoice, Product, Recipe, Sale, SellableItem, StockMove, WineProfile
+from app.models import Invoice, Product, Recipe, Sale, SellableItem, StockMove, Supplier, WineProfile
 
 
 def on_hand_base(db: Session, product_id: int) -> Decimal:
@@ -152,6 +152,89 @@ def sales_span(db: Session) -> dict:
         "last": last,
         "all_time_sales": money(all_time or 0),
         "tickets": int(tickets or 0),
+    }
+
+
+def _iso_day(value) -> str:
+    if hasattr(value, "isoformat"):
+        return value.isoformat()[:10]
+    return str(value)[:10]
+
+
+def _num(value) -> float:
+    return float(money(value or 0))
+
+
+def daily_activity(db: Session, start: datetime, end: datetime) -> dict:
+    """Sales vs invoice spend by day, plus vendor mix for the dashboard charts."""
+    sales_map: dict[str, float] = {}
+    for sold_at, revenue in db.execute(
+        select(Sale.sold_at, Sale.revenue).where(Sale.sold_at >= start, Sale.sold_at < end)
+    ):
+        if not sold_at:
+            continue
+        key = _iso_day(sold_at)
+        sales_map[key] = round(sales_map.get(key, 0.0) + _num(revenue), 2)
+    invoice_rows = db.execute(
+        select(Invoice.issued_on, func.coalesce(func.sum(Invoice.total), 0))
+        .where(Invoice.issued_on.is_not(None), Invoice.issued_on >= start.date(), Invoice.issued_on <= end.date())
+        .group_by(Invoice.issued_on)
+    ).all()
+    vendor_name = func.coalesce(Supplier.name, "Unknown")
+    vendor_rows = db.execute(
+        select(vendor_name, func.coalesce(func.sum(Invoice.total), 0))
+        .select_from(Invoice)
+        .outerjoin(Supplier, Supplier.id == Invoice.supplier_id)
+        .where(Invoice.issued_on.is_not(None), Invoice.issued_on >= start.date(), Invoice.issued_on <= end.date())
+        .group_by(vendor_name)
+        .order_by(func.coalesce(func.sum(Invoice.total), 0).desc())
+        .limit(8)
+    ).all()
+    invoice_map = {_iso_day(day): _num(total) for day, total in invoice_rows if day}
+    cursor = start.date()
+    last = end.date()
+    labels: list[str] = []
+    sales: list[float] = []
+    purchases: list[float] = []
+    while cursor <= last:
+        key = cursor.isoformat()
+        labels.append(key)
+        sales.append(sales_map.get(key, 0.0))
+        purchases.append(invoice_map.get(key, 0.0))
+        cursor += timedelta(days=1)
+    invoice_spend = money(sum(invoice_map.values(), 0.0))
+    return {
+        "labels": labels,
+        "sales": sales,
+        "purchases": purchases,
+        "invoice_spend": invoice_spend,
+        "vendors": [{"name": str(name), "spend": _num(total)} for name, total in vendor_rows],
+    }
+
+
+def dashboard_charts(costing: dict, activity: dict) -> dict:
+    groups = costing["groups"]
+    mix = []
+    cost_bars = []
+    for key in ("food", "wine", "beverage", "beer", "other"):
+        bucket = groups[key]
+        if bucket["sales"] or bucket["cost"]:
+            mix.append({"name": key, "sales": _num(bucket["sales"])})
+            cost_bars.append({"name": key, "pct": _num(bucket["cost_pct"]), "cost": _num(bucket["cost"])})
+    theoretical_cost = money(sum((groups[key]["cost"] for key in groups), Decimal(0)))
+    period_sales = costing["period_sales"]
+    return {
+        "labels": activity["labels"],
+        "sales": activity["sales"],
+        "purchases": activity["purchases"],
+        "mix": mix,
+        "cost_bars": cost_bars,
+        "vendors": activity["vendors"],
+        "theoretical_cost": _num(theoretical_cost),
+        "theoretical_pct": _num(cost_percent(theoretical_cost, period_sales)),
+        "invoice_spend": _num(activity["invoice_spend"]),
+        "purchase_pct": _num(cost_percent(activity["invoice_spend"], period_sales)),
+        "margin": _num(money(period_sales - theoretical_cost)),
     }
 
 

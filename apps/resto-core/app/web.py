@@ -22,7 +22,7 @@ from app.db import get_db
 from app.matching import match_sellables
 from app.models import Connector, Invoice, Product, Recipe, SellableItem, StockMove, WineProfile
 from app.purchasing import CATEGORIES, purchasing_board
-from app.services import catalog_counts, period_costing, sales_span, wine_rows
+from app.services import catalog_counts, daily_activity, dashboard_charts, period_costing, sales_span, wine_rows
 
 router = APIRouter()
 ALLOWED_DAYS = (7, 30, 90, 365)
@@ -63,6 +63,8 @@ def dashboard(request: Request, days: int = DEFAULT_DAYS, db: Session = Depends(
     invoices = db.query(Invoice).order_by(Invoice.issued_on.desc()).limit(6).all()
     purchasing = purchasing_board(db)
     report = overnight_report(db)
+    activity = daily_activity(db, start, end)
+    charts = dashboard_charts(costing, activity)
     return render(
         request,
         "dashboard.html",
@@ -77,6 +79,7 @@ def dashboard(request: Request, days: int = DEFAULT_DAYS, db: Session = Depends(
         days=window,
         span=sales_span(db),
         counts=catalog_counts(db),
+        charts=charts,
         page="dashboard",
     )
 
@@ -322,6 +325,8 @@ def costing_page(request: Request, days: int = DEFAULT_DAYS, db: Session = Depen
     costing = period_costing(db, start, end)
     wines = wine_rows(db)
     counts = catalog_counts(db)
+    activity = daily_activity(db, start, end)
+    charts = dashboard_charts(costing, activity)
     return render(
         request,
         "costing.html",
@@ -329,6 +334,7 @@ def costing_page(request: Request, days: int = DEFAULT_DAYS, db: Session = Depen
         wines=wines,
         days=window,
         counts=counts,
+        charts=charts,
         page="costing",
     )
 

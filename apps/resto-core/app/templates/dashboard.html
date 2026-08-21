@@ -1,35 +1,30 @@
 {% extends "base.html" %}
-{% block title %}Dashboard{% endblock %}
+{% block title %}Dashboard · Survey Cafe{% endblock %}
 {% block content %}
-<section class="hero">
+<div class="page-head">
   <div>
-    <p class="eyebrow">Survey Cafe</p>
-    <h1>What the cafe actually costs.</h1>
-    <p class="lede">Sales, recipes, and invoices in one place. Quiet numbers, no extra dashboard.</p>
-    <p>
-      <a class="btn" href="/connect">Connect</a>
-      <a class="btn secondary" href="/invoices/scan">Scan a bill</a>
-    </p>
+    <p class="eyebrow">Survey Cafe · live back office</p>
+    <h1>Dashboard</h1>
+    <p class="lede">Sales from Square, theoretical recipe cost, and invoice spend in one place — the same shape as a restaurant P&amp;L board.</p>
   </div>
-</section>
-
-<nav class="period" aria-label="Date range">
-  <a href="/?days=7" class="{% if days == 7 %}on{% endif %}">7 days</a>
-  <a href="/?days=30" class="{% if days == 30 %}on{% endif %}">30 days</a>
-  <a href="/?days=90" class="{% if days == 90 %}on{% endif %}">90 days</a>
-  <a href="/?days=365" class="{% if days == 365 %}on{% endif %}">Year</a>
-</nav>
+  <nav class="period" aria-label="Date range">
+    <a href="/?days=7" class="{% if days == 7 %}on{% endif %}">7 days</a>
+    <a href="/?days=30" class="{% if days == 30 %}on{% endif %}">30 days</a>
+    <a href="/?days=90" class="{% if days == 90 %}on{% endif %}">90 days</a>
+    <a href="/?days=365" class="{% if days == 365 %}on{% endif %}">Year</a>
+  </nav>
+</div>
 
 <section class="kpis">
   <article>
-    <span>Square sales</span>
+    <span>Net sales</span>
     <strong>{{ costing.period_sales | money }}</strong>
     <em>Last {{ days }} days{% if span.last %} · last ticket {{ span.last.date() }}{% endif %}</em>
   </article>
   <article>
     <span>Food cost</span>
     <strong>{{ costing.groups.food.cost_pct | pct }}</strong>
-    <em>{{ costing.groups.food.sales | money }} sales</em>
+    <em>{{ costing.groups.food.sales | money }} sales · {{ costing.groups.food.cost | money }} cost</em>
   </article>
   <article>
     <span>Wine cost</span>
@@ -37,10 +32,62 @@
     <em>{{ costing.groups.wine.sales | money }} sales</em>
   </article>
   <article>
-    <span>Cellar value</span>
-    <strong>{{ cellar_value | money }}</strong>
-    <em>{{ wines | length }} labels in stock</em>
+    <span>Beverage cost</span>
+    <strong>{{ costing.groups.beverage.cost_pct | pct }}</strong>
+    <em>Cocktails, juice, coffee</em>
   </article>
+  <article>
+    <span>Theoretical COGS</span>
+    <strong>{{ charts.theoretical_pct | pct }}</strong>
+    <em>{{ charts.theoretical_cost | money }} cost · {{ charts.margin | money }} margin</em>
+  </article>
+  <article>
+    <span>Invoice spend</span>
+    <strong>{{ charts.invoice_spend | money }}</strong>
+    <em>{{ charts.purchase_pct | pct }} of sales · actual bills filed</em>
+  </article>
+</section>
+
+<section class="charts">
+  <div class="card chart-card tall">
+    <h2>Sales vs invoice spend</h2>
+    <div class="chart-wrap">
+      <canvas id="sales-chart" aria-label="Sales versus invoice spend"></canvas>
+    </div>
+  </div>
+  <div class="card chart-card tall">
+    <h2>Sales mix</h2>
+    <div class="chart-wrap">
+      {% if charts.mix %}
+      <canvas id="mix-chart" aria-label="Sales mix by costing group"></canvas>
+      {% else %}
+      <p class="empty-chart">No sales in this window yet.</p>
+      {% endif %}
+    </div>
+  </div>
+</section>
+
+<section class="charts">
+  <div class="card chart-card">
+    <h2>Cost % by group</h2>
+    <div class="chart-wrap">
+      {% if charts.cost_bars %}
+      <canvas id="cost-chart" aria-label="Cost percent by group"></canvas>
+      {% else %}
+      <p class="empty-chart">Match Square items to recipes to see food cost.</p>
+      {% endif %}
+    </div>
+  </div>
+  <div class="card chart-card">
+    <h2>Spend by vendor</h2>
+    <div class="chart-wrap">
+      {% if charts.vendors %}
+      <canvas id="vendor-chart" aria-label="Invoice spend by vendor"></canvas>
+      {% else %}
+      <p class="empty-chart">No invoices in this window.</p>
+      {% endif %}
+    </div>
+  </div>
 </section>
 
 <section class="kpis">
@@ -60,9 +107,9 @@
     <em>{{ counts.invoices_with_total }} with a dollar amount</em>
   </article>
   <article>
-    <span>Beverage cost</span>
-    <strong>{{ costing.groups.beverage.cost_pct | pct }}</strong>
-    <em>Cocktails, juice, coffee</em>
+    <span>Cellar value</span>
+    <strong>{{ cellar_value | money }}</strong>
+    <em>{{ wines | length }} labels in stock</em>
   </article>
   <article>
     <span>Purchasing</span>
@@ -71,24 +118,16 @@
   </article>
 </section>
 
+{% if counts.unmatched %}
+<p class="flash">Food cost stays near 0% until Square items attach to Mealie recipes. <a href="/costing/match">Match them now</a>.</p>
+{% endif %}
+
 {% if report and (report.opportunities or report.needs_reauth or report.run) %}
-<section class="kpis">
-  <article>
-    <span>Overnight check</span>
-    <strong>{{ report.checked }} products</strong>
-    <em>{{ report.updated }} updated · {{ report.unavailable }} unavailable</em>
-  </article>
-  <article>
-    <span>Estimated monthly saving</span>
-    <strong>{{ report.monthly_total | money }}</strong>
-    <em>{{ report.opportunities | length }} price opportunities · <a href="/purchasing">Buy</a></em>
-  </article>
-</section>
+{% if report.needs_reauth %}
+<p class="flash err">Log in again: {% for slug in report.needs_reauth %}{{ slug }}{% if not loop.last %}, {% endif %}{% endfor %} · <a href="/collector">Open vendor logins</a></p>
+{% endif %}
 <div class="card">
   <h2>Purchasing intelligence</h2>
-  {% if report.needs_reauth %}
-  <p class="flash err">Log in again: {% for slug in report.needs_reauth %}{{ slug }}{% if not loop.last %}, {% endif %}{% endfor %} · <a href="/collector">Open Prices</a></p>
-  {% endif %}
   {% if report.opportunities %}
   <table class="wide">
     <thead><tr><th>Item</th><th>You pay</th><th>Better</th><th>/month</th></tr></thead>
@@ -106,22 +145,27 @@
   {% else %}
   <p class="muted">No switch worth $25/month after the last check. <a href="/collector">Log suppliers in</a> so tonight can fill prices.</p>
   {% endif %}
-  {% if report.recipes %}
-  <p class="muted">Mealie recipe cost moves:</p>
-  <ul class="plain">
-    {% for row in report.recipes %}
-    <li>{{ row.recipe }} <span>{{ row.yesterday | money }} → {{ row.today | money }}</span></li>
-    {% endfor %}
-  </ul>
-  {% endif %}
 </div>
 {% endif %}
 
-{% if counts.unmatched %}
-<p class="flash">Food cost stays near 0% until Square items attach to Mealie recipes. <a href="/costing/match">Match them now</a>.</p>
-{% endif %}
-
 <section class="grid-2">
+  <div class="card">
+    <h2>Recent orders</h2>
+    <p><a href="/invoices/scan">Photograph a paper invoice</a> · <a href="/invoices">All orders</a></p>
+    <table>
+      <thead><tr><th>Date</th><th>Vendor</th><th>Type</th><th>Total</th></tr></thead>
+      <tbody>
+      {% for invoice in invoices %}
+        <tr>
+          <td>{{ invoice.issued_on or "—" }}</td>
+          <td>{{ invoice.supplier.name if invoice.supplier else (invoice.title or invoice.number) }}</td>
+          <td><span class="pill">{{ invoice.invoice_type }}</span></td>
+          <td>{{ invoice.total | money }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
   <div class="card">
     <h2>Wine below par</h2>
     {% if below_par %}
@@ -136,48 +180,20 @@
     {% else %}
     <p class="muted">Every wine is at or above par.</p>
     {% endif %}
-  </div>
-  <div class="card">
-    <h2>How the stack fits</h2>
-    <ol class="stack">
-      <li><b>Paperless</b> archives invoice PDFs from email, a drop folder, or a photo from your iPhone.</li>
-      <li><b>Connect</b> is where you log in to Square, Mealie and Paperless yourself.</li>
-      <li><b>This app</b> matches purchase prices, recipes, glasses and bottles.</li>
-      <li><b>Metabase</b> is the TV dashboard for food cost, wine cost and margin.</li>
-    </ol>
-  </div>
-</section>
-
-<section class="grid-2">
-  <div class="card">
-    <h2>Recent invoices</h2>
-    <p><a href="/invoices/scan">Photograph a paper invoice</a> · <a href="/invoices">All invoices</a></p>
-    <table>
-      <thead><tr><th>Date</th><th>Invoice</th><th>Type</th><th>Total</th></tr></thead>
-      <tbody>
-      {% for invoice in invoices %}
-        <tr>
-          <td>{{ invoice.issued_on or "—" }}</td>
-          <td>{{ invoice.title or invoice.number }}</td>
-          <td>{{ invoice.invoice_type }}</td>
-          <td>{{ invoice.total | money }}</td>
-        </tr>
-      {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  <div class="card">
-    <h2>Connectors</h2>
+    <h2 style="margin-top:18px">Connections</h2>
     <ul class="plain">
       {% for connector in connectors %}
       <li>
-        <span class="dot {{ connector.status }}"></span>
-        {{ connector.name }}
-        <span>{{ connector.kind }} · {{ connector.status.replace('_', ' ') }}</span>
+        <span><span class="dot {{ connector.status }}"></span>{{ connector.name }}</span>
+        <span>{{ connector.status.replace('_', ' ') }}</span>
       </li>
       {% endfor %}
     </ul>
-    <p><a class="btn" href="/connect">Connect Square / Mealie / Paperless</a></p>
   </div>
 </section>
+<script id="dash-data" type="application/json">{{ charts | tojson }}</script>
+{% endblock %}
+{% block scripts %}
+<script src="/static/vendor/chart.umd.min.js"></script>
+<script src="/static/dashboard.js?v=4"></script>
 {% endblock %}

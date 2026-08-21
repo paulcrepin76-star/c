@@ -23,7 +23,7 @@ Do this instead:
 | 3 | Drop folder on the share | Anything you still download by hand |
 | 4 | Portal automation in n8n | Last resort, one site at a time |
 
-Paperless is the filing cabinet. n8n talks to the outside world and holds secrets. **resto-core** is a small local app for costing and wine. Metabase draws the TV dashboard.
+Paperless is the filing cabinet. n8n talks to the outside world and holds secrets. **resto-core** is the MarginEdge-style board for costing, invoices, and wine.
 
 ```text
   FPL / Sam's / Chef's / wine invoices / utilities
@@ -86,7 +86,7 @@ Open `http://100.116.48.120:8088` for the cellar. This will not start a second P
 1. Keep using your existing Paperless and Mealie.
 2. Open `http://100.116.48.120:8088/connect`. Click Connect on Square, Mealie, and Paperless, and log in with the accounts you already use.
 3. In resto-core, add your real wines (or edit the demo list).
-4. Open Metabase at `http://100.116.48.120:3001` and sign in with the account you already created. After `./scripts/setup-metabase.sh`, the **Survey Cafe** dashboard is already there.
+4. The home page at `http://100.116.48.120:8088` is the restaurant board: sales, food/wine cost, and graphs. Metabase at `http://100.116.48.120:3001` is optional extra reporting.
 5. Drop any PDF you still download by hand into `/mnt/user/documents/invoices-inbox`.
 
 You do **not** put tokens into n8n. n8n only runs the nightly sync after you have connected on that page.

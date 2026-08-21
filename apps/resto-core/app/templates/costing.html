@@ -1,15 +1,19 @@
 {% extends "base.html" %}
-{% block title %}Costing{% endblock %}
+{% block title %}Recipes & cost{% endblock %}
 {% block content %}
-<p class="eyebrow">Last {{ days }} days</p>
-<h1>Food, wine and beverage cost</h1>
-<nav class="period" aria-label="Date range">
-  <a href="/costing?days=7" class="{% if days == 7 %}on{% endif %}">7 days</a>
-  <a href="/costing?days=30" class="{% if days == 30 %}on{% endif %}">30 days</a>
-  <a href="/costing?days=90" class="{% if days == 90 %}on{% endif %}">90 days</a>
-  <a href="/costing?days=365" class="{% if days == 365 %}on{% endif %}">Year</a>
-</nav>
-<p class="lede">{{ costing.period_sales | money }} Square sales in this window. {{ counts.linked }} menu items linked to recipes or wines · {{ counts.unmatched }} still unmatched. <a href="/costing/match">Match Square to Mealie</a></p>
+<div class="page-head">
+  <div>
+    <p class="eyebrow">Last {{ days }} days</p>
+    <h1>Recipes &amp; cost</h1>
+    <p class="lede">{{ costing.period_sales | money }} Square sales in this window. Theoretical cost uses Mealie recipes and wine pours. {{ counts.linked }} menu items linked · {{ counts.unmatched }} unmatched. <a href="/costing/match">Match Square to Mealie</a></p>
+  </div>
+  <nav class="period" aria-label="Date range">
+    <a href="/costing?days=7" class="{% if days == 7 %}on{% endif %}">7 days</a>
+    <a href="/costing?days=30" class="{% if days == 30 %}on{% endif %}">30 days</a>
+    <a href="/costing?days=90" class="{% if days == 90 %}on{% endif %}">90 days</a>
+    <a href="/costing?days=365" class="{% if days == 365 %}on{% endif %}">Year</a>
+  </nav>
+</div>
 <section class="kpis">
   {% for key in ['food','wine','beverage','beer'] %}
   <article>
@@ -18,7 +22,27 @@
     <em>{{ costing.groups[key].sales | money }} sales · {{ costing.groups[key].margin | money }} margin</em>
   </article>
   {% endfor %}
+  <article>
+    <span>Theoretical COGS</span>
+    <strong>{{ charts.theoretical_pct | pct }}</strong>
+    <em>{{ charts.theoretical_cost | money }} cost · {{ charts.margin | money }} margin</em>
+  </article>
 </section>
+<section class="charts">
+  <div class="card chart-card">
+    <h2>Cost % by group</h2>
+    <div class="chart-wrap">
+      <canvas id="cost-chart" aria-label="Cost percent by group"></canvas>
+    </div>
+  </div>
+  <div class="card chart-card">
+    <h2>Sales mix</h2>
+    <div class="chart-wrap">
+      <canvas id="mix-chart" aria-label="Sales mix by costing group"></canvas>
+    </div>
+  </div>
+</section>
+<script id="dash-data" type="application/json">{{ charts | tojson }}</script>
 
 <div class="card">
   <h2>Wine usage vs sales</h2>
@@ -77,4 +101,8 @@
     </tbody>
   </table>
 </div>
+{% endblock %}
+{% block scripts %}
+<script src="/static/vendor/chart.umd.min.js"></script>
+<script src="/static/dashboard.js?v=4"></script>
 {% endblock %}
