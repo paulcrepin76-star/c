@@ -247,7 +247,8 @@ def test_purchasing_page_and_api():
         body = payload.json()
         assert body["cheaper_elsewhere"] >= 1
         assert "compared" in body
-        assert "total_products" in body
+        assert body["total_products"] >= 1
+        assert body["compared"] <= body["total_products"]
         butter = next(card for card in body["cards"] if card["product"] == "Butter")
         assert butter["best_supplier"] == "Costco"
         assert butter["current_supplier"] == "Chef's Warehouse"

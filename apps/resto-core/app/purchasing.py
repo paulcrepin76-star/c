@@ -899,7 +899,6 @@ def purchasing_board(db: Session, category: str = "", days: int | None = DEFAULT
             (Product.purchasing_category == category) | (Product.category == category)
         )
     products = query.order_by(Product.name).all()
-    total_products = len(products)
     canonical_skus = {spec["sku"] for spec in CANONICAL_PRODUCTS}
     cards = []
     monthly_total = Decimal("0")
@@ -926,6 +925,7 @@ def purchasing_board(db: Session, category: str = "", days: int | None = DEFAULT
         monthly_total += Decimal(str(card["net"] if card["recommend"] in ("switch", "consider") else 0))
         if card["recommend"] in ("switch", "consider"):
             cheaper_elsewhere += 1
+    tracked = len(cards)
     if view == "opportunities":
         cards = [
             card
@@ -959,7 +959,7 @@ def purchasing_board(db: Session, category: str = "", days: int | None = DEFAULT
         "price_increases": increases,
         "promos": promos,
         "compared": compared,
-        "total_products": total_products,
+        "total_products": tracked,
         "scan": scan,
         "category": category,
         "days": window or DEFAULT_COMPARE_DAYS,
