@@ -73,20 +73,16 @@ One Compose stack, one Postgres, these containers:
 | metabase | 3001 | Dashboards |
 | postgres | 5433 | Shared database server |
 
-Install with the Docker Compose plugin (or Compose Manager):
+Install over SSH from a computer that can already reach Unraid (do not put the root password in chat):
 
 ```bash
-git clone <this-repo> /mnt/user/appdata/resto
-cd /mnt/user/appdata/resto
-cp .env.example .env
-# edit passwords, URLs, PUID/PGID (Unraid is usually 99/100)
-mkdir -p /mnt/user/documents/invoices-inbox
-docker compose up -d
+ssh-copy-id root@YOUR_UNRAID_IP
+./scripts/deploy-unraid.sh root@YOUR_UNRAID_IP
 ```
 
-Open `http://TOWER:8088` for the cellar. Demo wines are loaded on first boot so the screens are not empty.
+Open `http://YOUR_UNRAID_IP:8088` for the cellar. Demo wines load on first boot.
 
-Details: [docs/UNRAID.md](docs/UNRAID.md), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/WINE.md](docs/WINE.md).
+A Cursor cloud agent cannot see `192.168.x.x`. To let the agent SSH in, put Unraid on Tailscale and send only `root@your-unraid.tailnet.ts.net`. Details: [docs/SSH.md](docs/SSH.md), [docs/UNRAID.md](docs/UNRAID.md), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/WINE.md](docs/WINE.md).
 
 ## What you do on day one
 

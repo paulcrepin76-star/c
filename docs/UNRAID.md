@@ -8,16 +8,23 @@ Unraid PUID/PGID is usually `99:100` (`nobody:users`). That is already in `.env.
 
 Install **Docker Compose Manager** (or Compose) from Community Applications. Point it at this folder. You can still install Paperless or Mealie from CA instead, but one shared Postgres is simpler to back up.
 
-## First start
+## First start (SSH)
+
+From a laptop that already SSHes into Unraid:
 
 ```bash
-cp .env.example .env
-nano .env   # passwords, tower IP, time zone
-mkdir -p /mnt/user/documents/invoices-inbox
-docker compose pull
-docker compose up -d
-docker compose ps
+./scripts/deploy-unraid.sh root@YOUR_UNRAID_IP
 ```
+
+Or on the server itself:
+
+```bash
+cd /mnt/user/appdata/resto
+./scripts/setup.sh
+./scripts/remote-up.sh
+```
+
+See [SSH.md](SSH.md). PUID/PGID `99:100` is already in `.env.example`.
 
 Give Paperless a minute on first boot (OCR stack + migrations). Then:
 
