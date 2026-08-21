@@ -17,11 +17,26 @@ else
 fi
 docker exec resto-n8n n8n list:workflow || true
 
-# Activate nightly Square/Mealie/Paperless, plus the 15-minute Paperless backup.
-docker exec resto-postgres psql -U resto -d n8n -c \
-  "UPDATE workflow_entity SET active = false WHERE name IN ('Mealie recipes → cellar');" || true
-docker exec resto-postgres psql -U resto -d n8n -c \
-  "UPDATE workflow_entity SET active = true WHERE name IN ('Square sales → cellar', 'Paperless invoices → cellar');" || true
+# Activate only the newest copy of the nightly Square sync and the 15-minute Paperless backup.
+docker exec -i resto-postgres psql -U resto -d n8n <<'SQL'
+UPDATE workflow_entity SET active = false
+WHERE name IN (
+  'Mealie recipes → cellar',
+  'Check cellar connection',
+  'Paperless invoices → cellar',
+  'Square sales → cellar'
+);
+UPDATE workflow_entity AS w
+SET active = true
+FROM (
+  SELECT DISTINCT ON (name) id
+  FROM workflow_entity
+  WHERE name IN ('Square sales → cellar', 'Paperless invoices → cellar')
+  ORDER BY name, "updatedAt" DESC
+) AS newest
+WHERE w.id = newest.id;
+SELECT id, name, active FROM workflow_entity ORDER BY name, active DESC, "updatedAt" DESC;
+SQL
 
 echo
 echo "Open http://100.116.48.120:8088/connect and log in to Square, Mealie, Paperless."
