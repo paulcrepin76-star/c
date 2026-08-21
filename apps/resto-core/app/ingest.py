@@ -202,11 +202,15 @@ def _invoice_total(doc: dict) -> Decimal:
     return parse_invoice_amount(doc.get("title"), doc.get("content"), doc.get("correspondent"))
 
 
-def _add_invoice_lines(db: Session, invoice: Invoice, lines: list[dict]) -> int:
+def _add_invoice_lines(db: Session, invoice: Invoice, lines: list[dict], require_match: bool = False) -> int:
+    from app.purchasing import match_canonical_product
+
     added = 0
     for line in lines:
         description = str(line.get("description") or line.get("raw_description") or "")
         if not description:
+            continue
+        if require_match and match_canonical_product(db, description)[0] is None:
             continue
         item = InvoiceLine(
             invoice_id=invoice.id,
@@ -256,7 +260,8 @@ def ingest_paperless_doc(db: Session, doc: dict) -> dict:
         if doc.get("title") and not existing.title:
             existing.title = str(doc.get("title") or "")[:240]
             status = "updated"
-        if _add_invoice_lines(db, existing, _ocr_lines_for(db, existing, doc)):
+        parsed = _ocr_lines_for(db, existing, doc)
+        if _add_invoice_lines(db, existing, parsed, require_match=not doc.get("lines")):
             status = "updated"
         if status == "updated":
             db.commit()
@@ -282,7 +287,7 @@ def ingest_paperless_doc(db: Session, doc: dict) -> dict:
     )
     db.add(invoice)
     db.flush()
-    _add_invoice_lines(db, invoice, _ocr_lines_for(db, invoice, doc))
+    _add_invoice_lines(db, invoice, _ocr_lines_for(db, invoice, doc), require_match=not doc.get("lines"))
     db.commit()
     record_invoice_prices(db, invoice)
     return {"status": "created", "invoice_id": invoice.id}

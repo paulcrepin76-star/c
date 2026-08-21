@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 from decimal import Decimal
+import re
 
 from sqlalchemy.orm import Session
 
@@ -68,8 +69,15 @@ def compare_unit_for(product: Product) -> str:
     return (product.compare_unit or product.base_unit or "g").strip() or "g"
 
 
+def _has_alias(text: str, needle: str) -> bool:
+    token = str(needle or "").lower().strip()
+    if not token:
+        return False
+    return re.search(rf"(?<![a-z0-9]){re.escape(token)}(?:es|s)?(?![a-z0-9])", text) is not None
+
+
 def _excluded(text: str, excludes) -> bool:
-    return any(part and part in text for part in excludes)
+    return any(part and _has_alias(text, part) for part in excludes)
 
 
 def match_canonical_product(db: Session, description: str) -> tuple[Product | None, Decimal]:
@@ -80,7 +88,7 @@ def match_canonical_product(db: Session, description: str) -> tuple[Product | No
     best: tuple[Product | None, Decimal] = (None, Decimal("0"))
     for alias in aliases:
         needle = alias.alias.lower().strip()
-        if not needle or needle not in text:
+        if not _has_alias(text, needle):
             continue
         excluded = [part.strip() for part in (alias.exclude or "").split(",") if part.strip()]
         if _excluded(text, excluded):
@@ -95,7 +103,7 @@ def match_canonical_product(db: Session, description: str) -> tuple[Product | No
     products = db.query(Product).filter(Product.is_active.is_(True)).all()
     for product in products:
         name = product.name.lower().strip()
-        if len(name) < 4 or name not in text:
+        if len(name) < 4 or not _has_alias(text, name):
             continue
         if "butter" in name and _excluded(text, BUTTER_EXCLUDES):
             continue
@@ -105,6 +113,10 @@ def match_canonical_product(db: Session, description: str) -> tuple[Product | No
 
 def record_line(db: Session, invoice: Invoice, line: InvoiceLine) -> PurchasePrice | None:
     if not invoice.supplier_id:
+        return None
+    if invoice.invoice_type not in ("food", "wine"):
+        return None
+    if "+$" in str(line.raw_description or ""):
         return None
     pack_price = Decimal(str(line.line_total or 0)) or (
         Decimal(str(line.qty or 0)) * Decimal(str(line.unit_cost or 0))

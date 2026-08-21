@@ -54,7 +54,12 @@ def test_peanut_butter_is_not_butter():
     db = SessionLocal()
     product, score = match_canonical_product(db, "Peanut butter 5 lb 12.99")
     assert product is None or product.sku != "BUTTER"
-    assert score == 0 or (product and product.sku != "BUTTER")
+    veggies, veg_score = match_canonical_product(
+        db,
+        "Veggies: Caramelized onions, spinach, tomato, roasted pepper, grilled mushrooms +$1.50 each",
+    )
+    assert veggies is None or veggies.sku != "EGG"
+    assert veg_score == 0 or (veggies and veggies.sku != "EGG")
     db.close()
 
 
