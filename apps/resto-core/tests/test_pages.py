@@ -15,7 +15,8 @@ def test_core_pages_render_demo_wines():
         assert "Sales vs invoice spend" in home.text
         purchasing = client.get("/purchasing")
         assert purchasing.status_code == 200
-        assert "Supplier price comparison" in purchasing.text
+        assert "Purchasing" in purchasing.text
+        assert "Best price" in purchasing.text
         assert "1 month" in purchasing.text
         assert "class=\"compare\"" in purchasing.text or "compare-wrap" in purchasing.text
         connect = client.get("/connect")

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 import re
 
@@ -8,7 +8,8 @@ from sqlalchemy.orm import Session
 
 from app.costing import cost_percent, money
 from app.geo import FAR_MILES, HOME_MARKET, LOCAL_SUPPLIERS, MID_MILES, NEAR_MILES, radius_band
-from app.models import Invoice, InvoiceLine, Product, ProductAlias, PurchasePrice, Recipe, RecipeLine, Supplier
+from app.models import CollectorRun, Connection, Invoice, InvoiceLine, Product, ProductAlias, PurchasePrice, Recipe, RecipeLine, Supplier
+from app.names import looks_like_vendor_noise, pretty_item
 from app.units import comparable_cost, family, parse_pack, to_base
 
 STAY_THRESHOLD = Decimal("25")  # monthly saving below this: stay with the current supplier
@@ -45,6 +46,9 @@ CATEGORIES = ("", "dairy", "food", "meat", "produce", "cleaning", "beverage", "w
 USAGE_DAYS = 30
 COMPARE_DAYS = (30, 60, 90, 365)
 DEFAULT_COMPARE_DAYS = 90
+FRESH_DAYS = 7
+OK_DAYS = 30
+STALE_DAYS = 90
 VENDOR_ORDER = (
     "Chef's Warehouse",
     "Gordon Food Service",
@@ -69,6 +73,15 @@ VENDOR_SHORT = {
     "Stan's Coffee": "Stan's",
     "US retail average (BLS)": "BLS",
 }
+SCAN_VENDORS = (
+    ("chefs-warehouse", "Chef's Warehouse"),
+    ("gordon", "Gordon Food Service"),
+    ("sams-club", "Sam's Club"),
+    ("costco", "Costco"),
+    ("restaurant-depot", "Restaurant Depot"),
+    ("webstaurantstore", "WebstaurantStore"),
+    ("publix", "Publix"),
+)
 
 CANONICAL_PRODUCTS = (
     {
@@ -228,7 +241,8 @@ def ensure_purchased_product(db: Session, description: str) -> Product | None:
         return None
     text = re.sub(r"\s+Qty\s+\d+(?:\.\d+)?\s*$", "", text, flags=re.I).strip()
     food = clean_food_name(re.sub(r"\b(?:sku|upc)\s*[:#]?\s*[A-Z0-9-]+\b", "", text, flags=re.I)) or text
-    food = food[:80].strip(" -")
+    pretty, _pack = pretty_item(text)
+    food = (pretty or food)[:80].strip(" -")
     if len(food) < 4:
         return None
     sku = product_sku(food)
@@ -520,6 +534,169 @@ def vendor_short(name: str) -> str:
     return label.split("·")[0].strip()[:16]
 
 
+def offer_age_days(row: PurchasePrice, today: date | None = None) -> int | None:
+    if not row.purchased_on:
+        return None
+    return ((today or date.today()) - row.purchased_on).days
+
+
+def freshness_band(days: int | None) -> str:
+    if days is None:
+        return "unknown"
+    if days <= FRESH_DAYS:
+        return "fresh"
+    if days <= OK_DAYS:
+        return "ok"
+    if days <= STALE_DAYS:
+        return "stale"
+    return "old"
+
+
+def age_label(days: int | None) -> str:
+    if days is None:
+        return ""
+    if days <= 0:
+        return "Today"
+    if days == 1:
+        return "Yesterday"
+    if days < 14:
+        return f"{days} days ago"
+    if days < 45:
+        weeks = max(1, days // 7)
+        return f"{weeks} week{'s' if weeks != 1 else ''} ago"
+    months = max(1, days // 30)
+    if months >= 6:
+        return f"{months} months old"
+    return f"{months} month{'s' if months != 1 else ''} old"
+
+
+def is_fresh_enough(row: PurchasePrice) -> bool:
+    return freshness_band(offer_age_days(row)) != "old"
+
+
+def fulfillment_for(row: PurchasePrice) -> str:
+    miles = offer_miles(row)
+    city = (row.supplier.city if row.supplier else "") or ""
+    if city in {"delivered", "online"} or miles <= 0:
+        return "Delivered"
+    return f"Pickup · {miles} mi"
+
+
+def sparkline_svg(values: list[Decimal | float], width: int = 84, height: int = 22) -> str:
+    nums = [float(v) for v in values if v is not None]
+    if len(nums) < 2:
+        return ""
+    lo, hi = min(nums), max(nums)
+    span = (hi - lo) or 1.0
+    pts = []
+    for index, value in enumerate(nums):
+        x = index * (width / (len(nums) - 1))
+        y = height - 3 - ((value - lo) / span) * (height - 6)
+        pts.append(f"{x:.1f},{y:.1f}")
+    color = "#1a7a72" if nums[-1] <= nums[0] else "#b42318"
+    return (
+        f'<svg class="spark" viewBox="0 0 {width} {height}" width="{width}" height="{height}" aria-hidden="true">'
+        f'<polyline fill="none" stroke="{color}" stroke-width="1.8" points="{" ".join(pts)}"/></svg>'
+    )
+
+
+def _display_for(product: Product, row: PurchasePrice | None = None) -> tuple[str, str]:
+    pretty, pack = pretty_item(product.name)
+    if row and (not pretty or not pack):
+        alt, alt_pack = pretty_item(row.raw_description or "", row.pack_qty, row.pack_unit)
+        pretty = pretty or alt
+        pack = pack or alt_pack
+    if not pack and row and row.pack_qty and row.pack_unit:
+        pack = f"{row.pack_qty} {row.pack_unit}".replace(".0000", "").strip()
+    return pretty or product.name, pack
+
+
+def _price_change(db: Session, product_id: int, supplier_id: int | None, days: int = 60) -> dict:
+    empty = {"pct": Decimal("0"), "old": None, "new": None, "spark": "", "points": []}
+    if not supplier_id:
+        return empty
+    rows = (
+        db.query(PurchasePrice)
+        .filter(
+            PurchasePrice.product_id == product_id,
+            PurchasePrice.supplier_id == supplier_id,
+            PurchasePrice.source.in_(PAID_SOURCES + ACCOUNT_SOURCES),
+            PurchasePrice.purchased_on >= _cutoff(days),
+        )
+        .order_by(PurchasePrice.purchased_on.asc(), PurchasePrice.id.asc())
+        .all()
+    )
+    points = [Decimal(str(row.unit_cost_compare)) for row in rows]
+    if len(points) < 2:
+        return {**empty, "points": points, "spark": sparkline_svg(points)}
+    old, new = points[0], points[-1]
+    pct = money(((new - old) / old) * 100) if old > 0 else Decimal("0")
+    return {"pct": pct, "old": old, "new": new, "spark": sparkline_svg(points), "points": points}
+
+
+def _action_badge(recommend: str, usable: list[PurchasePrice], current: PurchasePrice, cheapest: PurchasePrice, net, gap) -> dict:
+    suppliers = {row.supplier_id for row in usable}
+    best_name = vendor_short(cheapest.supplier.name) if cheapest.supplier else "another vendor"
+    current_name = vendor_short(current.supplier.name) if current.supplier else "current"
+    if cheapest.is_discounted and cheapest.supplier_id != current.supplier_id:
+        return {
+            "code": "promo",
+            "label": "Promo",
+            "detail": f"{best_name} has a discounted pack.",
+        }
+    if len(suppliers) < 2:
+        return {
+            "code": "none",
+            "label": "No comparison",
+            "detail": "Only one vendor has a price fresh enough to trust.",
+        }
+    if recommend == "switch":
+        return {
+            "code": "switch",
+            "label": "Switch",
+            "detail": f"{best_name} · save {money(net)}/mo",
+        }
+    if recommend == "consider":
+        return {
+            "code": "watch",
+            "label": "Watch",
+            "detail": f"Consider {best_name} · {money(net)}/mo after the trip",
+        }
+    if Decimal(str(gap or 0)) > 0:
+        return {
+            "code": "stay",
+            "label": "Stay",
+            "detail": f"Don't switch — saving is below {money(STAY_THRESHOLD)}/mo or {GAP_PCT_THRESHOLD}% after the trip.",
+        }
+    return {"code": "stay", "label": "Stay", "detail": f"Stay with {current_name}."}
+
+
+def _vendor_rows(offers: list[PurchasePrice], current: PurchasePrice, cheapest: PurchasePrice) -> list[dict]:
+    rows = []
+    for offer in sorted(offers, key=lambda row: Decimal(str(row.unit_cost_compare))):
+        age = offer_age_days(offer)
+        rows.append(
+            {
+                "supplier": offer.supplier.name if offer.supplier else "",
+                "short": vendor_short(offer.supplier.name if offer.supplier else ""),
+                "unit_cost": offer.unit_cost_compare,
+                "is_current": offer.id == current.id,
+                "is_best": offer.id == cheapest.id,
+                "age_days": age,
+                "freshness": freshness_band(age),
+                "age_label": age_label(age),
+                "pack": f"{offer.pack_qty} {offer.pack_unit}".replace(".0000", "").strip(),
+                "raw": offer.raw_description or "",
+                "fulfillment": fulfillment_for(offer),
+                "source": offer.source,
+                "min_order": Decimal(str(offer.supplier.min_order or 0)) if offer.supplier else Decimal("0"),
+                "delivery_fee": Decimal(str(offer.supplier.delivery_fee or 0)) if offer.supplier else Decimal("0"),
+                "miles": offer_miles(offer),
+            }
+        )
+    return rows
+
+
 def product_comparison(db: Session, product: Product, days: int | None = None) -> dict | None:
     paid = latest_by_supplier(db, product.id, source="invoice", days=days)
     account = latest_by_supplier(db, product.id, source="account", days=days if days is not None else 21)
@@ -541,7 +718,9 @@ def product_comparison(db: Session, product: Product, days: int | None = None) -
         pool = account + public
         current = min(pool, key=lambda row: Decimal(str(row.unit_cost_compare)))
     offers = paid + account + public
-    cheapest = min(offers, key=lambda row: Decimal(str(row.unit_cost_compare)))
+    usable = [row for row in offers if is_fresh_enough(row)]
+    rec_pool = usable or [current]
+    cheapest = min(rec_pool, key=lambda row: Decimal(str(row.unit_cost_compare)))
     gap = money(Decimal(str(current.unit_cost_compare)) - Decimal(str(cheapest.unit_cost_compare)))
     usage = monthly_usage_compare(db, product, days=USAGE_DAYS)
     monthly_unit = money(gap * usage) if usage else money(0)
@@ -556,16 +735,19 @@ def product_comparison(db: Session, product: Product, days: int | None = None) -
     gap_pct = cost_percent(gap, current.unit_cost_compare)
     trip_class = "skip"
     recommend = "stay"
-    if cheapest.supplier_id != current.supplier_id and gap > 0:
+    same_vendor = cheapest.supplier_id == current.supplier_id
+    if not same_vendor and gap > 0:
         trip_class = classify_trip(cheapest, gap_pct, net)
-        if trip_class == "go":
+        cheapest_band = freshness_band(offer_age_days(cheapest))
+        if trip_class == "go" and cheapest_band == "stale":
+            recommend = "consider"
+        elif trip_class == "go":
             recommend = "switch"
         elif trip_class == "maybe":
             recommend = "consider"
         else:
             recommend = "stay"
-            net = money(0)
-    if cheapest.supplier_id == current.supplier_id:
+    if same_vendor:
         recommend = "stay"
         trip_class = "skip"
         net = money(0)
@@ -577,12 +759,18 @@ def product_comparison(db: Session, product: Product, days: int | None = None) -
         for row in offers
         if row.supplier_id != current.supplier_id and offer_miles(row) <= FAR_MILES
     ]
+    display_name, pack_label = _display_for(product, current)
+    change = _price_change(db, product.id, current.supplier_id)
+    badge = _action_badge(recommend, usable or offers, current, cheapest, net, gap)
     return {
         "product": product,
+        "display_name": display_name,
+        "pack_label": pack_label,
         "compare_unit": compare_unit,
         "current": current,
         "cheapest": cheapest,
         "offers": sorted(offers, key=lambda row: Decimal(str(row.unit_cost_compare))),
+        "vendor_rows": _vendor_rows(offers, current, cheapest),
         "paid": paid,
         "account": account,
         "market": sorted(public, key=lambda row: Decimal(str(row.unit_cost_compare))),
@@ -600,6 +788,17 @@ def product_comparison(db: Session, product: Product, days: int | None = None) -
         "band": radius_band(offer_miles(cheapest)),
         "trip_class": trip_class,
         "recommend": recommend,
+        "badge": badge,
+        "change_pct": change["pct"],
+        "previous_cost": change["old"],
+        "spark": change["spark"],
+        "current_fulfillment": fulfillment_for(current),
+        "best_fulfillment": fulfillment_for(cheapest),
+        "current_age": age_label(offer_age_days(current)),
+        "best_age": age_label(offer_age_days(cheapest)),
+        "current_freshness": freshness_band(offer_age_days(current)),
+        "best_freshness": freshness_band(offer_age_days(cheapest)),
+        "compared": len({row.supplier_id for row in usable}) >= 2,
         "market_label": HOME_MARKET,
         "impacts": recipe_impacts(
             db,
@@ -693,40 +892,173 @@ def seasonal_hint(db: Session, product: Product, card: dict) -> str:
     return ""
 
 
-def purchasing_board(db: Session, category: str = "", days: int | None = DEFAULT_COMPARE_DAYS) -> dict:
+def purchasing_board(db: Session, category: str = "", days: int | None = DEFAULT_COMPARE_DAYS, view: str = "") -> dict:
     query = db.query(Product).filter(Product.is_active.is_(True))
     if category:
         query = query.filter(
             (Product.purchasing_category == category) | (Product.category == category)
         )
+    products = query.order_by(Product.name).all()
+    total_products = len(products)
+    canonical_skus = {spec["sku"] for spec in CANONICAL_PRODUCTS}
     cards = []
     monthly_total = Decimal("0")
     cheaper_elsewhere = 0
+    compared = 0
+    increases = 0
+    promos = 0
     window = days if days in COMPARE_DAYS or days is None else DEFAULT_COMPARE_DAYS
-    for product in query.order_by(Product.name).all():
+    for product in products:
         card = product_comparison(db, product, days=window)
         if not card:
             continue
+        if product.sku not in canonical_skus:
+            if looks_like_vendor_noise(card["display_name"]) or not pretty_item(card["display_name"])[0]:
+                continue
         card["hint"] = seasonal_hint(db, product, card)
         cards.append(card)
+        if card.get("compared"):
+            compared += 1
+        if Decimal(str(card.get("change_pct") or 0)) >= GAP_PCT_THRESHOLD:
+            increases += 1
+        if (card.get("badge") or {}).get("code") == "promo" or any(row.is_discounted for row in card["offers"]):
+            promos += 1
         monthly_total += Decimal(str(card["net"] if card["recommend"] in ("switch", "consider") else 0))
         if card["recommend"] in ("switch", "consider"):
             cheaper_elsewhere += 1
-    cards.sort(key=lambda item: item["product"].name.lower())
+    if view == "opportunities":
+        cards = [
+            card
+            for card in cards
+            if card["recommend"] in ("switch", "consider")
+            or Decimal(str(card.get("change_pct") or 0)) >= GAP_PCT_THRESHOLD
+            or (card.get("badge") or {}).get("code") == "promo"
+        ]
+    cards.sort(
+        key=lambda item: (
+            {"switch": 0, "consider": 1}.get(item["recommend"], 2),
+            -float(item["net"] or 0),
+            -float(item.get("change_pct") or 0),
+            str(item.get("display_name") or item["product"].name).lower(),
+        )
+    )
     vendors = matrix_vendors(cards)
     tips = [card for card in cards if card["recommend"] in ("switch", "consider")][:5]
+    increases_list = [
+        card for card in cards if Decimal(str(card.get("change_pct") or 0)) >= GAP_PCT_THRESHOLD
+    ][:5]
+    scan = vendor_scan_status(db)
     return {
         "cards": cards,
         "vendors": vendors,
         "tips": tips,
+        "increases": increases_list,
         "monthly_total": money(monthly_total),
         "cheaper_elsewhere": cheaper_elsewhere,
+        "worth_switching": sum(1 for card in cards if card["recommend"] == "switch"),
+        "price_increases": increases,
+        "promos": promos,
+        "compared": compared,
+        "total_products": total_products,
+        "scan": scan,
         "category": category,
         "days": window or DEFAULT_COMPARE_DAYS,
+        "view": view,
         "stay_threshold": STAY_THRESHOLD,
         "gap_pct_threshold": GAP_PCT_THRESHOLD,
         "market": HOME_MARKET,
     }
+
+
+def vendor_scan_status(db: Session) -> dict:
+    from app.connections import extra_dict
+
+    run = db.query(CollectorRun).order_by(CollectorRun.id.desc()).first()
+    latest_by_name: dict[str, tuple[date | None, int]] = {}
+    cutoff = _cutoff(30)
+    rows = db.query(PurchasePrice).filter(PurchasePrice.purchased_on >= cutoff).all()
+    for row in rows:
+        if not row.supplier:
+            continue
+        name = row.supplier.name
+        seen_on, count = latest_by_name.get(name, (None, 0))
+        purchased = row.purchased_on
+        if seen_on is None or (purchased and purchased > seen_on):
+            seen_on = purchased
+        latest_by_name[name] = (seen_on, count + 1)
+    vendors = []
+    last_times: list[datetime] = []
+    if run and run.finished_at:
+        last_times.append(run.finished_at)
+    for slug, label in SCAN_VENDORS:
+        row = db.query(Connection).filter(Connection.name == slug).first()
+        extra = extra_dict(row) if row else {}
+        browser_status = str(extra.get("browser_status") or "")
+        seen_on, count = latest_by_name.get(label, (None, 0))
+        status = "ok"
+        note = ""
+        if browser_status == "needs_reauth":
+            status = "warn"
+            note = "Login expired"
+        elif not seen_on and browser_status in ("never_logged_in", ""):
+            status = "idle"
+            note = "No recent prices"
+        success = str(extra.get("browser_success_at") or "")
+        scanned = None
+        if success:
+            try:
+                scanned = datetime.fromisoformat(success.replace("Z", ""))
+                last_times.append(scanned)
+            except ValueError:
+                scanned = None
+        vendors.append(
+            {
+                "slug": slug,
+                "label": label,
+                "short": vendor_short(label),
+                "status": status,
+                "note": note,
+                "count": count,
+                "seen_on": seen_on,
+                "scanned_at": scanned,
+            }
+        )
+    last_scan = max(last_times) if last_times else None
+    if last_scan is None:
+        dates = [seen for seen, _count in latest_by_name.values() if seen]
+        if dates:
+            last_scan = datetime.combine(max(dates), datetime.min.time())
+    updated = int(run.updated) if run else sum(item["count"] for item in vendors)
+    return {
+        "last_scan": last_scan,
+        "last_scan_label": last_scan.strftime("%I:%M %p").lstrip("0") if last_scan else "No scan yet",
+        "updated": updated,
+        "vendors": vendors,
+        "needs_reauth": [part for part in (run.needs_reauth.split(",") if run else []) if part],
+    }
+
+
+def polish_product_names(db: Session) -> int:
+    canonical = {spec["sku"] for spec in CANONICAL_PRODUCTS}
+    updated = 0
+    for product in db.query(Product).filter(Product.is_active.is_(True)).all():
+        if product.sku in canonical:
+            continue
+        pretty, _pack = pretty_item(product.name)
+        if not pretty or pretty == product.name:
+            continue
+        clash = (
+            db.query(Product)
+            .filter(Product.id != product.id, Product.name.ilike(pretty))
+            .first()
+        )
+        if clash:
+            continue
+        product.name = pretty[:200]
+        updated += 1
+    if updated:
+        db.commit()
+    return updated
 
 
 def board_payload(board: dict) -> dict:
@@ -734,7 +1066,9 @@ def board_payload(board: dict) -> dict:
     for card in board["cards"]:
         cards.append(
             {
-                "product": card["product"].name,
+                "product": card.get("display_name") or card["product"].name,
+                "raw_name": card["product"].name,
+                "pack": card.get("pack_label") or "",
                 "sku": card["product"].sku,
                 "category": card["product"].purchasing_category or card["product"].category,
                 "compare_unit": card["compare_unit"],
@@ -748,7 +1082,10 @@ def board_payload(board: dict) -> dict:
                 "monthly": float(card["monthly"]),
                 "net": float(card["net"]),
                 "recommend": card["recommend"],
+                "badge": (card.get("badge") or {}).get("code") or card["recommend"],
                 "hint": card.get("hint") or "",
+                "change_pct": float(card.get("change_pct") or 0),
+                "compared": bool(card.get("compared")),
                 "trip_class": card.get("trip_class") or "skip",
                 "miles": float(card.get("miles") or 0),
                 "best_source": card["cheapest"].source,
@@ -784,6 +1121,11 @@ def board_payload(board: dict) -> dict:
     return {
         "monthly_total": float(board["monthly_total"]),
         "cheaper_elsewhere": board["cheaper_elsewhere"],
+        "worth_switching": board.get("worth_switching") or 0,
+        "price_increases": board.get("price_increases") or 0,
+        "promos": board.get("promos") or 0,
+        "compared": board.get("compared") or 0,
+        "total_products": board.get("total_products") or 0,
         "category": board["category"],
         "days": board.get("days") or DEFAULT_COMPARE_DAYS,
         "vendors": [row.name for row in board.get("vendors") or []],
@@ -850,4 +1192,5 @@ def ensure_purchasing(db: Session) -> None:
             supplier.city = spec["city"]
         if not supplier.miles:
             supplier.miles = spec["miles"]
+    polish_product_names(db)
     db.commit()

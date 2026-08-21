@@ -134,7 +134,7 @@ def test_collector_page_and_ingest_api():
         assert ok.status_code == 200
         assert ok.json()["recorded"] == 1
         purchasing = client.get("/purchasing")
-        assert "Worth changing" in purchasing.text or "Maybe" in purchasing.text
+        assert "Switch" in purchasing.text or "Watch" in purchasing.text or "Stay" in purchasing.text
         assert "Bonita Springs" in purchasing.text
 
 

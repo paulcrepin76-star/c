@@ -1,63 +1,131 @@
 {% extends "base.html" %}
-{% block title %}Price compare{% endblock %}
+{% block title %}Purchasing{% endblock %}
 {% block content %}
 {% set period_label = {30: '1 month', 60: '2 months', 90: '3 months', 365: 'Year'} %}
 <div class="page-head">
   <div>
-    <p class="eyebrow">{{ board.market }} · per comparable unit</p>
-    <h1>Supplier price comparison</h1>
-    <p class="lede">One row per item you buy, vendors across. Cheapest cell is teal. The underline is who you usually pay.</p>
+    <p class="eyebrow">{{ board.market }} · should I change supplier?</p>
+    <h1>Purchasing</h1>
+    <p class="lede">Current vs best price, what you’d save a month, and whether the trip is worth it. Click a row for every vendor, pack, and recipe impact.</p>
   </div>
   <div class="toolbar">
     <nav class="period" aria-label="Date range">
       {% for n in compare_days %}
-      <a href="/purchasing?days={{ n }}{% if board.category %}&amp;category={{ board.category }}{% endif %}" class="{% if board.days == n %}on{% endif %}">{{ period_label.get(n, n) }}</a>
+      <a href="/purchasing?days={{ n }}{% if board.category %}&amp;category={{ board.category }}{% endif %}{% if board.view %}&amp;view={{ board.view }}{% endif %}" class="{% if board.days == n %}on{% endif %}">{{ period_label.get(n, n) }}</a>
       {% endfor %}
     </nav>
-    <form method="post" action="/purchasing/scan" class="inline">
-      <input type="hidden" name="mode" value="refresh">
-      <input type="hidden" name="days" value="{{ board.days }}">
-      <input type="hidden" name="category" value="{{ board.category }}">
-      <button type="submit" class="btn">Daily refresh · {{ relevant_count }}</button>
-    </form>
+    <details class="scan-pop">
+      <summary class="btn secondary scan-btn">
+        <span class="dot {% if board.scan.needs_reauth %}manual{% else %}ready{% endif %}"></span>
+        Last scan {{ board.scan.last_scan_label }} · {{ board.scan.updated }} prices
+      </summary>
+      <div class="scan-panel">
+        <h2>Price scan status</h2>
+        <table class="scan-table">
+          <tbody>
+          {% for vendor in board.scan.vendors %}
+            <tr>
+              <td>{{ vendor.label }}</td>
+              <td>
+                {% if vendor.status == 'ok' %}<span class="dot ready"></span> {{ vendor.scanned_at.strftime('%I:%M %p').lstrip('0') if vendor.scanned_at else (vendor.seen_on.isoformat() if vendor.seen_on else '—') }}
+                {% elif vendor.status == 'warn' %}<span class="dot manual"></span> {{ vendor.note }}
+                {% else %}<span class="dot"></span> {{ vendor.note or '—' }}
+                {% endif %}
+              </td>
+              <td class="num">{{ vendor.count }} prices</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+        <form method="post" action="/purchasing/scan" class="inline">
+          <input type="hidden" name="mode" value="refresh">
+          <input type="hidden" name="days" value="{{ board.days }}">
+          <input type="hidden" name="category" value="{{ board.category }}">
+          <button type="submit" class="btn">Daily refresh</button>
+        </form>
+      </div>
+    </details>
   </div>
 </div>
 {% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
 {% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
 
-<nav class="period" aria-label="Category">
-  <a href="/purchasing?days={{ board.days }}" class="{% if not board.category %}on{% endif %}">All</a>
+<nav class="period" aria-label="View">
+  <a href="/purchasing?days={{ board.days }}{% if board.category %}&amp;category={{ board.category }}{% endif %}" class="{% if board.view != 'opportunities' %}on{% endif %}">All items</a>
+  <a href="/purchasing?days={{ board.days }}&amp;view=opportunities{% if board.category %}&amp;category={{ board.category }}{% endif %}" class="{% if board.view == 'opportunities' %}on{% endif %}">Opportunities</a>
   {% for name in categories %}
     {% if name %}
-    <a href="/purchasing?days={{ board.days }}&amp;category={{ name }}" class="{% if board.category == name %}on{% endif %}">{{ name | capitalize }}</a>
+    <a href="/purchasing?days={{ board.days }}&amp;category={{ name }}{% if board.view %}&amp;view={{ board.view }}{% endif %}" class="{% if board.category == name %}on{% endif %}">{{ name | capitalize }}</a>
     {% endif %}
   {% endfor %}
 </nav>
 
 <section class="kpis compact-kpis">
   <article>
-    <span>Switch savings / month</span>
+    <span>Potential savings</span>
     <strong>{{ board.monthly_total | money }}</strong>
-    <em>Only 8% and {{ board.stay_threshold | money }}+ after the trip</em>
+    <em>/ month after trip cost</em>
   </article>
   <article>
-    <span>Cheaper elsewhere</span>
-    <strong>{{ board.cheaper_elsewhere }}</strong>
-    <em>{{ board.cards | length }} items in this window</em>
+    <span>Worth switching</span>
+    <strong>{{ board.worth_switching }}</strong>
+    <em>{{ board.cheaper_elsewhere }} including watch</em>
+  </article>
+  <article>
+    <span>Price increases</span>
+    <strong>{{ board.price_increases }}</strong>
+    <em>{{ board.gap_pct_threshold }}%+ vs 60 days ago</em>
+  </article>
+  <article>
+    <span>Active promotions</span>
+    <strong>{{ board.promos }}</strong>
+    <em>Discounted packs on file</em>
+  </article>
+  <article>
+    <span>Products compared</span>
+    <strong>{{ board.compared }} / {{ board.total_products }}</strong>
+    <em>Have a second vendor price</em>
+  </article>
+  <article>
+    <span>Last scan</span>
+    <strong>{{ board.scan.last_scan_label }}</strong>
+    <em>{{ board.scan.updated }} prices updated</em>
   </article>
 </section>
 
-{% if board.tips %}
-<div class="card tips">
-  <h2>What to do this window</h2>
-  <ul class="plain">
-    {% for card in board.tips %}
-    <li>
-      <span><b>{{ card.product.name }}</b> · {{ card.hint }}</span>
-      <span>{{ card.net | money }}/mo</span>
-    </li>
-    {% endfor %}
-  </ul>
+{% if board.tips or board.increases %}
+<div class="grid-2">
+  {% if board.tips %}
+  <div class="card tips">
+    <h2>Best opportunities</h2>
+    <ul class="plain">
+      {% for card in board.tips %}
+      <li>
+        <span>
+          <b>{{ card.display_name }}</b>
+          · {{ card.current.supplier.name | vendorshort if card.current.supplier else "—" }}
+          → {{ card.cheapest.supplier.name | vendorshort if card.cheapest.supplier else "—" }}
+          <small>{{ card.gap_pct }}% cheaper</small>
+        </span>
+        <span>{{ card.net | money }}/mo</span>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+  {% if board.increases %}
+  <div class="card tips">
+    <h2>Price increases</h2>
+    <ul class="plain">
+      {% for card in board.increases %}
+      <li>
+        <span><b>{{ card.display_name }}</b> · {{ card.current.supplier.name | vendorshort if card.current.supplier else "—" }}</span>
+        <span>+{{ card.change_pct }}%</span>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
 </div>
 {% endif %}
 
@@ -70,53 +138,109 @@
 {% else %}
 <div class="card compare-card">
   <div class="compare-wrap">
-    <table class="compare">
+    <table class="compare decision">
       <thead>
         <tr>
           <th class="item">Item</th>
-          <th>Unit</th>
-          {% for vendor in board.vendors %}
-          <th class="vendor">{{ vendor.name | vendorshort }}</th>
-          {% endfor %}
-          <th>Note</th>
+          <th>Current</th>
+          <th>Best price</th>
+          <th>Saving</th>
+          <th>Monthly</th>
+          <th>Action</th>
         </tr>
       </thead>
       <tbody>
       {% for card in board.cards %}
-        <tr>
+        <tr class="decision-row">
           <td class="item">
             <details>
-              <summary>{{ card.product.name }}</summary>
-              <p class="muted">
-                You pay {{ card.current.supplier.name if card.current.supplier else "—" }}
-                {{ card.current.unit_cost_compare | unitcost }}/{{ card.compare_unit }}
-                · Best {{ card.cheapest.supplier.name if card.cheapest.supplier else "—" }}
-                {{ card.cheapest.unit_cost_compare | unitcost }}
-                {% if card.recommend == "switch" %} · Worth changing{% elif card.recommend == "consider" %} · Maybe — combine with a trip{% endif %}
-              </p>
-              {% if card.impacts %}
-              <p class="muted">Recipes: {% for impact in card.impacts %}{{ impact.recipe }} {{ impact.delta | money }}{% if not loop.last %} · {% endif %}{% endfor %}</p>
-              {% endif %}
+              <summary>
+                <strong>{{ card.display_name }}</strong>
+                {% if card.pack_label %}<small>{{ card.pack_label }}</small>{% endif %}
+                {% if card.spark %}<span class="spark-wrap">{{ card.spark | safe }}</span>{% endif %}
+              </summary>
+              <div class="item-detail">
+                <p class="muted">
+                  Use {{ card.usage }} {{ card.compare_unit }}/mo.
+                  {% if card.gap > 0 %}
+                  Gross saving {{ card.monthly | money }}/mo · after trip {{ card.net | money }}/mo.
+                  {% endif %}
+                  {{ card.current_fulfillment }} vs {{ card.best_fulfillment }}.
+                </p>
+                <table class="vendor-detail">
+                  <tbody>
+                  {% for row in card.vendor_rows %}
+                    <tr class="fresh-{{ row.freshness }}">
+                      <td>
+                        {{ row.short }}
+                        {% if row.is_current %}<em class="you-tag">current</em>{% endif %}
+                        {% if row.is_best and not row.is_current %}<em class="best-tag">best</em>{% endif %}
+                      </td>
+                      <td class="num">{{ row.unit_cost | unitcost }}/{{ card.compare_unit }}</td>
+                      <td class="muted">{{ row.age_label }}{% if row.freshness == 'old' %} · stale{% endif %}</td>
+                      <td class="muted">{{ row.fulfillment }}</td>
+                    </tr>
+                    {% if row.raw %}
+                    <tr class="raw-row fresh-{{ row.freshness }}">
+                      <td colspan="4" class="muted raw">{{ row.raw }}{% if row.pack %} · {{ row.pack }}{% endif %}</td>
+                    </tr>
+                    {% endif %}
+                  {% endfor %}
+                  </tbody>
+                </table>
+                {% if card.change_pct and card.previous_cost %}
+                <p class="muted">
+                  60-day change: {{ card.current.unit_cost_compare | unitcost }} vs {{ card.previous_cost | unitcost }}
+                  ({{ card.change_pct }}%).
+                </p>
+                {% endif %}
+                {% if card.impacts %}
+                <p class="muted">Recipes:
+                  {% for impact in card.impacts %}{{ impact.recipe }} {{ impact.delta | money }}{% if not loop.last %} · {% endif %}{% endfor %}
+                </p>
+                {% endif %}
+                <p class="muted">{{ card.badge.detail }}</p>
+              </div>
             </details>
           </td>
-          <td class="muted">{{ card.compare_unit }}</td>
-          {% for vendor in board.vendors %}
-            {% set offer = card.cells.get(vendor.id) %}
-            {% if offer %}
-            <td class="cost {% if offer.id == card.cheapest.id %}best{% endif %} {% if offer.id == card.current.id %}you{% endif %}" title="{{ offer.pack_qty }} {{ offer.pack_unit }} · {{ offer.source | sourcelabel }} · {{ offer.purchased_on or '—' }}">
-              {{ offer.unit_cost_compare | unitcost }}
-            </td>
-            {% else %}
-            <td class="cost empty">—</td>
+          <td>
+            <div class="price-cell">
+              <b>{{ card.current.supplier.name | vendorshort if card.current.supplier else "—" }}</b>
+              {{ card.current.unit_cost_compare | unitcost }}/{{ card.compare_unit }}
+              <small class="fresh-{{ card.current_freshness }}">{{ card.current_age }} · {{ card.current_fulfillment }}</small>
+            </div>
+          </td>
+          <td>
+            <div class="price-cell {% if card.cheapest.id != card.current.id %}best-alt{% endif %}">
+              <b>{{ card.cheapest.supplier.name | vendorshort if card.cheapest.supplier else "—" }}</b>
+              {{ card.cheapest.unit_cost_compare | unitcost }}
+              <small class="fresh-{{ card.best_freshness }}">{{ card.best_age }} · {{ card.best_fulfillment }}</small>
+            </div>
+          </td>
+          <td class="num">
+            {% if card.gap > 0 %}<span class="save">−{{ card.gap_pct }}%</span>{% else %}—{% endif %}
+          </td>
+          <td class="num">
+            {% if card.recommend in ('switch', 'consider') %}{{ card.net | money }}
+            {% elif card.gap > 0 %}<span class="muted">{{ card.monthly | money }}</span>
+            {% else %}—{% endif %}
+          </td>
+          <td>
+            <span class="badge badge-{{ card.badge.code }}" title="{{ card.badge.detail }}">{{ card.badge.label }}</span>
+            {% if card.recommend == 'switch' and card.cheapest.supplier %}
+            <small class="badge-sub">{{ card.cheapest.supplier.name | vendorshort }}</small>
+            {% elif card.recommend == 'consider' and card.cheapest.supplier %}
+            <small class="badge-sub">{{ card.cheapest.supplier.name | vendorshort }}</small>
+            {% elif card.current.supplier %}
+            <small class="badge-sub">{{ card.current.supplier.name | vendorshort }}</small>
             {% endif %}
-          {% endfor %}
-          <td class="note">{{ card.hint }}</td>
+          </td>
         </tr>
       {% endfor %}
       </tbody>
     </table>
   </div>
-  <p class="muted legend">Teal = cheapest known. Underline = who you usually buy from. Click an item for pack and recipe impact.</p>
+  <p class="muted legend">Click an item for every vendor pack. Stale prices (31–90 days) fade; anything older than 90 days is not used to recommend a switch. Stay still shows a small saving when it is under your {{ board.stay_threshold | money }} / {{ board.gap_pct_threshold }}% trip rule.</p>
 </div>
 {% endif %}
 

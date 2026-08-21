@@ -58,6 +58,24 @@ def test_small_monthly_saving_says_stay():
     db.close()
 
 
+def test_prices_older_than_90_days_are_not_used_to_switch():
+    from datetime import date, timedelta
+
+    db = SessionLocal()
+    butter = db.query(Product).filter(Product.sku == "BUTTER").one()
+    chefs = db.query(Supplier).filter(Supplier.name == "Chef's Warehouse").one()
+    for row in db.query(PurchasePrice).filter(PurchasePrice.product_id == butter.id):
+        if row.supplier_id != chefs.id:
+            row.purchased_on = date.today() - timedelta(days=120)
+    db.commit()
+    card = product_comparison(db, butter)
+    assert card["recommend"] == "stay"
+    assert card["current"].supplier.name == "Chef's Warehouse"
+    assert card["cheapest"].supplier.name == "Chef's Warehouse"
+    assert card["badge"]["code"] in ("stay", "none")
+    db.close()
+
+
 def test_peanut_butter_is_not_butter():
     db = SessionLocal()
     product, score = match_canonical_product(db, "Peanut butter 5 lb 12.99")
@@ -211,14 +229,16 @@ def test_purchasing_page_and_api():
     with TestClient(app) as client:
         page = client.get("/purchasing")
         assert page.status_code == 200
-        assert "Supplier price comparison" in page.text
+        assert "Purchasing" in page.text
+        assert "Best price" in page.text
+        assert "Products compared" in page.text
         assert "Costco" in page.text
         assert "$4.99" in page.text
         assert "Warehouse" in page.text
         assert "$5.60" in page.text
-        assert "compare" in page.text
-        names = [card["product"].name for card in purchasing_board(SessionLocal())["cards"]]
-        assert names == sorted(names, key=str.lower)
+        assert "Stay" in page.text
+        names = [card["display_name"] for card in purchasing_board(SessionLocal())["cards"]]
+        assert "Butter" in names
         dairy = client.get("/purchasing?category=dairy")
         assert dairy.status_code == 200
         assert "Butter" in dairy.text
@@ -226,9 +246,12 @@ def test_purchasing_page_and_api():
         assert payload.status_code == 200
         body = payload.json()
         assert body["cheaper_elsewhere"] >= 1
+        assert "compared" in body
+        assert "total_products" in body
         butter = next(card for card in body["cards"] if card["product"] == "Butter")
         assert butter["best_supplier"] == "Costco"
         assert butter["current_supplier"] == "Chef's Warehouse"
+        assert butter["badge"] in ("switch", "watch", "stay", "promo", "none")
         home = client.get("/")
         assert "Purchasing" in home.text
         assert 'href="/purchasing"' in home.text

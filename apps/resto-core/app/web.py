@@ -503,11 +503,18 @@ def connector_status(connector_id: int, status: str = Form(...), db: Session = D
 
 
 @router.get("/purchasing")
-def purchasing_page(request: Request, category: str = "", days: int = DEFAULT_COMPARE_DAYS, db: Session = Depends(get_db)):
+def purchasing_page(
+    request: Request,
+    category: str = "",
+    days: int = DEFAULT_COMPARE_DAYS,
+    view: str = "",
+    db: Session = Depends(get_db),
+):
     ok, err = _pop_flash(request)
     chosen = category if category in CATEGORIES else ""
     window = days if days in COMPARE_DAYS else DEFAULT_COMPARE_DAYS
-    board = purchasing_board(db, chosen, days=window)
+    chosen_view = view if view in ("", "opportunities") else ""
+    board = purchasing_board(db, chosen, days=window, view=chosen_view)
     relevant = relevant_products(db, mode="refresh")
     return render(
         request,
