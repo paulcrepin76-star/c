@@ -108,6 +108,8 @@ def test_collector_page_and_ingest_api():
         assert "Price Collector" in page.text
         assert "Unraid Chromium" in page.text
         assert "not n8n" in page.text
+        assert "Walmart" in page.text
+        assert "no account" in page.text
         assert "8088" in page.text
         assert 'id="cellar-api-key"' in page.text
         assert ">test<" in page.text

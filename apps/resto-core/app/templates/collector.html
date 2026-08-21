@@ -39,11 +39,15 @@
     <tbody>
     {% for row in browsers %}
       <tr>
-        <td>{{ row.label }}</td>
+        <td>{{ row.label }}{% if not row.needs_login %} <span class="muted">no account</span>{% endif %}</td>
         <td><span class="dot {{ row.status }}"></span> {{ row.status.replace('_', ' ') }}{% if row.error %} <span class="muted">{{ row.error }}</span>{% endif %}{% if row.success_at %} <span class="muted">last ok {{ row.success_at[:16] }}</span>{% endif %}</td>
         <td>
           <form method="post" action="/collector/login/{{ row.slug }}" class="inline">
+            {% if row.needs_login %}
             <button type="submit" class="btn">{{ 'Reconnect' if row.status in ('ready', 'needs_reauth') else 'Log in' }}</button>
+            {% else %}
+            <button type="submit" class="btn secondary">Open</button>
+            {% endif %}
           </form>
         </td>
       </tr>

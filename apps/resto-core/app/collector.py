@@ -60,7 +60,7 @@ COLLECTORS: list[dict] = [
     {"slug": "us-foods", "label": "US Foods", "adapter": ADAPTER_AUTH, "status": "extension", "home": "https://www.usfoods.com/", "hosts": ["usfoods.com"], "blurb": "Customer portal. Same as Sysco: your browser, not a bot."},
     {"slug": "sams-club", "label": "Sam's Club", "adapter": ADAPTER_EXTENSION, "status": "extension", "home": "https://www.samsclub.com/", "hosts": ["samsclub.com"], "blurb": "Connected login files invoices. No catalog crawl. Open Sam's in Chrome; the extension reads hidden JSON on the page you already have open."},
     {"slug": "costco", "label": "Costco", "adapter": ADAPTER_EXTENSION, "status": "extension", "home": "https://www.costco.com/", "hosts": ["costco.com"], "blurb": "Terms block automated catalog collection. Extension on the current page + receipts."},
-    {"slug": "walmart", "label": "Walmart", "adapter": ADAPTER_EXTENSION, "status": "extension", "home": "https://www.walmart.com/", "hosts": ["walmart.com"], "blurb": "No consumer grocery price API. Extension or a receipt, not Marketplace seller APIs."},
+    {"slug": "walmart", "label": "Walmart", "adapter": ADAPTER_PLAYWRIGHT, "status": "browser", "home": "https://www.walmart.com/", "hosts": ["walmart.com"], "blurb": "No account. Guest Chromium looks up what you buy and stops if a CAPTCHA appears. Receipts still count as paid prices."},
 ]
 
 

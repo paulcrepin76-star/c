@@ -25,6 +25,9 @@ BROWSER_SOURCES = (
     ("aldi", "Aldi"),
 )
 
+# Guest Chromium is enough. No membership login.
+PUBLIC_BROWSER_SLUGS = {"webstaurantstore", "publix", "walmart", "target", "aldi"}
+
 
 def set_browser_status(db: Session, slug: str, status: str, error: str = "") -> None:
     row = get_connection(db, slug)

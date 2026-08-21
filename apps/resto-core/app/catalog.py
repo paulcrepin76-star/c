@@ -45,7 +45,7 @@ CATALOGS: list[dict] = [
     },
     {"slug": "sams-club", "label": "Sam's Club", "kind": "blocked", "method": "receipts + extension", "blurb": "Connected login files invoices. Catalog crawl is not allowed (PerimeterX / terms). Open Sam's in Chrome and send the page.", "home": "https://www.samsclub.com/"},
     {"slug": "costco", "label": "Costco", "kind": "blocked", "method": "receipts + extension", "blurb": "Costco prohibits automated catalog collection. Email receipts and the extension while you shop.", "home": "https://www.costco.com/"},
-    {"slug": "walmart", "label": "Walmart", "kind": "blocked", "method": "receipts + extension", "blurb": "Search redirects to a bot wall from a server.", "home": "https://www.walmart.com/"},
+    {"slug": "walmart", "label": "Walmart", "kind": "js", "method": "guest Chromium / extension", "blurb": "No membership. HTTP search is a bot wall from a server; Unraid Chromium can try the public page and stop on a CAPTCHA.", "home": "https://www.walmart.com/"},
     {"slug": "publix", "label": "Publix", "kind": "js", "method": "extension / Playwright", "blurb": "Weekly ad is public in a browser; HTML has no dollars until JavaScript runs.", "home": "https://www.publix.com/"},
     {"slug": "target", "label": "Target", "kind": "js", "method": "extension / Playwright", "blurb": "Prices load in the app shell, not in the first HTML.", "home": "https://www.target.com/"},
     {"slug": "aldi", "label": "Aldi", "kind": "js", "method": "extension / Playwright", "blurb": "Store finder first; no stable public search HTML.", "home": "https://www.aldi.us/"},

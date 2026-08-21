@@ -61,8 +61,8 @@ SUPPLIERS: list[dict] = [
     {
         "slug": "walmart",
         "label": "Walmart",
-        "needs_login": True,
-        "login_url": "https://www.walmart.com/account/login",
+        "needs_login": False,
+        "login_url": "https://www.walmart.com/",
         "home_url": "https://www.walmart.com/",
         "search_url": "https://www.walmart.com/search?q={query}",
     },

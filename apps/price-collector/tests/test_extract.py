@@ -9,6 +9,12 @@ def test_chefs_login_uses_public_site():
     assert "shop.chefswarehouse.com" not in source["login_url"]
 
 
+def test_walmart_is_guest_no_account():
+    source = supplier_by_slug("walmart")
+    assert source["needs_login"] is False
+    assert source["login_url"] == "https://www.walmart.com/"
+
+
 def test_stale_chromium_locks_are_removed(tmp_path, monkeypatch):
     monkeypatch.setattr(browser_mod.settings, "data_dir", str(tmp_path))
     profile = tmp_path / "profiles" / "chefs-warehouse"

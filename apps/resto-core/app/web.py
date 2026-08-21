@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.catalog import catalog_lexicon, scan_catalogs
 from app.collector import collector_rows, playwright_available, source_label
 from app.config import settings
-from app.intel import BROWSER_SOURCES, browser_status_for, overnight_report
+from app.intel import BROWSER_SOURCES, PUBLIC_BROWSER_SLUGS, browser_status_for, overnight_report
 from app.equivalents import connection_status, relevant_products, watch_payload
 from app.geo import FAR_MILES, HOME_MARKET, NEAR_MILES
 from app.market import scan_external_prices
@@ -577,6 +577,7 @@ def collector_page(request: Request, db: Session = Depends(get_db)):
     for slug, label in BROWSER_SOURCES:
         row = browser_status_for(db, slug)
         row["label"] = label
+        row["needs_login"] = slug not in PUBLIC_BROWSER_SLUGS
         browsers.append(row)
     return render(
         request,
