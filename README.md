@@ -73,16 +73,17 @@ One Compose stack, one Postgres, these containers:
 | metabase | 3001 | Dashboards |
 | postgres | 5433 | Shared database server |
 
-Install over SSH from a computer that can already reach Unraid (do not put the root password in chat):
+On the MacBook, create a key first if `ssh-copy-id` says **No identities found**, then deploy:
 
 ```bash
-ssh-copy-id root@YOUR_UNRAID_IP
-./scripts/deploy-unraid.sh root@YOUR_UNRAID_IP
+ssh-keygen -t ed25519 -N "" -f ~/.ssh/id_ed25519
+ssh-copy-id -i ~/.ssh/id_ed25519.pub root@100.116.48.120
+git clone https://github.com/paulcrepin76-star/c.git resto-backoffice
+cd resto-backoffice
+./scripts/deploy-unraid.sh root@100.116.48.120
 ```
 
-Open `http://YOUR_UNRAID_IP:8088` for the cellar. Demo wines load on first boot.
-
-A Cursor cloud agent cannot see `192.168.x.x`. To let the agent SSH in, put Unraid on Tailscale and send only `root@your-unraid.tailnet.ts.net`. Details: [docs/SSH.md](docs/SSH.md), [docs/UNRAID.md](docs/UNRAID.md), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/WINE.md](docs/WINE.md).
+Open `http://100.116.48.120:8088` for the cellar. Paperless files invoices under `Survey Cafe/{year}/{supplier}/{type}/`. Details: [docs/SSH.md](docs/SSH.md).
 
 ## What you do on day one
 

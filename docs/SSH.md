@@ -1,53 +1,57 @@
 # Install on Unraid over SSH
 
-Yes — that is the right way to let the agent (or you) put the stack on the server.
+Yes — that is the right way to put the stack on the server.
 
-This Cursor cloud machine is **not** on your home network. It cannot SSH to `192.168.x.x` or `tower.local` unless Unraid is reachable on the public internet or through Tailscale/WireGuard.
+This Cursor cloud machine is **not** on your Tailnet. Unraid is `root@100.116.48.120`. Deploy from the MacBook.
 
-Never paste the Unraid root password into chat. Use an SSH key.
+Never paste the Unraid root password into chat. Type it only in Terminal when `ssh-copy-id` asks once.
 
-## Option A — you already SSH from a laptop (easiest)
+## Your Mac had no SSH key
 
-On that laptop:
+`ssh-copy-id: ERROR: No identities found` means the laptop has never created a key. Do this in Terminal on **Pauls-MacBook-Pro**, not as `root@lerouxfamily`.
 
 ```bash
-ssh-copy-id root@YOUR_UNRAID_IP
-cd /path/to/this-repo
-./scripts/deploy-unraid.sh root@YOUR_UNRAID_IP
+mkdir -p ~/.ssh
+chmod 700 ~/.ssh
+ssh-keygen -t ed25519 -N "" -f ~/.ssh/id_ed25519 -C "paulcrepin@Pauls-MacBook-Pro"
+ssh-copy-id -i ~/.ssh/id_ed25519.pub root@100.116.48.120
+ssh root@100.116.48.120 'hostname && ls /mnt/user && docker info >/dev/null && echo ok'
 ```
 
-That rsyncs the files to `/mnt/user/appdata/resto`, writes a local `.env` with random secrets, and runs `docker compose up`.
+`ssh-copy-id` will ask for the Unraid root password **once**. After `echo ok` works without a password, clone and deploy:
+
+```bash
+cd ~
+git clone https://github.com/paulcrepin76-star/c.git resto-backoffice
+cd resto-backoffice
+./scripts/deploy-unraid.sh root@100.116.48.120
+```
 
 Then open:
 
-- http://YOUR_UNRAID_IP:8088 — wine cellar
-- http://YOUR_UNRAID_IP:8010 — Paperless
-- http://YOUR_UNRAID_IP:9925 — Mealie
-- http://YOUR_UNRAID_IP:5678 — n8n
-- http://YOUR_UNRAID_IP:3001 — Metabase
+- http://100.116.48.120:8088 — wine cellar
+- http://100.116.48.120:8010 — Paperless
+- http://100.116.48.120:9925 — Mealie
+- http://100.116.48.120:5678 — n8n
+- http://100.116.48.120:3001 — Metabase
 
-## Option B — let the cloud agent SSH in
-
-1. Install Tailscale (or WireGuard) on Unraid so the hostname is reachable from the internet.
-2. Add an SSH public key under Unraid **Settings → Management Access** (or `~/.ssh/authorized_keys` for root).
-3. Send only:
-   - `root@your-unraid.tailnet.ts.net`
-   - not the password
-
-Then the agent can run `./scripts/deploy-unraid.sh root@your-unraid.tailnet.ts.net`.
-
-## Option C — SSH one-liner if the repo is already on Unraid
+If `ssh-copy-id` is missing on the Mac, use this instead:
 
 ```bash
-ssh root@YOUR_UNRAID_IP
-cd /mnt/user/appdata/resto
-./scripts/setup.sh
-./scripts/remote-up.sh
+cat ~/.ssh/id_ed25519.pub | ssh root@100.116.48.120 'mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys'
 ```
+
+## Paperless storage path
+
+Invoices are stored as:
+
+`Survey Cafe/{{ created_year }}/{{ correspondent }}/{{ document_type }}/{{ created }} - {{ title }} - {{ doc_pk }}`
+
+That layout is already set in `compose.yml`. After Paperless is up, you can also paste the same path in Paperless → Settings → Storage paths if you use the UI template.
 
 ## After it is up
 
-Still in the Unraid browser, not in chat:
+Still in the browser, not in chat:
 
 1. Paperless → create admin → add the mailbox that receives e-bills
 2. Mealie → create admin

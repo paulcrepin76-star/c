@@ -42,6 +42,10 @@ In Paperless: Settings → Mail → add the inbox that receives e-bills. Rules:
 - Sam's Club / Chef's Warehouse → type = food
 - Wine house → type = wine
 
+Storage layout (already in `compose.yml`):
+
+`Survey Cafe/{{ created_year }}/{{ correspondent }}/{{ document_type }}/{{ created }} - {{ title }} - {{ doc_pk }}`
+
 The consume folder is enough when you download a PDF yourself. Share `invoices-inbox` over SMB if you want to drop files from a laptop.
 
 ## Metabase

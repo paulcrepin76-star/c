@@ -17,11 +17,24 @@ if [ -z "$TARGET" ]; then
   echo "Usage: $0 root@UNRAID_IP"
   echo
   echo "This script must run on a machine that already reaches Unraid."
-  echo "A Cursor cloud agent cannot see 192.168.x.x unless you use Tailscale/WireGuard."
   echo
-  echo "Example:"
-  echo "  ssh-copy-id root@192.168.1.50"
-  echo "  ./scripts/deploy-unraid.sh root@192.168.1.50"
+  echo "On a Mac that has never used SSH keys:"
+  echo "  ssh-keygen -t ed25519 -N \"\" -f ~/.ssh/id_ed25519"
+  echo "  ssh-copy-id -i ~/.ssh/id_ed25519.pub root@100.116.48.120"
+  echo "  ./scripts/deploy-unraid.sh root@100.116.48.120"
+  exit 1
+fi
+
+if ! ls "$HOME"/.ssh/id_*.pub >/dev/null 2>&1 && [ ! -f "$HOME/.ssh/config" ]; then
+  echo "No SSH key found on this computer (ssh-copy-id: No identities found)."
+  echo "Create one, then copy it to Unraid. Type the Unraid root password only in this terminal:"
+  echo
+  echo "  mkdir -p ~/.ssh && chmod 700 ~/.ssh"
+  echo "  ssh-keygen -t ed25519 -N \"\" -f ~/.ssh/id_ed25519 -C \"$(whoami)@$(hostname)\""
+  echo "  ssh-copy-id -i ~/.ssh/id_ed25519.pub ${TARGET}"
+  echo "  ssh ${TARGET} 'echo ok'"
+  echo
+  echo "Then run this script again."
   exit 1
 fi
 
