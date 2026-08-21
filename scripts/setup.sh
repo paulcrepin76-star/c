@@ -25,7 +25,9 @@ detect_container() {
   local skip="$2"
   docker ps --format '{{.Names}}|{{.Image}}' 2>/dev/null |
     awk -F'|' -v needle="$needle" -v skip="$skip" '
-      tolower($0) ~ needle && $1 != skip { print $1; exit }
+      $1 == skip { next }
+      tolower($1) ~ /ollama/ { next }
+      tolower($1) ~ needle || tolower($2) ~ needle { print $1; exit }
     ' || true
 }
 
@@ -129,7 +131,7 @@ chmod 600 "$ROOT/.env" 2>/dev/null || true
 cat <<EOF
 
 This stack will start: resto-core, n8n, Metabase, Postgres
-Skipped (already on Unraid): ${EXISTING_PAPERLESS:-} ${EXISTING_MEALIE:-}
+It will NOT install Paperless or Mealie. Keep the ones you already have.
 
 Next:
   ./scripts/remote-up.sh
