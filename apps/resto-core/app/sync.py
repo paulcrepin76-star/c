@@ -11,6 +11,7 @@ from app.ingest import clean_food_name, ingest_paperless_doc, ingest_recipes, in
 from app.matching import match_sellables
 from app.models import Sale
 from app.purchasing import backfill_purchase_prices
+from app.catalog import scan_catalogs
 
 TIMEOUT = httpx.Timeout(30.0, connect=10.0)
 
@@ -295,6 +296,13 @@ def sync_all(db: Session) -> dict:
     mealie = sync_mealie(db)
     paperless = sync_paperless(db)
     prices = {"status": "ok", "created": backfill_purchase_prices(db)}
+    if settings.catalog_scan_enabled:
+        try:
+            catalogs = scan_catalogs(db)
+        except Exception as exc:  # noqa: BLE001
+            catalogs = {"status": "error", "error": str(exc)[:200]}
+    else:
+        catalogs = {"status": "skipped", "reason": "disabled"}
     try:
         matched = match_sellables(db)
         matched["status"] = "ok"
@@ -305,6 +313,7 @@ def sync_all(db: Session) -> dict:
         "mealie": mealie,
         "paperless": paperless,
         "purchasing": prices,
+        "catalogs": catalogs,
         "matched": matched,
         "ran_at": _now().isoformat(),
     }

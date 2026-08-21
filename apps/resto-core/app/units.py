@@ -56,6 +56,10 @@ _EACH_CT = re.compile(
     r"(?P<each>\d+(?:\.\d+)?)\s*(?P<unit>lbs?|pounds?|oz|ounces?|kg|g|grams?|gal|gallons?|qt|quarts?|ml|l)\b\.?,?\s*(?P<count>\d+)\s*(?:ct|count|pk|pack)\b",
     re.I,
 )
+_CASE_PACK = re.compile(
+    r"(?P<each>\d+(?:\.\d+)?)\s*(?P<unit>lbs?|pounds?|oz|ounces?|kg|g|grams?|gal|gallons?|qt|quarts?|ml|l)\b\.?\s*[-–]\s*(?P<count>\d+)\s*/\s*(?:case|cs)\b",
+    re.I,
+)
 _PACK = re.compile(
     r"(?P<qty>\d+(?:\.\d+)?)\s*(?P<unit>lbs?|pounds?|oz|ounces?|kg|g|grams?|gal|gallons?|qt|quarts?|ml|l|each|ea|ct|pc|dz|doz|dozen)\b",
     re.I,
@@ -129,19 +133,24 @@ def parse_pack(description: str, fallback_qty: Decimal | int | float = 0, fallba
         qty = Decimal(counted.group("count")) * Decimal(counted.group("each"))
         unit = counted.group("unit")
     else:
-        counted = _EACH_CT.search(text)
+        counted = _CASE_PACK.search(text)
         if counted:
             qty = Decimal(counted.group("each")) * Decimal(counted.group("count"))
             unit = counted.group("unit")
         else:
-            matches = list(_PACK.finditer(text))
-            if matches:
-                chosen = matches[-1]
-                qty = Decimal(chosen.group("qty"))
-                unit = chosen.group("unit")
-            elif fallback_qty and fallback_unit:
-                qty = Decimal(str(fallback_qty))
-                unit = fallback_unit
+            counted = _EACH_CT.search(text)
+            if counted:
+                qty = Decimal(counted.group("each")) * Decimal(counted.group("count"))
+                unit = counted.group("unit")
+            else:
+                matches = list(_PACK.finditer(text))
+                if matches:
+                    chosen = matches[-1]
+                    qty = Decimal(chosen.group("qty"))
+                    unit = chosen.group("unit")
+                elif fallback_qty and fallback_unit:
+                    qty = Decimal(str(fallback_qty))
+                    unit = fallback_unit
     suffix = _QTY_SUFFIX.search(text)
     if suffix and qty > 0:
         qty *= Decimal(suffix.group(1))

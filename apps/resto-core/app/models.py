@@ -192,6 +192,7 @@ class PurchasePrice(Base):
     unit_cost_compare: Mapped[Decimal] = mapped_column(UnitCost, default=0)
     confidence: Mapped[Decimal] = mapped_column(Numeric(4, 3), default=1)
     source: Mapped[str] = mapped_column(String(20), default="invoice")
+    url: Mapped[str] = mapped_column(String(400), default="")
 
     product: Mapped[Product] = relationship()
     supplier: Mapped[Supplier] = relationship()

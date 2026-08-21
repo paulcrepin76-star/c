@@ -3,7 +3,9 @@
 {% block content %}
 <p class="eyebrow">Price intelligence</p>
 <h1>Supplier price comparison</h1>
-<p class="lede">Every invoice line is kept. Pack sizes are converted to the same unit before anything is called cheaper. A $80 case can beat a $25 pack once you divide by pounds.</p>
+<p class="lede">Paid invoice packs stay on the left. Public catalogs are scanned every night — no club login. A listed case is converted to the same unit as what you actually paid.</p>
+{% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
+{% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
 
 <nav class="period" aria-label="Category">
   <a href="/purchasing" class="{% if not board.category %}on{% endif %}">All</a>
@@ -25,13 +27,22 @@
     <strong>{{ board.cheaper_elsewhere }}</strong>
     <em>Stay if the monthly gain is under {{ board.stay_threshold | money }}</em>
   </article>
+  <article>
+    <span>Public catalogs</span>
+    <strong>{{ catalogs | selectattr("fetchable") | list | length }} / {{ catalogs | length }}</strong>
+    <em>Sites we can read without your account</em>
+  </article>
 </section>
+
+<form method="post" action="/purchasing/scan" class="inline" style="margin-bottom: 16px;">
+  <button type="submit" class="btn">Scan public prices now</button>
+  <span class="muted">Nightly 02:10 already does this. Grocery club sites usually block the server; restaurant catalogs often do not.</span>
+</form>
 
 {% if not board.cards %}
 <div class="card">
-  <h2>Waiting on invoice lines</h2>
-  <p>Invoice totals are not enough. This page needs a pack size on the line — <code>36 lb case</code>, <code>4 lb pack</code>, <code>15 dozen</code> — so a carton is never compared to a sleeve at face value.</p>
-  <p class="muted">Photograph a Chef's, Gordon, Costco or Sam's invoice, or wait for Paperless OCR. Known products (butter, eggs, milk, heavy cream) are matched automatically. Peanut butter is not butter.</p>
+  <h2>Waiting on comparable packs</h2>
+  <p>Invoice totals are not enough, and most grocery homepages hide the price until you open a browser. Scan public restaurant catalogs, or photograph a Chef's / Sam's invoice with a pack size.</p>
   <p><a class="btn" href="/invoices/scan">Photograph an invoice</a></p>
 </div>
 {% endif %}
@@ -45,15 +56,19 @@
     </div>
     {% if card.recommend == "switch" %}
       <strong class="badge-switch">Switch recommended</strong>
+    {% elif card.recommend == "consider" %}
+      <strong class="badge-switch">Listed cheaper — check the trip</strong>
     {% else %}
       <strong class="badge-stay">Stay with current</strong>
     {% endif %}
   </div>
   <p class="lede">
-    Current: {{ card.current.supplier.name if card.current.supplier else "Unknown" }}
+    You pay: {{ card.current.supplier.name if card.current.supplier else "Unknown" }}
     {{ card.current.unit_cost_compare | unitcost }}/{{ card.compare_unit }}
+    {% if card.current.source == "catalog" %}<em>(listed, not a receipt)</em>{% endif %}
     · Best known: {{ card.cheapest.supplier.name if card.cheapest.supplier else "Unknown" }}
     {{ card.cheapest.unit_cost_compare | unitcost }}/{{ card.compare_unit }}
+    {% if card.cheapest.source == "catalog" %} listed{% endif %}
     {% if card.gap > 0 %}
     · {{ card.gap_pct | pct }} cheaper
     {% endif %}
@@ -63,8 +78,9 @@
       <tr>
         <th>Supplier</th>
         <th>Pack</th>
-        <th>Paid</th>
+        <th>Price</th>
         <th>Per {{ card.compare_unit }}</th>
+        <th>Kind</th>
         <th>Date</th>
       </tr>
     </thead>
@@ -75,6 +91,7 @@
         <td>{{ offer.pack_qty }} {{ offer.pack_unit }}</td>
         <td>{{ offer.pack_price | money }}</td>
         <td>{{ offer.unit_cost_compare | unitcost }}</td>
+        <td>{% if offer.source == "catalog" %}Listed{% else %}Paid{% endif %}</td>
         <td>{{ offer.purchased_on or "—" }}</td>
       </tr>
     {% endfor %}
@@ -84,13 +101,12 @@
     Usage {{ card.usage }} {{ card.compare_unit }}/month
     · Unit gap {{ card.gap | money }}/{{ card.compare_unit }}
     · {{ card.monthly | money }}/month before trip
-    {% if card.trip_cost or card.delivery_fee %}
-    · Trip/delivery {{ card.trip_cost | money }} + {{ card.delivery_fee | money }}
-    {% endif %}
     · Net {{ card.net | money }}/month
   </p>
   {% if card.recommend == "switch" %}
     <p><b>Potential saving {{ card.net | money }}/month — change supplier recommended.</b></p>
+  {% elif card.recommend == "consider" %}
+    <p><b>{{ card.cheapest.supplier.name }} lists this cheaper than your last paid pack.</b> Confirm case size, shipping, and whether the cafe will actually buy it before you switch.</p>
   {% elif card.gap > 0 %}
     <p class="muted">Saving only {{ card.net | money }}/month after trip cost — stay with {{ card.current.supplier.name if card.current.supplier else "the current supplier" }}.</p>
   {% endif %}
@@ -106,11 +122,19 @@
 {% endfor %}
 
 <div class="card">
-  <h2>What comes next</h2>
-  <ol class="stack">
-    <li><b>Invoice history</b> — this page. Old prices stay. A new purchase adds a row.</li>
-    <li><b>Promo emails</b> — Costco / Sam's / Gordon “butter $4.49/lb through September 1” compared with what you actually pay. Website scraping is last, not first: logins, CAPTCHA and 2FA break it.</li>
-    <li><b>Alerts</b> — Metabase can email a query. A tiny ntfy container can push to your iPhone later.</li>
-  </ol>
+  <h2>Where we look (no account)</h2>
+  <p class="muted">A 24-hour scan does not mean 40 logins. It means: hit every site whose prices are actually in the HTML, skip the rest, and keep the lexicon honest.</p>
+  <table class="wide">
+    <thead><tr><th>Site</th><th>Status</th><th>Why</th></tr></thead>
+    <tbody>
+    {% for source in catalogs %}
+      <tr>
+        <td>{% if source.home %}<a href="{{ source.home }}" target="_blank" rel="noreferrer">{{ source.label }}</a>{% else %}{{ source.label }}{% endif %}</td>
+        <td>{% if source.fetchable %}Scanned nightly{% elif source.kind == "login" %}Needs a login{% elif source.kind == "js" %}Browser only{% else %}Blocked{% endif %}</td>
+        <td class="muted">{{ source.blurb }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
 </div>
 {% endblock %}

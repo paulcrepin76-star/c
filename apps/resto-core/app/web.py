@@ -7,6 +7,7 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
+from app.catalog import catalog_lexicon, scan_catalogs
 from app.config import settings
 from app.connections import access_token_for
 from app.costing import money
@@ -481,6 +482,7 @@ def connector_status(connector_id: int, status: str = Form(...), db: Session = D
 
 @router.get("/purchasing")
 def purchasing_page(request: Request, category: str = "", db: Session = Depends(get_db)):
+    ok, err = _pop_flash(request)
     chosen = category if category in CATEGORIES else ""
     board = purchasing_board(db, chosen)
     return render(
@@ -488,6 +490,20 @@ def purchasing_page(request: Request, category: str = "", db: Session = Depends(
         "purchasing.html",
         board=board,
         categories=CATEGORIES,
+        catalogs=catalog_lexicon(),
+        flash_ok=ok,
+        flash_err=err,
         page="purchasing",
     )
+
+
+@router.post("/purchasing/scan")
+def purchasing_scan(request: Request, db: Session = Depends(get_db)):
+    try:
+        result = scan_catalogs(db)
+        quotes = int(result.get("quotes") or 0)
+        _flash(request, ok=f"Public catalog scan finished. {quotes} listed pack(s) recorded today.")
+    except Exception:  # noqa: BLE001
+        _flash(request, err="Catalog scan failed. Public sites block bots more often than they list prices.")
+    return RedirectResponse("/purchasing", status_code=303)
 

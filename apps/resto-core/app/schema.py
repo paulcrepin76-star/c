@@ -12,6 +12,9 @@ NEW_COLUMNS = {
         ("compare_unit", "VARCHAR(20) DEFAULT ''"),
         ("purchasing_category", "VARCHAR(40) DEFAULT ''"),
     ),
+    "purchase_prices": (
+        ("url", "VARCHAR(400) DEFAULT ''"),
+    ),
 }
 
 

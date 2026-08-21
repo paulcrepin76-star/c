@@ -10,6 +10,7 @@ from app.db import get_db
 from app.ingest import ingest_paperless_doc, ingest_recipes, ingest_sales
 from app.paperless_hook import ensure_paperless_sync_workflow, sync_paperless_now
 from app.purchasing import board_payload, purchasing_board
+from app.catalog import scan_catalogs
 from app.services import period_costing, wine_rows
 from app.sync import sync_all, sync_paperless
 
@@ -129,6 +130,11 @@ def sync_paperless_job(
     if recent:
         return sync_paperless_now(db, max_pages=3)
     return sync_paperless(db, max_pages=15)
+
+
+@router.post("/jobs/scan-catalogs", dependencies=[Depends(require_key)])
+def scan_catalogs_job(db: Session = Depends(get_db)):
+    return scan_catalogs(db)
 
 
 @router.post("/jobs/nightly", dependencies=[Depends(require_key)])

@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     paperless_base_url: str = "http://host.docker.internal:8011"
     paperless_api_token: str = ""
     paperless_public_url: str = ""
-    ollama_base_url: str = ""
+    catalog_scan_enabled: bool = True
 
 
 settings = Settings()

@@ -11,7 +11,20 @@ from app.models import Invoice, InvoiceLine, Product, ProductAlias, PurchasePric
 from app.units import comparable_cost, parse_pack, to_base
 
 STAY_THRESHOLD = Decimal("25")  # monthly saving below this: stay with the current supplier
-BUTTER_EXCLUDES = ("peanut", "cacao", "cocoa", "hazelnut", "almond", "espelette", "buttermilk", "butternut")
+BUTTER_EXCLUDES = (
+    "peanut",
+    "cacao",
+    "cocoa",
+    "hazelnut",
+    "almond",
+    "espelette",
+    "buttermilk",
+    "butternut",
+    "vegan",
+    "plant-based",
+    "margarine",
+    "clarified",
+)
 CATEGORIES = ("", "dairy", "food", "meat", "produce", "cleaning", "beverage", "wine")
 USAGE_DAYS = 30
 
@@ -52,16 +65,36 @@ CANONICAL_PRODUCTS = (
         "purchasing_category": "dairy",
         "excludes": ("ice cream", "creamer", "sour cream"),
     },
+    {
+        "sku": "SALMON",
+        "name": "Salmon",
+        "category": "meat",
+        "base_unit": "g",
+        "compare_unit": "lb",
+        "purchasing_category": "meat",
+        "excludes": ("oil", "seasoning"),
+    },
+    {
+        "sku": "CHICKEN",
+        "name": "Chicken",
+        "category": "meat",
+        "base_unit": "g",
+        "compare_unit": "lb",
+        "purchasing_category": "meat",
+        "excludes": ("stock", "broth", "seasoning", "nugget"),
+    },
 )
 
 DEFAULT_ALIASES = (
-    ("Butter", "butter", "peanut,cacao,cocoa,hazelnut,almond,espelette,buttermilk,butternut"),
-    ("Butter", "unsalted butter", ""),
+    ("Butter", "butter", "peanut,cacao,cocoa,hazelnut,almond,espelette,buttermilk,butternut,vegan,plant-based,margarine,clarified"),
+    ("Butter", "unsalted butter", "vegan,plant-based,clarified"),
     ("Eggs", "egg", "eggplant,egg wash"),
     ("Eggs", "eggs", "eggplant"),
     ("Milk", "milk", "almond,oat,coconut,buttermilk,condensed,yogurt"),
     ("Heavy cream", "heavy cream", "ice cream,creamer,sour cream"),
     ("Heavy cream", "whipping cream", ""),
+    ("Salmon", "salmon", "oil,seasoning"),
+    ("Chicken", "chicken", "stock,broth,seasoning,nugget"),
 )
 
 
@@ -227,13 +260,15 @@ def backfill_purchase_prices(db: Session) -> int:
     return created
 
 
-def latest_by_supplier(db: Session, product_id: int) -> list[PurchasePrice]:
-    rows = (
-        db.query(PurchasePrice)
-        .filter(PurchasePrice.product_id == product_id)
-        .order_by(PurchasePrice.purchased_on.desc(), PurchasePrice.id.desc())
-        .all()
-    )
+def latest_by_supplier(db: Session, product_id: int, source: str | None = None, days: int | None = None) -> list[PurchasePrice]:
+    query = db.query(PurchasePrice).filter(PurchasePrice.product_id == product_id)
+    if source == "catalog":
+        query = query.filter(PurchasePrice.source == "catalog")
+    elif source == "invoice":
+        query = query.filter(PurchasePrice.source != "catalog")
+    if days is not None:
+        query = query.filter(PurchasePrice.purchased_on >= _cutoff(days))
+    rows = query.order_by(PurchasePrice.purchased_on.desc(), PurchasePrice.id.desc()).all()
     seen: set[int] = set()
     latest = []
     for row in rows:
@@ -253,6 +288,8 @@ def monthly_usage_compare(db: Session, product: Product, days: int = USAGE_DAYS)
     total = Decimal("0")
     rows = db.query(PurchasePrice).filter(PurchasePrice.product_id == product.id).all()
     for row in rows:
+        if row.source == "catalog":
+            continue
         if row.purchased_on is None or row.purchased_on < cutoff:
             continue
         total += Decimal(str(row.compare_qty or 0))
@@ -288,6 +325,8 @@ def _volume_by_supplier(db: Session, product_id: int, days: int = USAGE_DAYS) ->
     volumes: dict[int, Decimal] = {}
     rows = db.query(PurchasePrice).filter(PurchasePrice.product_id == product_id).all()
     for row in rows:
+        if row.source == "catalog":
+            continue
         if row.purchased_on is None or row.purchased_on < cutoff:
             continue
         volumes[row.supplier_id] = volumes.get(row.supplier_id, Decimal("0")) + Decimal(str(row.compare_qty or 0))
@@ -295,19 +334,24 @@ def _volume_by_supplier(db: Session, product_id: int, days: int = USAGE_DAYS) ->
 
 
 def product_comparison(db: Session, product: Product) -> dict | None:
-    latest = latest_by_supplier(db, product.id)
-    if not latest:
+    paid = latest_by_supplier(db, product.id, source="invoice")
+    market = latest_by_supplier(db, product.id, source="catalog", days=3)
+    if not paid and not market:
         return None
     compare_unit = compare_unit_for(product)
     volumes = _volume_by_supplier(db, product.id)
-    current = max(
-        latest,
-        key=lambda row: (
-            volumes.get(row.supplier_id, Decimal("0")),
-            row.purchased_on.toordinal() if row.purchased_on else 0,
-        ),
-    )
-    cheapest = min(latest, key=lambda row: Decimal(str(row.unit_cost_compare)))
+    if paid:
+        current = max(
+            paid,
+            key=lambda row: (
+                volumes.get(row.supplier_id, Decimal("0")),
+                row.purchased_on.toordinal() if row.purchased_on else 0,
+            ),
+        )
+    else:
+        current = min(market, key=lambda row: Decimal(str(row.unit_cost_compare)))
+    offers = paid + market
+    cheapest = min(offers, key=lambda row: Decimal(str(row.unit_cost_compare)))
     gap = money(Decimal(str(current.unit_cost_compare)) - Decimal(str(cheapest.unit_cost_compare)))
     usage = monthly_usage_compare(db, product)
     monthly_unit = money(gap * usage) if usage else money(0)
@@ -319,7 +363,12 @@ def product_comparison(db: Session, product: Product) -> dict | None:
     if current_supplier and cheapest_supplier and cheapest_supplier.id != current_supplier.id:
         extra -= Decimal(str(current_supplier.delivery_fee or 0))
     net = money(monthly_unit - extra)
-    recommend = "switch" if net >= STAY_THRESHOLD else "stay"
+    recommend = "stay"
+    if cheapest.supplier_id != current.supplier_id and gap > 0:
+        if cheapest.source == "catalog":
+            recommend = "consider" if net >= STAY_THRESHOLD else "stay"
+        elif net >= STAY_THRESHOLD:
+            recommend = "switch"
     if cheapest.supplier_id == current.supplier_id:
         recommend = "stay"
         net = money(0)
@@ -330,7 +379,9 @@ def product_comparison(db: Session, product: Product) -> dict | None:
         "compare_unit": compare_unit,
         "current": current,
         "cheapest": cheapest,
-        "offers": sorted(latest, key=lambda row: Decimal(str(row.unit_cost_compare))),
+        "offers": sorted(offers, key=lambda row: Decimal(str(row.unit_cost_compare))),
+        "paid": paid,
+        "market": sorted(market, key=lambda row: Decimal(str(row.unit_cost_compare))),
         "gap": gap,
         "gap_pct": cost_percent(gap, current.unit_cost_compare),
         "usage": usage,
@@ -363,7 +414,7 @@ def purchasing_board(db: Session, category: str = "") -> dict:
         if not card:
             continue
         cards.append(card)
-        monthly_total += Decimal(str(card["net"] if card["recommend"] == "switch" else 0))
+        monthly_total += Decimal(str(card["net"] if card["recommend"] in ("switch", "consider") else 0))
         if card["cheapest"].supplier_id != card["current"].supplier_id and card["gap"] > 0:
             cheaper_elsewhere += 1
     cards.sort(key=lambda item: Decimal(str(item["net"])), reverse=True)
@@ -395,6 +446,7 @@ def board_payload(board: dict) -> dict:
                 "monthly": float(card["monthly"]),
                 "net": float(card["net"]),
                 "recommend": card["recommend"],
+                "best_source": card["cheapest"].source,
                 "offers": [
                     {
                         "supplier": row.supplier.name if row.supplier else "",
@@ -402,6 +454,7 @@ def board_payload(board: dict) -> dict:
                         "pack_price": float(row.pack_price),
                         "unit_cost": float(row.unit_cost_compare),
                         "purchased_on": row.purchased_on.isoformat() if row.purchased_on else None,
+                        "source": row.source,
                     }
                     for row in card["offers"]
                 ],

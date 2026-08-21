@@ -18,6 +18,7 @@ def test_pack_normalization_never_compares_sticker_price():
     assert parse_pack("Member's Mark Unsalted Sweet Cream Butter Block, 1 lb., 4 ct. Qty 4") == (Decimal("16"), "lb")
     assert parse_pack("Large Eggs 15 dozen Qty 3") == (Decimal("45"), "dozen")
     assert parse_pack("Member's Mark Vitamin D Whole Milk, 1 gal. Qty 3") == (Decimal("3"), "gal")
+    assert parse_pack("Grassland Unsalted Grade AA Butter Solid - 1 lb. - 36/Case") == (Decimal("36"), "lb")
     assert comparable_cost(Decimal("201.60"), Decimal("36"), "lb", "lb") == Decimal("5.60")
     assert comparable_cost(Decimal("19.96"), Decimal("4"), "lb", "lb") == Decimal("4.99")
     assert comparable_cost(Decimal("47.88"), Decimal("15"), "dozen", "each") == Decimal("0.266")
