@@ -186,6 +186,7 @@ def sync_square(db: Session, days: int | None = None) -> dict:
                     break
         result = ingest_sales(db, sales) if sales else {"created": 0, "skipped": 0}
         row = get_connection(db, "square")
+        row.status = "connected"
         row.last_error = ""
         row.updated_at = _now()
         db.commit()
@@ -252,6 +253,7 @@ def sync_mealie(db: Session) -> dict:
                 recipes.append(_mealie_recipe_payload(detail))
         result = ingest_recipes(db, recipes) if recipes else {"created": 0, "updated": 0}
         row = get_connection(db, "mealie")
+        row.status = "connected"
         row.last_error = ""
         row.updated_at = _now()
         db.commit()
@@ -346,6 +348,7 @@ def sync_paperless(db: Session, max_pages: int = 15) -> dict:
                     break
                 page += 1
         row = get_connection(db, "paperless")
+        row.status = "connected"
         row.last_error = ""
         row.updated_at = _now()
         db.commit()
