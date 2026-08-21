@@ -46,6 +46,9 @@ def product_sku(food: str) -> str:
     slug = "".join(ch if ch.isalnum() else "-" for ch in food.upper())
     slug = "-".join(part for part in slug.split("-") if part)
     return clip(slug or "FOOD", 70)
+
+
+def match_sellable(db: Session, name: str, square_item_id: str = "") -> SellableItem | None:
     if square_item_id:
         item = db.query(SellableItem).filter(SellableItem.square_item_id == square_item_id).first()
         if item:

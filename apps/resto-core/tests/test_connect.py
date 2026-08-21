@@ -175,4 +175,26 @@ def test_recipe_import_survives_long_mealie_ingredient_notes():
         assert sync.status_code == 200
 
 
+def test_sales_import_creates_a_square_ticket():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/sales/import",
+            headers={"X-API-Key": "test"},
+            json={
+                "sales": [
+                    {
+                        "sold_at": "2026-08-01T12:00:00",
+                        "name": "Espresso",
+                        "qty": 1,
+                        "unit_price": 4,
+                        "square_order_id": "sq-order-1",
+                        "square_line_id": "sq-line-1",
+                    }
+                ]
+            },
+        )
+        assert response.status_code == 200
+        assert response.json()["created"] == 1
+
+
 
