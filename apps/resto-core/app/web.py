@@ -1,3 +1,5 @@
+import json
+
 import httpx
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -532,6 +534,21 @@ def purchasing_scan(request: Request, mode: str = Form("refresh"), db: Session =
     return RedirectResponse("/purchasing", status_code=303)
 
 
+def collector_failure_message(status_code: int, body: str) -> str:
+    text = (body or "").strip()
+    lowered = text.lower()
+    if text.startswith("{") or text.startswith("["):
+        try:
+            data = json.loads(text)
+            if isinstance(data, dict) and data.get("error"):
+                return str(data["error"])[:300]
+        except Exception:  # noqa: BLE001
+            pass
+    if "<html" in lowered or "internal server error" in lowered:
+        return "The Unraid Chromium collector failed to open the browser."
+    return text[:200] or f"Collector error ({status_code})"
+
+
 def _collector_json(method: str, path: str, payload: dict | None = None, timeout: float = 20.0):
     if not settings.collector_url:
         return None, "The Unraid Chromium collector is not running."
@@ -543,8 +560,11 @@ def _collector_json(method: str, path: str, payload: dict | None = None, timeout
             else:
                 response = client.post(url, json=payload or {})
             if not response.is_success:
-                return None, response.text[:200]
-            return response.json(), None
+                return None, collector_failure_message(response.status_code, response.text)
+            try:
+                return response.json(), None
+            except Exception:  # noqa: BLE001
+                return None, "Collector returned a non-JSON response."
     except Exception as exc:  # noqa: BLE001
         return None, str(exc)[:200]
 

@@ -1,5 +1,6 @@
 from datetime import date
 from decimal import Decimal
+import json
 
 from fastapi.testclient import TestClient
 
@@ -133,3 +134,59 @@ def test_collector_page_and_ingest_api():
         purchasing = client.get("/purchasing")
         assert "Worth changing" in purchasing.text or "Maybe" in purchasing.text
         assert "Bonita Springs" in purchasing.text
+
+
+def test_collector_failure_message_hides_html():
+    from app.web import collector_failure_message
+
+    assert collector_failure_message(500, "<h1>Internal Server Error</h1>") == (
+        "The Unraid Chromium collector failed to open the browser."
+    )
+    assert "playwright" in collector_failure_message(
+        500, '{"ok": false, "error": "No module named \'playwright\'"}'
+    )
+
+
+def test_login_flash_does_not_show_html_500(monkeypatch):
+    from app import web as webmod
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "collector_url", "http://price-collector:8099")
+
+    class FakeResponse:
+        def __init__(self, status_code: int, payload):
+            self.status_code = status_code
+            self.is_success = 200 <= status_code < 300
+            self._payload = payload
+            self.text = payload if isinstance(payload, str) else json.dumps(payload)
+
+        def json(self):
+            if isinstance(self._payload, str):
+                raise ValueError("not json")
+            return self._payload
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def get(self, url):
+            return FakeResponse(200, {"ok": True})
+
+        def post(self, url, json=None):
+            return FakeResponse(500, "<h1>Internal Server Error</h1>")
+
+    monkeypatch.setattr(webmod.httpx, "Client", FakeClient)
+    with TestClient(app) as client:
+        start = client.post("/collector/login/chefs-warehouse", follow_redirects=False)
+        assert start.status_code == 303
+        page = client.get("/collector")
+        assert page.status_code == 200
+        assert "<h1>Internal Server Error</h1>" not in page.text
+        assert "failed to open the browser" in page.text
+

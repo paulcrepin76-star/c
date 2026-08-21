@@ -19,7 +19,7 @@ class PlaywrightWorker(threading.Thread):
         if not done.wait(timeout):
             return {"ok": False, "error": "browser timed out"}
         if "exc" in box:
-            raise box["exc"]
+            return {"ok": False, "error": str(box["exc"])[:400]}
         return box.get("result")
 
     def run(self) -> None:

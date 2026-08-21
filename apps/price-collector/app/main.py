@@ -69,18 +69,29 @@ class LoginIn(BaseModel):
     slug: str
 
 
+def _browser_result(result, error_status: int = 500):
+    if not isinstance(result, dict):
+        return JSONResponse({"ok": False, "error": "Could not talk to Chromium."}, 500)
+    if not result.get("ok"):
+        return JSONResponse(
+            {"ok": False, "error": str(result.get("error") or "Could not open Chromium.")[:400]},
+            error_status,
+        )
+    return result
+
+
 @app.post("/login/start")
 def login_start(body: LoginIn):
     if scan_running():
         return JSONResponse({"ok": False, "error": "Nightly scan is running. Try again when it finishes."}, 409)
     if supplier_by_slug(body.slug) is None:
         return JSONResponse({"ok": False, "error": "unknown supplier"}, 404)
-    return worker.call(start_login, body.slug, timeout=90)
+    return _browser_result(worker.call(start_login, body.slug, timeout=90))
 
 
 @app.post("/login/finish")
 def login_finish():
-    return worker.call(stop_login, timeout=60)
+    return _browser_result(worker.call(stop_login, timeout=60))
 
 
 @app.post("/jobs/scan")
