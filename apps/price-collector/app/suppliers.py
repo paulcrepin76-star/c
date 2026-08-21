@@ -6,9 +6,9 @@ SUPPLIERS: list[dict] = [
         "slug": "chefs-warehouse",
         "label": "Chef's Warehouse",
         "needs_login": True,
-        "login_url": "https://shop.chefswarehouse.com/",
-        "home_url": "https://shop.chefswarehouse.com/",
-        "search_url": "https://shop.chefswarehouse.com/search?q={query}",
+        "login_url": "https://www.chefswarehouse.com/login/",
+        "home_url": "https://www.chefswarehouse.com/",
+        "search_url": "https://www.chefswarehouse.com/search?q={query}",
     },
     {
         "slug": "gordon",

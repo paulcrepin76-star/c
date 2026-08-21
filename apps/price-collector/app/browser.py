@@ -93,14 +93,29 @@ def start_login(slug: str) -> dict:
     from playwright.sync_api import sync_playwright
 
     playwright = sync_playwright().start()
-    context = playwright.chromium.launch_persistent_context(
-        str(profile_dir(slug)),
-        **_launch_kwargs(headless=False),
-    )
+    try:
+        context = playwright.chromium.launch_persistent_context(
+            str(profile_dir(slug)),
+            **_launch_kwargs(headless=False),
+        )
+    except Exception as exc:  # noqa: BLE001
+        try:
+            playwright.stop()
+        except Exception:  # noqa: BLE001
+            pass
+        return {"ok": False, "error": f"Could not open Chromium: {exc}"[:400]}
+
     page = context.pages[0] if context.pages else context.new_page()
-    page.goto(source["login_url"], wait_until="domcontentloaded", timeout=45000)
     _LOGIN.update({"slug": slug, "playwright": playwright, "context": context})
-    return {"ok": True, "slug": slug, "label": source["label"], "url": source["login_url"]}
+    warning = ""
+    try:
+        page.goto(source["login_url"], wait_until="domcontentloaded", timeout=25000)
+    except Exception as exc:  # noqa: BLE001
+        warning = str(exc)[:200]
+    result = {"ok": True, "slug": slug, "label": source["label"], "url": source["login_url"]}
+    if warning:
+        result["warning"] = warning
+    return result
 
 
 def stop_login() -> dict:

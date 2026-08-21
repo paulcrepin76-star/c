@@ -31,7 +31,7 @@ VENDORS: list[dict] = [
         "kind": "food",
         "invoice_type": "food",
         "email_domain": "chefswarehouse.com",
-        "login_url": "https://shop.chefswarehouse.com/",
+        "login_url": "https://www.chefswarehouse.com/login/",
         "blurb": "Food invoices. Codex already pulled the Chef's archive. New bills go to Paperless.",
         "legacy_names": ["Chef Rao's", "The Chefs' Warehouse of Florida, LLC", "The Chefs' Warehouse", "Chefs Warehouse"],
         "match_needles": ["chef's warehouse", "chefs' warehouse", "chefswarehouse"],

@@ -1,4 +1,11 @@
 from app.extract import classify_wall, matches_watch, products_from_html, search_url, walk_products
+from app.suppliers import supplier_by_slug
+
+
+def test_chefs_login_uses_public_site():
+    source = supplier_by_slug("chefs-warehouse")
+    assert source["login_url"].startswith("https://www.chefswarehouse.com/")
+    assert "shop.chefswarehouse.com" not in source["login_url"]
 
 
 def test_captcha_and_login_walls_are_detected():

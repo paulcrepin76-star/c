@@ -52,7 +52,7 @@ CATALOGS: list[dict] = [
     {"slug": "heb", "label": "H-E-B", "kind": "blocked", "blurb": "Texas chain; search is not useful from a datacenter IP.", "home": "https://www.heb.com/"},
     {"slug": "bjs", "label": "BJ's Wholesale", "kind": "blocked", "blurb": "Club prices need a membership cookie.", "home": "https://www.bjs.com/"},
     {"slug": "restaurant-depot", "label": "Restaurant Depot", "kind": "login", "blurb": "Cash-and-carry. Prices after a member login, not on the public homepage.", "home": "https://www.restaurantdepot.com/"},
-    {"slug": "chefs-warehouse", "label": "Chef's Warehouse", "kind": "login", "blurb": "Shop prices after account login. Itemized PDFs beat a scraper here.", "home": "https://shop.chefswarehouse.com/"},
+    {"slug": "chefs-warehouse", "label": "Chef's Warehouse", "kind": "login", "blurb": "Shop prices after account login. Itemized PDFs beat a scraper here.", "home": "https://www.chefswarehouse.com/"},
     {"slug": "gordon", "label": "Gordon Food Service", "kind": "login", "blurb": "order.gfs.com is an account portal.", "home": "https://order.gfs.com/"},
     {"slug": "sysco", "label": "Sysco", "kind": "login", "blurb": "Shop Sysco is behind a customer login.", "home": "https://shop.sysco.com/"},
     {"slug": "us-foods", "label": "US Foods", "kind": "login", "blurb": "Customer portal, not a public catalog.", "home": "https://www.usfoods.com/"},
