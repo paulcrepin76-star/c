@@ -21,12 +21,54 @@ from app.models import (
 CONNECTION_NAMES = ("square", "mealie", "paperless")
 
 
+def ensure_vendors(db: Session) -> None:
+    from app.connections import get_connection
+    from app.vendors import VENDORS, vendor_names
+
+    for vendor in VENDORS:
+        names = vendor_names(vendor)
+        supplier = db.query(Supplier).filter(Supplier.name.in_(names)).first()
+        if supplier is None:
+            db.add(
+                Supplier(
+                    name=vendor["label"],
+                    category=vendor["kind"],
+                    email_domain=vendor["email_domain"],
+                    default_invoice_type=vendor["invoice_type"],
+                )
+            )
+        else:
+            supplier.name = vendor["label"]
+            supplier.category = vendor["kind"]
+            supplier.default_invoice_type = vendor["invoice_type"]
+            if vendor["email_domain"]:
+                supplier.email_domain = vendor["email_domain"]
+
+        connector = db.query(Connector).filter(Connector.name.in_(names)).first()
+        if connector is None:
+            db.add(
+                Connector(
+                    name=vendor["label"],
+                    kind="email",
+                    status="not_connected",
+                    notes=vendor["blurb"],
+                )
+            )
+        else:
+            connector.name = vendor["label"]
+            connector.notes = vendor["blurb"] or connector.notes
+
+        get_connection(db, vendor["slug"])
+    db.commit()
+
+
 def ensure_connections(db: Session) -> None:
     existing = {row.name for row in db.query(Connection).all()}
     for name in CONNECTION_NAMES:
         if name not in existing:
             db.add(Connection(name=name, status="not_connected"))
     db.commit()
+    ensure_vendors(db)
 
 
 def seed_if_empty(db: Session) -> None:
@@ -36,7 +78,7 @@ def seed_if_empty(db: Session) -> None:
     sams = Supplier(name="Sam's Club", category="food", email_domain="samsclub.com", default_invoice_type="food")
     chefs = Supplier(name="Chef's Warehouse", category="food", email_domain="chefswarehouse.com", default_invoice_type="food")
     wine_co = Supplier(name="Wine distributor", category="wine", default_invoice_type="wine")
-    fpl = Supplier(name="FPL", category="utility", email_domain="fpl.com", default_invoice_type="utility")
+    fpl = Supplier(name="FPL Bonita Springs", category="utility", email_domain="fpl.com", default_invoice_type="utility")
     db.add_all([sams, chefs, wine_co, fpl])
     db.flush()
 
@@ -300,10 +342,6 @@ def seed_if_empty(db: Session) -> None:
             Connector(name="Paperless email", kind="email", status="ready", notes="Best default: any supplier PDF that arrives by email."),
             Connector(name="Square", kind="api", status="not_connected", notes="Official API for sales. Click Connect on this site and log in yourself."),
             Connector(name="Mealie", kind="api", status="not_connected", notes="Recipes stay in Mealie. Click Connect and use your Mealie login."),
-            Connector(name="FPL", kind="portal", status="not_connected", notes="Portal download only if the bill is not emailed as a PDF."),
-            Connector(name="Sam's Club", kind="email", status="not_connected", notes="Prefer emailed receipts. Portal history is last resort."),
-            Connector(name="Chef's Warehouse", kind="email", status="not_connected", notes="Use invoices / statements from the customer portal or email PDFs."),
-            Connector(name="Water", kind="email", status="not_connected", notes="Utility: archive the bill, no line-item matching needed."),
             Connector(name="Comcast", kind="email", status="not_connected", notes="Utility: Paperless is enough."),
             Connector(name="Waste Management", kind="email", status="not_connected", notes="Utility: Paperless is enough."),
             Connector(name="Wine distributor", kind="email", status="not_connected", notes="Receive bottles into the cellar from invoice lines."),

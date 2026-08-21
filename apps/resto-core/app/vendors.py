@@ -1,0 +1,76 @@
+from __future__ import annotations
+
+VENDORS: list[dict] = [
+    {
+        "slug": "fpl",
+        "label": "FPL Bonita Springs",
+        "kind": "utility",
+        "invoice_type": "utility",
+        "email_domain": "fpl.com",
+        "login_url": "https://www.fpl.com/my-account.html",
+        "blurb": "Electric for the Bonita Springs cafe. Paperless files the emailed bill.",
+        "legacy_names": ["FPL"],
+    },
+    {
+        "slug": "greatest-spring-water",
+        "label": "The Greatest Spring Water",
+        "kind": "utility",
+        "invoice_type": "utility",
+        "email_domain": "",
+        "login_url": "",
+        "blurb": "Water delivery. Paperless files the invoice; no line-item matching needed.",
+        "legacy_names": ["Water"],
+    },
+    {
+        "slug": "chefs-warehouse",
+        "label": "Chef's Warehouse",
+        "kind": "food",
+        "invoice_type": "food",
+        "email_domain": "chefswarehouse.com",
+        "login_url": "https://shop.chefswarehouse.com/",
+        "blurb": "Food invoices. Log in on Chef's Warehouse, then come back here.",
+        "legacy_names": ["Chef Rao's"],
+    },
+    {
+        "slug": "sams-club",
+        "label": "Sam's Club",
+        "kind": "food",
+        "invoice_type": "food",
+        "email_domain": "samsclub.com",
+        "login_url": "https://www.samsclub.com/login",
+        "blurb": "Receipts and invoices. Prefer the PDF that lands in Gmail.",
+        "legacy_names": [],
+    },
+    {
+        "slug": "costco",
+        "label": "Costco",
+        "kind": "food",
+        "invoice_type": "food",
+        "email_domain": "costco.com",
+        "login_url": "https://www.costco.com/LogonForm",
+        "blurb": "Business Center receipts. Email PDF first, portal only if a bill is missing.",
+        "legacy_names": [],
+    },
+    {
+        "slug": "gordon",
+        "label": "Gordon Food Service",
+        "kind": "food",
+        "invoice_type": "food",
+        "email_domain": "gfs.com",
+        "login_url": "https://order.gfs.com/",
+        "blurb": "GFS invoices. Log in on Gordon, then come back here.",
+        "legacy_names": ["Gordon"],
+    },
+]
+
+
+def vendor_by_slug(slug: str) -> dict | None:
+    for vendor in VENDORS:
+        if vendor["slug"] == slug:
+            return vendor
+    return None
+
+
+def vendor_names(vendor: dict) -> list[str]:
+    names = [vendor["label"], *vendor.get("legacy_names", [])]
+    return [name for name in names if name]

@@ -4,6 +4,27 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 
 from app.models import Invoice, InvoiceLine, Product, Recipe, RecipeLine, Sale, SellableItem, StockMove, Supplier
+from app.vendors import VENDORS, vendor_names
+
+
+def match_supplier(db: Session, correspondent: str | None, invoice_type: str = "food") -> Supplier | None:
+    if not correspondent:
+        return None
+    name = str(correspondent).strip()
+    supplier = db.query(Supplier).filter(Supplier.name.ilike(name)).first()
+    if supplier:
+        return supplier
+    lowered = name.lower()
+    for vendor in VENDORS:
+        aliases = [item.lower() for item in vendor_names(vendor)]
+        if any(alias in lowered or lowered in alias for alias in aliases):
+            supplier = db.query(Supplier).filter(Supplier.name == vendor["label"]).first()
+            if supplier:
+                return supplier
+    supplier = Supplier(name=name, category=invoice_type, default_invoice_type=invoice_type)
+    db.add(supplier)
+    db.flush()
+    return supplier
 
 
 def match_sellable(db: Session, name: str, square_item_id: str = "") -> SellableItem | None:
@@ -77,15 +98,8 @@ def ingest_paperless_doc(db: Session, doc: dict) -> dict:
     existing = db.query(Invoice).filter(Invoice.paperless_id == paperless_id).first()
     if existing:
         return {"status": "duplicate", "invoice_id": existing.id}
-    supplier = None
-    correspondent = doc.get("correspondent")
     invoice_type = str(doc.get("invoice_type") or "food")
-    if correspondent:
-        supplier = db.query(Supplier).filter(Supplier.name.ilike(str(correspondent))).first()
-        if supplier is None:
-            supplier = Supplier(name=str(correspondent), category=invoice_type, default_invoice_type=invoice_type)
-            db.add(supplier)
-            db.flush()
+    supplier = match_supplier(db, doc.get("correspondent"), invoice_type)
     issued_on = None
     created = doc.get("created")
     if created:

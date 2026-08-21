@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.connections import (
+    access_token_for,
     disconnect,
     extra_dict,
     get_connection,
@@ -21,12 +22,47 @@ from app.connections import (
     strip_auth_prefix,
 )
 from app.db import get_db
+from app.models import Invoice, Supplier
 from app.sync import sync_all
+from app.vendors import VENDORS, vendor_by_slug
 from app.web import render
 
 router = APIRouter()
 TIMEOUT = httpx.Timeout(20.0, connect=8.0)
 SQUARE_SCOPES = "ORDERS_READ ITEMS_READ MERCHANT_PROFILE_READ PAYMENTS_READ"
+SYSTEM_NAMES = {"square", "mealie", "paperless"}
+VENDOR_SLUGS = {vendor["slug"] for vendor in VENDORS}
+
+
+def _vendor_cards(db: Session) -> list[dict]:
+    cards = []
+    for vendor in VENDORS:
+        connection = get_connection(db, vendor["slug"])
+        supplier = db.query(Supplier).filter(Supplier.name == vendor["label"]).first()
+        filed = 0
+        if supplier:
+            filed = db.query(Invoice).filter(Invoice.supplier_id == supplier.id).count()
+        cards.append({**vendor, "connection": connection, "filed_count": filed, "login": extra_dict(connection).get("login", "")})
+    return cards
+
+
+def _ensure_paperless_correspondent(db: Session, vendor: dict) -> None:
+    token = access_token_for(db, "paperless")
+    if not token:
+        return
+    base = settings.paperless_base_url.rstrip("/")
+    headers = {"Authorization": f"Token {token}"}
+    try:
+        with httpx.Client(timeout=TIMEOUT) as client:
+            listing = client.get(f"{base}/api/correspondents/", headers=headers, params={"page_size": 200})
+            if listing.status_code != 200:
+                return
+            names = {str(item.get("name") or "").lower() for item in listing.json().get("results") or []}
+            if vendor["label"].lower() in names:
+                return
+            client.post(f"{base}/api/correspondents/", headers=headers, json={"name": vendor["label"]})
+    except Exception:  # noqa: BLE001
+        return
 
 
 def _flash(request: Request, ok: str = "", err: str = "") -> None:
@@ -72,6 +108,7 @@ def connect_page(request: Request, db: Session = Depends(get_db)):
         square_callback=square_callback_url(),
         mealie_url=settings.mealie_base_url,
         paperless_url=settings.paperless_public_url or settings.paperless_base_url,
+        vendors=_vendor_cards(db),
     )
 
 
@@ -275,12 +312,42 @@ def connect_paperless(
     return _redirect_connect()
 
 
+@router.post("/connect/vendor/{slug}")
+def connect_vendor(
+    slug: str,
+    request: Request,
+    username: str = Form(""),
+    account: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    vendor = vendor_by_slug(slug)
+    if vendor is None:
+        return _redirect_connect()
+    login = username.strip()
+    if not login:
+        _flash(request, err=f"Enter the same email or username you use to log in to {vendor['label']}.")
+        return _redirect_connect()
+    mark_connected(
+        db,
+        vendor["slug"],
+        "",
+        login=login,
+        account=account.strip(),
+        connector_name=vendor["label"],
+    )
+    _ensure_paperless_correspondent(db, vendor)
+    _flash(request, ok=f"{vendor['label']} is connected. Paperless will file their invoices.")
+    return _redirect_connect()
+
+
 @router.post("/connect/{name}/disconnect")
 def disconnect_service(name: str, request: Request, db: Session = Depends(get_db)):
-    if name not in {"square", "mealie", "paperless"}:
+    if name not in SYSTEM_NAMES and name not in VENDOR_SLUGS:
         return _redirect_connect()
     disconnect(db, name)
-    _flash(request, ok=f"{name.title()} disconnected.")
+    vendor = vendor_by_slug(name)
+    label = vendor["label"] if vendor else name.title()
+    _flash(request, ok=f"{label} disconnected.")
     return _redirect_connect()
 
 

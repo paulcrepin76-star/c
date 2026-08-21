@@ -2,8 +2,8 @@
 {% block title %}Connect{% endblock %}
 {% block content %}
 <p class="eyebrow">You log in. The cellar remembers the connection.</p>
-<h1>Connect Square, Mealie and Paperless</h1>
-<p class="lede">Open this page, click Connect, and sign in with the same account you already use. You do not open n8n. You do not paste tokens into a credentials screen. After this, n8n only rings the nightly bell.</p>
+<h1>Connect the cafe</h1>
+<p class="lede">Open this page, click Connect, and sign in with the account you already use. Square, Mealie and Paperless first. Then FPL, water, Chef's Warehouse, Sam's, Costco and Gordon. You do not open n8n.</p>
 
 {% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
 {% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
@@ -92,6 +92,40 @@
     {% endif %}
     {% if paperless.last_error %}<p class="flash err">{{ paperless.last_error }}</p>{% endif %}
   </article>
+</section>
+
+<h2>Bills and invoices</h2>
+<p class="lede">Click Connect, log in on their site, then come back and type the same email or username here. Paperless already files the PDFs that land in the Survey Cafe Gmail.</p>
+<section class="connect-grid">
+  {% for vendor in vendors %}
+  <article class="card connect-card">
+    <p class="eyebrow">{{ vendor.kind }}</p>
+    <h2>{{ vendor.label }}</h2>
+    <p class="status-line">
+      <span class="dot {{ vendor.connection.status }}"></span>
+      {% if vendor.connection.status == 'connected' %}Connected{% elif vendor.connection.status == 'error' %}Needs attention{% else %}Not connected{% endif %}
+    </p>
+    <p class="muted">{{ vendor.blurb }}</p>
+    {% if vendor.filed_count %}
+      <p class="muted">{{ vendor.filed_count }} invoice{{ 's' if vendor.filed_count != 1 else '' }} already in the cellar.</p>
+    {% endif %}
+    {% if vendor.connection.status == 'connected' %}
+      <p class="muted">Linked as {{ vendor.login or "connected" }}.</p>
+      <form method="post" action="/connect/{{ vendor.slug }}/disconnect">
+        <button type="submit" class="btn secondary">Disconnect</button>
+      </form>
+    {% else %}
+      {% if vendor.login_url %}
+        <a class="btn secondary big" href="{{ vendor.login_url }}" target="_blank" rel="noreferrer">Log in at {{ vendor.label }}</a>
+      {% endif %}
+      <form method="post" action="/connect/vendor/{{ vendor.slug }}" class="stack-form">
+        <label>Email or username <input name="username" autocomplete="username" placeholder="The login you already use"></label>
+        <label>Account number <input name="account" autocomplete="off" placeholder="Optional"></label>
+        <button type="submit" class="btn big">Connect {{ vendor.label }}</button>
+      </form>
+    {% endif %}
+  </article>
+  {% endfor %}
 </section>
 
 <div class="card">

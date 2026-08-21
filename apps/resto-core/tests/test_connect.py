@@ -1,3 +1,4 @@
+from html import unescape
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
@@ -57,9 +58,16 @@ def test_connect_page_is_the_login_door():
     with TestClient(app) as client:
         page = client.get("/connect")
         assert page.status_code == 200
-        assert "Connect Square" in page.text
-        assert "Connect Mealie" in page.text
-        assert "Connect Paperless" in page.text
+        text = unescape(page.text)
+        assert "Connect Square" in text
+        assert "Connect Mealie" in text
+        assert "Connect Paperless" in text
+        assert "FPL Bonita Springs" in text
+        assert "Chef's Warehouse" in text
+        assert "The Greatest Spring Water" in text
+        assert "Sam's Club" in text
+        assert "Costco" in text
+        assert "Gordon Food Service" in text
         setup = client.get("/setup", follow_redirects=False)
         assert setup.status_code == 303
         assert setup.headers["location"] == "/connect"
@@ -130,3 +138,22 @@ def test_sync_all_skips_until_connected():
         assert body["square"]["status"] == "skipped"
         assert body["mealie"]["status"] == "skipped"
         assert body["paperless"]["status"] == "skipped"
+
+
+def test_vendor_connect_uses_the_same_login_you_already_have():
+    with TestClient(app) as client:
+        page = client.post(
+            "/connect/vendor/fpl",
+            data={"username": "surveycafedowntown@gmail.com", "account": "bonita-1"},
+            follow_redirects=True,
+        )
+        assert page.status_code == 200
+        assert "FPL Bonita Springs is connected" in unescape(page.text)
+        warehouse = client.post(
+            "/connect/vendor/chefs-warehouse",
+            data={"username": "survey-cafe"},
+            follow_redirects=True,
+        )
+        assert "Chef's Warehouse is connected" in unescape(warehouse.text)
+
+

@@ -9,6 +9,35 @@ from app.config import settings
 from app.models import Connection, Connector
 
 
+def _connector_for(db: Session, name: str, connector_name: str | None = None) -> Connector | None:
+    from app.vendors import vendor_by_slug
+
+    candidates = [connector_name, name]
+    vendor = vendor_by_slug(name)
+    if vendor:
+        candidates.append(vendor["label"])
+        candidates.extend(vendor.get("legacy_names") or [])
+    seen: set[str] = set()
+    for candidate in candidates:
+        if not candidate or candidate in seen:
+            continue
+        seen.add(candidate)
+        row = db.query(Connector).filter(Connector.name.ilike(candidate)).first()
+        if row:
+            return row
+    return None
+
+
+def _sync_connector_status(db: Session, name: str, status: str, when: datetime | None, connector_name: str | None = None) -> None:
+    connector = _connector_for(db, name, connector_name)
+    if connector is None:
+        return
+    connector.status = status
+    connector.last_run_at = when
+    if status == "ready":
+        connector.last_error = ""
+
+
 def get_connection(db: Session, name: str) -> Connection:
     row = db.query(Connection).filter(Connection.name == name).first()
     if row is None:
@@ -59,11 +88,7 @@ def mark_connected(db: Session, name: str, access_token: str, refresh_token: str
     row.updated_at = datetime.now(UTC).replace(tzinfo=None)
     if extra:
         set_extra(row, **extra)
-    connector = db.query(Connector).filter(Connector.name.ilike(name)).first()
-    if connector:
-        connector.status = "ready"
-        connector.last_error = ""
-        connector.last_run_at = row.updated_at
+    _sync_connector_status(db, name, "ready", row.updated_at, extra.get("connector_name"))
     db.commit()
     db.refresh(row)
     return row
@@ -86,11 +111,10 @@ def disconnect(db: Session, name: str) -> Connection:
     row.status = "not_connected"
     row.last_error = ""
     row.updated_at = datetime.now(UTC).replace(tzinfo=None)
+    extra_name = extra_dict(row).get("connector_name")
     kept = {key: value for key, value in extra_dict(row).items() if key in {"application_id", "application_secret"}}
     row.extra = json.dumps(kept) if kept else ""
-    connector = db.query(Connector).filter(Connector.name.ilike(name)).first()
-    if connector:
-        connector.status = "not_connected"
+    _sync_connector_status(db, name, "not_connected", row.updated_at, extra_name)
     db.commit()
     return row
 

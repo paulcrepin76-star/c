@@ -29,10 +29,12 @@ def infer_costing_group(name: str) -> str:
 
 def infer_invoice_type(title: str, doc_type: str = "") -> str:
     blob = f"{title} {doc_type}".lower()
-    if any(word in blob for word in ("fpl", "comcast", "waste", "water", "utility", "electric")):
+    if any(word in blob for word in ("fpl", "comcast", "waste", "water", "utility", "electric", "bsu")):
         return "utility"
     if any(word in blob for word in ("wine", "vin", "champagne")):
         return "wine"
+    if any(word in blob for word in ("costco", "gordon", "gfs", "sam's", "sams", "chef")):
+        return "food"
     return "food"
 
 
