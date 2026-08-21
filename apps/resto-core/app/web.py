@@ -1,30 +1,51 @@
+import httpx
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from fastapi.responses import RedirectResponse
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
+from app.config import settings
+from app.connections import access_token_for
 from app.costing import money
 from app.db import get_db
-from app.models import Connector, Invoice, Product, SellableItem, StockMove, WineProfile
-from app.services import period_costing, wine_rows
+from app.matching import match_sellables
+from app.models import Connector, Invoice, Product, Recipe, SellableItem, StockMove, WineProfile
+from app.services import catalog_counts, period_costing, sales_span, wine_rows
 
 router = APIRouter()
+ALLOWED_DAYS = (7, 30, 90, 365)
+DEFAULT_DAYS = 90
+INVOICE_PAGE_SIZE = 40
+SCAN_TIMEOUT = httpx.Timeout(60.0, connect=10.0)
 
 
 def render(request: Request, template: str, **context):
     return request.app.state.templates.TemplateResponse(request, template, context)
 
 
-def _period(days: int = 7) -> tuple[datetime, datetime]:
+def _flash(request: Request, ok: str = "", err: str = "") -> None:
+    if ok:
+        request.session["flash_ok"] = ok
+    if err:
+        request.session["flash_err"] = err
+
+
+def _pop_flash(request: Request) -> tuple[str, str]:
+    return request.session.pop("flash_ok", ""), request.session.pop("flash_err", "")
+
+
+def _period(days: int | None = None) -> tuple[int, datetime, datetime]:
+    window = days if days in ALLOWED_DAYS else DEFAULT_DAYS
     end = datetime.now(UTC).replace(tzinfo=None)
-    return end - timedelta(days=days), end
+    return window, end - timedelta(days=window), end
 
 
 @router.get("/")
-def dashboard(request: Request, db: Session = Depends(get_db)):
-    start, end = _period(7)
+def dashboard(request: Request, days: int = DEFAULT_DAYS, db: Session = Depends(get_db)):
+    window, start, end = _period(days)
     costing = period_costing(db, start, end)
     wines = wine_rows(db)
     cellar_value = money(sum((row["cellar_value"] for row in wines), Decimal(0)))
@@ -40,6 +61,9 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
         below_par=below_par,
         connectors=connectors,
         invoices=invoices,
+        days=window,
+        span=sales_span(db),
+        counts=catalog_counts(db),
         page="dashboard",
     )
 
@@ -280,22 +304,161 @@ async def inventory_count(request: Request, db: Session = Depends(get_db)):
 
 
 @router.get("/costing")
-def costing_page(request: Request, db: Session = Depends(get_db)):
-    start, end = _period(7)
+def costing_page(request: Request, days: int = DEFAULT_DAYS, db: Session = Depends(get_db)):
+    window, start, end = _period(days)
     costing = period_costing(db, start, end)
     wines = wine_rows(db)
-    return render(request, "costing.html", costing=costing, wines=wines, page="costing")
+    counts = catalog_counts(db)
+    return render(
+        request,
+        "costing.html",
+        costing=costing,
+        wines=wines,
+        days=window,
+        counts=counts,
+        page="costing",
+    )
+
+
+@router.get("/costing/match")
+def costing_match(request: Request, db: Session = Depends(get_db)):
+    ok, err = _pop_flash(request)
+    unmatched = (
+        db.query(SellableItem)
+        .filter(SellableItem.recipe_id.is_(None), SellableItem.product_id.is_(None))
+        .order_by(SellableItem.name)
+        .limit(80)
+        .all()
+    )
+    recipes = db.query(Recipe).order_by(Recipe.name).limit(80).all()
+    return render(
+        request,
+        "costing_match.html",
+        unmatched=unmatched,
+        recipes=recipes,
+        counts=catalog_counts(db),
+        flash_ok=ok,
+        flash_err=err,
+        page="costing",
+    )
+
+
+@router.post("/costing/match")
+def costing_match_run(request: Request, db: Session = Depends(get_db)):
+    result = match_sellables(db)
+    _flash(
+        request,
+        ok=f"Linked {result.get('recipes', 0)} Square items to recipes and {result.get('wines', 0)} to wines.",
+    )
+    return RedirectResponse("/costing/match", status_code=303)
 
 
 @router.get("/invoices")
-def invoices_page(request: Request, db: Session = Depends(get_db)):
+def invoices_page(request: Request, p: int = 1, db: Session = Depends(get_db)):
+    ok, err = _pop_flash(request)
+    total_count = db.query(Invoice).count()
+    pages = max(1, (total_count + INVOICE_PAGE_SIZE - 1) // INVOICE_PAGE_SIZE)
+    page_number = min(max(p, 1), pages)
     invoices = (
         db.query(Invoice)
         .options(joinedload(Invoice.supplier), joinedload(Invoice.lines))
-        .order_by(Invoice.issued_on.desc())
+        .order_by(Invoice.issued_on.desc(), Invoice.id.desc())
+        .offset((page_number - 1) * INVOICE_PAGE_SIZE)
+        .limit(INVOICE_PAGE_SIZE)
         .all()
     )
-    return render(request, "invoices.html", invoices=invoices, page="invoices")
+    filed_total = db.scalar(select(func.coalesce(func.sum(Invoice.total), 0))) or 0
+    return render(
+        request,
+        "invoices.html",
+        invoices=invoices,
+        page_number=page_number,
+        pages=pages,
+        total_count=total_count,
+        filed_total=filed_total,
+        counts=catalog_counts(db),
+        flash_ok=ok,
+        flash_err=err,
+        page="invoices",
+    )
+
+
+@router.get("/invoices/scan")
+def invoices_scan(request: Request, db: Session = Depends(get_db)):
+    ok, err = _pop_flash(request)
+    connected = bool(access_token_for(db, "paperless"))
+    paperless_url = settings.paperless_public_url or settings.paperless_base_url
+    return render(
+        request,
+        "invoice_scan.html",
+        flash_ok=ok,
+        flash_err=err,
+        paperless_connected=connected,
+        paperless_url=paperless_url,
+        page="scan",
+    )
+
+
+def _scan_uploads(camera: UploadFile | None, files: list[UploadFile] | None) -> list[UploadFile]:
+    uploads: list[UploadFile] = []
+    if camera and camera.filename:
+        uploads.append(camera)
+    for item in files or []:
+        if item and item.filename:
+            uploads.append(item)
+    return uploads
+
+
+@router.post("/invoices/scan")
+async def invoices_scan_upload(
+    request: Request,
+    vendor: str = Form(""),
+    camera: UploadFile | None = File(default=None),
+    files: list[UploadFile] | None = File(default=None),
+    db: Session = Depends(get_db),
+):
+    token = access_token_for(db, "paperless")
+    if not token:
+        _flash(request, err="Connect Paperless first, then come back and take the photos.")
+        return RedirectResponse("/connect", status_code=303)
+    uploads = _scan_uploads(camera, files)
+    if not uploads:
+        _flash(request, err="Take a photo or pick files from Photos first.")
+        return RedirectResponse("/invoices/scan", status_code=303)
+    base = settings.paperless_base_url.rstrip("/")
+    headers = {"Authorization": f"Token {token}"}
+    sent = 0
+    errors = []
+    vendor_name = vendor.strip()
+    try:
+        with httpx.Client(timeout=SCAN_TIMEOUT) as client:
+            for upload in uploads:
+                content = await upload.read()
+                if not content:
+                    continue
+                filename = upload.filename or "invoice.jpg"
+                content_type = upload.content_type or "image/jpeg"
+                title = vendor_name or filename.rsplit(".", 1)[0]
+                response = client.post(
+                    f"{base}/api/documents/post_document/",
+                    headers=headers,
+                    files={"document": (filename, content, content_type)},
+                    data={"title": title[:240]},
+                )
+                if response.status_code >= 400:
+                    errors.append(filename)
+                    continue
+                sent += 1
+    except Exception:  # noqa: BLE001
+        _flash(request, err="Could not reach Paperless. Check Connect, then try again.")
+        return RedirectResponse("/invoices/scan", status_code=303)
+    if sent and not errors:
+        _flash(request, ok=f"Sent {sent} photo(s) to Paperless. Shoot the next pile, then Sync now after OCR.")
+    elif sent:
+        _flash(request, ok=f"Sent {sent}. Could not send {len(errors)}.", err="Some photos did not upload.")
+    else:
+        _flash(request, err="Paperless did not take those photos. Try JPEG or PDF.")
+    return RedirectResponse("/invoices/scan", status_code=303)
 
 
 @router.get("/connectors")

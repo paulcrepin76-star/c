@@ -3,30 +3,32 @@
 {% block content %}
 <p class="eyebrow">Paperless is the filing cabinet</p>
 <h1>Invoices and receipts</h1>
-<p class="lede">This app does not rebuild a document library. Paperless stores the PDF. We only keep the amounts and line items needed for food and wine cost.</p>
-{% for invoice in invoices %}
-<div class="card">
-  <div class="row-head">
-    <h2>{{ invoice.title or invoice.number or "Invoice" }}</h2>
-    <span>{{ invoice.issued_on or "" }} · {{ invoice.invoice_type }} · {{ invoice.total | money }}</span>
-  </div>
-  <p class="muted">{{ invoice.supplier.name if invoice.supplier else "Unknown supplier" }} · {{ invoice.status }}</p>
-  {% if invoice.lines %}
-  <table>
-    <thead><tr><th>Line</th><th>Qty</th><th>Unit cost</th><th>Total</th><th>Matched product</th></tr></thead>
-    <tbody>
-    {% for line in invoice.lines %}
-      <tr>
-        <td>{{ line.raw_description }}</td>
-        <td>{{ line.qty }} {{ line.unit }}</td>
-        <td>{{ line.unit_cost | money }}</td>
-        <td>{{ line.line_total | money }}</td>
-        <td>{{ line.product.name if line.product else "—" }}</td>
-      </tr>
-    {% endfor %}
-    </tbody>
-  </table>
-  {% endif %}
-</div>
-{% endfor %}
+<p class="lede">This app does not rebuild a document library. Paperless stores the PDF or photo. We only keep the amounts needed for food and wine cost.</p>
+{% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
+{% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
+<p>
+  <a class="btn" href="/invoices/scan">Photograph invoices on iPhone</a>
+  <span class="muted"> {{ total_count }} filed · {{ counts.invoices_with_total }} with dollars · {{ filed_total | money }} read so far</span>
+</p>
+<table class="wide">
+  <thead><tr><th>Date</th><th>Supplier</th><th>Invoice</th><th>Type</th><th>Total</th></tr></thead>
+  <tbody>
+  {% for invoice in invoices %}
+    <tr>
+      <td>{{ invoice.issued_on or "—" }}</td>
+      <td>{{ invoice.supplier.name if invoice.supplier else "Unknown" }}</td>
+      <td>{{ invoice.title or invoice.number or "Invoice" }}</td>
+      <td>{{ invoice.invoice_type }}</td>
+      <td>{{ invoice.total | money }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% if pages > 1 %}
+<nav class="period" aria-label="Invoice pages">
+  {% if page_number > 1 %}<a href="/invoices?p={{ page_number - 1 }}">Previous</a>{% endif %}
+  <span class="muted">Page {{ page_number }} of {{ pages }}</span>
+  {% if page_number < pages %}<a href="/invoices?p={{ page_number + 1 }}">Next</a>{% endif %}
+</nav>
+{% endif %}
 {% endblock %}

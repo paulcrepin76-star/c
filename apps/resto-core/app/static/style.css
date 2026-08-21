@@ -111,6 +111,31 @@ code { background: #efe4d4; padding: 2px 6px; border-radius: 6px; }
 }
 .flash.ok { background: #e5f3ea; color: var(--green); }
 .flash.err { background: #f8e6e2; color: var(--bad); }
+.flash a { color: inherit; }
+.period {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin: 12px 0 20px;
+}
+.period a {
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  text-decoration: none;
+  color: var(--ink);
+  background: var(--card);
+}
+.period a.on {
+  background: var(--wine);
+  color: #fff;
+  border-color: var(--wine);
+}
+.hero .btn { margin-right: 8px; margin-bottom: 8px; display: inline-block; }
+.scan-card { display: grid; gap: 14px; }
+.scan-shot input { margin-top: 6px; }
+.btn.big { display: inline-block; text-align: center; padding: 14px 18px; }
 .connect-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));

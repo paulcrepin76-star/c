@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Match Square to recipes{% endblock %}
+{% block content %}
+<p class="eyebrow"><a href="/costing">Costing</a></p>
+<h1>Match Square items to Mealie recipes</h1>
+<p class="lede">The cellar guesses from the name. Exact and close names link automatically. Leftovers stay here so you can see what still needs a recipe.</p>
+{% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
+{% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
+<p>{{ counts.linked }} already linked · {{ counts.unmatched }} unmatched · {{ counts.recipes }} Mealie recipes</p>
+<form method="post" action="/costing/match">
+  <button class="btn" type="submit">Auto-match now</button>
+</form>
+
+<div class="grid-2">
+  <div class="card">
+    <h2>Unmatched Square items</h2>
+    {% if unmatched %}
+    <ul class="plain">
+      {% for item in unmatched %}
+      <li>
+        {{ item.name }}
+        <span>{{ item.costing_group }} · {{ item.selling_price | money }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted">Every Square item has a recipe or a wine attached.</p>
+    {% endif %}
+  </div>
+  <div class="card">
+    <h2>Mealie recipes</h2>
+    <ul class="plain">
+      {% for recipe in recipes %}
+      <li>{{ recipe.name }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+</div>
+{% endblock %}

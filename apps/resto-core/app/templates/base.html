@@ -3,6 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Resto">
+  <meta name="theme-color" content="#4c121a">
   <title>{% block title %}Restaurant back office{% endblock %}</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
@@ -15,6 +18,7 @@
       <a href="/inventory" class="{% if page == 'inventory' %}on{% endif %}">Inventory</a>
       <a href="/costing" class="{% if page == 'costing' %}on{% endif %}">Costing</a>
       <a href="/invoices" class="{% if page == 'invoices' %}on{% endif %}">Invoices</a>
+      <a href="/invoices/scan" class="{% if page == 'scan' %}on{% endif %}">Scan</a>
       <a href="/connect" class="{% if page == 'connect' %}on{% endif %}">Connect</a>
       <a href="/connectors" class="{% if page == 'connectors' %}on{% endif %}">Connectors</a>
     </nav>

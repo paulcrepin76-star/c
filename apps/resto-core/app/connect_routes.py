@@ -373,7 +373,13 @@ def sync_now(request: Request, db: Session = Depends(get_db)):
             elif name == "mealie":
                 parts.append(f"Mealie {payload.get('created', 0)} new recipes")
             elif name == "paperless":
-                parts.append(f"Paperless {payload.get('created', 0)} new invoices")
+                created = payload.get("created", 0)
+                updated = payload.get("updated", 0)
+                parts.append(f"Paperless {created} new, {updated} updated invoices")
+            elif name == "matched":
+                parts.append(
+                    f"matched {payload.get('recipes', 0)} recipes and {payload.get('wines', 0)} wines"
+                )
             else:
                 parts.append(name.title())
         elif status == "error":

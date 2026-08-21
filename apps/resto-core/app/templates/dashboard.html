@@ -5,11 +5,26 @@
   <div>
     <p class="eyebrow">Unraid restaurant back office</p>
     <h1>Square sells. Mealie knows the recipes. Paperless files the bills. This cellar tells you what each glass actually costs.</h1>
-    <p><a class="btn" href="/connect">Connect Square, Mealie and Paperless</a></p>
+    <p>
+      <a class="btn" href="/connect">Connect Square, Mealie and Paperless</a>
+      <a class="btn secondary" href="/invoices/scan">Photograph invoices</a>
+    </p>
   </div>
 </section>
 
+<nav class="period" aria-label="Date range">
+  <a href="/?days=7" class="{% if days == 7 %}on{% endif %}">7 days</a>
+  <a href="/?days=30" class="{% if days == 30 %}on{% endif %}">30 days</a>
+  <a href="/?days=90" class="{% if days == 90 %}on{% endif %}">90 days</a>
+  <a href="/?days=365" class="{% if days == 365 %}on{% endif %}">Year</a>
+</nav>
+
 <section class="kpis">
+  <article>
+    <span>Square sales</span>
+    <strong>{{ costing.period_sales | money }}</strong>
+    <em>Last {{ days }} days{% if span.last %} · last ticket {{ span.last.date() }}{% endif %}</em>
+  </article>
   <article>
     <span>Food cost</span>
     <strong>{{ costing.groups.food.cost_pct | pct }}</strong>
@@ -18,12 +33,7 @@
   <article>
     <span>Wine cost</span>
     <strong>{{ costing.groups.wine.cost_pct | pct }}</strong>
-    <em>{{ costing.groups.wine.sales | money }} sales · last 7 days</em>
-  </article>
-  <article>
-    <span>Beverage cost</span>
-    <strong>{{ costing.groups.beverage.cost_pct | pct }}</strong>
-    <em>Cocktails, juice, coffee</em>
+    <em>{{ costing.groups.wine.sales | money }} sales</em>
   </article>
   <article>
     <span>Cellar value</span>
@@ -31,6 +41,33 @@
     <em>{{ wines | length }} labels in stock</em>
   </article>
 </section>
+
+<section class="kpis">
+  <article>
+    <span>All-time Square</span>
+    <strong>{{ span.all_time_sales | money }}</strong>
+    <em>{{ span.tickets }} line items{% if span.first %} · {{ span.first.date() }} → {{ span.last.date() if span.last else "" }}{% endif %}</em>
+  </article>
+  <article>
+    <span>Recipes</span>
+    <strong>{{ counts.recipes }}</strong>
+    <em>{{ counts.linked }} Square items linked · {{ counts.unmatched }} still unmatched</em>
+  </article>
+  <article>
+    <span>Invoices filed</span>
+    <strong>{{ counts.invoices }}</strong>
+    <em>{{ counts.invoices_with_total }} with a dollar amount</em>
+  </article>
+  <article>
+    <span>Beverage cost</span>
+    <strong>{{ costing.groups.beverage.cost_pct | pct }}</strong>
+    <em>Cocktails, juice, coffee</em>
+  </article>
+</section>
+
+{% if counts.unmatched %}
+<p class="flash">Food cost stays near 0% until Square items attach to Mealie recipes. <a href="/costing/match">Match them now</a>.</p>
+{% endif %}
 
 <section class="grid-2">
   <div class="card">
@@ -51,7 +88,7 @@
   <div class="card">
     <h2>How the stack fits</h2>
     <ol class="stack">
-      <li><b>Paperless</b> archives invoice PDFs from email or a drop folder.</li>
+      <li><b>Paperless</b> archives invoice PDFs from email, a drop folder, or a photo from your iPhone.</li>
       <li><b>Connect</b> is where you log in to Square, Mealie and Paperless yourself.</li>
       <li><b>This app</b> matches purchase prices, recipes, glasses and bottles.</li>
       <li><b>Metabase</b> is the TV dashboard for food cost, wine cost and margin.</li>
@@ -62,6 +99,7 @@
 <section class="grid-2">
   <div class="card">
     <h2>Recent invoices</h2>
+    <p><a href="/invoices/scan">Photograph a paper invoice</a> · <a href="/invoices">All invoices</a></p>
     <table>
       <thead><tr><th>Date</th><th>Invoice</th><th>Type</th><th>Total</th></tr></thead>
       <tbody>

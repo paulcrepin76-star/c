@@ -1,8 +1,15 @@
 {% extends "base.html" %}
 {% block title %}Costing{% endblock %}
 {% block content %}
-<p class="eyebrow">Last 7 days</p>
+<p class="eyebrow">Last {{ days }} days</p>
 <h1>Food, wine and beverage cost</h1>
+<nav class="period" aria-label="Date range">
+  <a href="/costing?days=7" class="{% if days == 7 %}on{% endif %}">7 days</a>
+  <a href="/costing?days=30" class="{% if days == 30 %}on{% endif %}">30 days</a>
+  <a href="/costing?days=90" class="{% if days == 90 %}on{% endif %}">90 days</a>
+  <a href="/costing?days=365" class="{% if days == 365 %}on{% endif %}">Year</a>
+</nav>
+<p class="lede">{{ costing.period_sales | money }} Square sales in this window. {{ counts.linked }} menu items linked to recipes or wines · {{ counts.unmatched }} still unmatched. <a href="/costing/match">Match Square to Mealie</a></p>
 <section class="kpis">
   {% for key in ['food','wine','beverage','beer'] %}
   <article>

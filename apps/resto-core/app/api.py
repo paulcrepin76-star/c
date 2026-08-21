@@ -52,7 +52,7 @@ def api_health():
 
 
 @router.get("/costing/summary", dependencies=[Depends(require_key)])
-def costing_summary(days: int = 7, db: Session = Depends(get_db)):
+def costing_summary(days: int = 90, db: Session = Depends(get_db)):
     end = datetime.now(UTC).replace(tzinfo=None)
     start = end - timedelta(days=days)
     return period_costing(db, start, end)

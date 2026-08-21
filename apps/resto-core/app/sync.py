@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.connections import access_token_for, extra_dict, get_connection, mark_error, set_extra, square_host
 from app.ingest import clean_food_name, ingest_paperless_doc, ingest_recipes, ingest_sales
+from app.matching import match_sellables
 from app.models import Sale
 
 TIMEOUT = httpx.Timeout(30.0, connect=10.0)
@@ -236,6 +237,7 @@ def _ingest_paperless_result(db: Session, doc: dict, correspondents: dict, types
             "invoice_number": str(invoice_number or ""),
             "total": total or 0,
             "invoice_type": infer_invoice_type(title, doc_type),
+            "content": doc.get("content") or "",
             "lines": [],
         },
     )
@@ -250,6 +252,7 @@ def sync_paperless(db: Session) -> dict:
     headers = {"Authorization": f"Token {token}"}
     try:
         created = 0
+        updated = 0
         skipped = 0
         with httpx.Client(timeout=TIMEOUT) as client:
             correspondents, types, fields = _paperless_maps(client, base, headers)
@@ -265,8 +268,11 @@ def sync_paperless(db: Session) -> dict:
                 if not docs:
                     break
                 for doc in docs:
-                    if _ingest_paperless_result(db, doc, correspondents, types, fields) == "created":
+                    status = _ingest_paperless_result(db, doc, correspondents, types, fields)
+                    if status == "created":
                         created += 1
+                    elif status == "updated":
+                        updated += 1
                     else:
                         skipped += 1
                 if not response.json().get("next"):
@@ -276,16 +282,25 @@ def sync_paperless(db: Session) -> dict:
         row.last_error = ""
         row.updated_at = _now()
         db.commit()
-        return {"status": "ok", "created": created, "skipped": skipped}
+        return {"status": "ok", "created": created, "updated": updated, "skipped": skipped}
     except Exception as exc:  # noqa: BLE001
         mark_error(db, "paperless", str(exc))
         return {"status": "error", "error": str(exc)}
 
 
 def sync_all(db: Session) -> dict:
+    square = sync_square(db)
+    mealie = sync_mealie(db)
+    paperless = sync_paperless(db)
+    try:
+        matched = match_sellables(db)
+        matched["status"] = "ok"
+    except Exception as exc:  # noqa: BLE001
+        matched = {"status": "error", "error": str(exc), "recipes": 0, "wines": 0}
     return {
-        "square": sync_square(db),
-        "mealie": sync_mealie(db),
-        "paperless": sync_paperless(db),
+        "square": square,
+        "mealie": mealie,
+        "paperless": paperless,
+        "matched": matched,
         "ran_at": _now().isoformat(),
     }

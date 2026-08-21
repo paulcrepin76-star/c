@@ -5,7 +5,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.costing import coefficient, cost_per_pour, cost_percent, money, recipe_cost
-from app.models import Product, Recipe, Sale, SellableItem, StockMove, WineProfile
+from app.models import Invoice, Product, Recipe, Sale, SellableItem, StockMove, WineProfile
 
 
 def on_hand_base(db: Session, product_id: int) -> Decimal:
@@ -138,4 +138,50 @@ def period_costing(db: Session, start: datetime, end: datetime) -> dict:
             }
         )
     wine_details.sort(key=lambda row: row["sales"], reverse=True)
-    return {"groups": summary, "wines": wine_details}
+    period_sales = money(sum((bucket["sales"] for bucket in summary.values()), Decimal(0)))
+    return {"groups": summary, "wines": wine_details, "period_sales": period_sales}
+
+
+def sales_span(db: Session) -> dict:
+    last = db.scalar(select(func.max(Sale.sold_at)))
+    first = db.scalar(select(func.min(Sale.sold_at)))
+    all_time = db.scalar(select(func.coalesce(func.sum(Sale.revenue), 0)))
+    tickets = db.scalar(select(func.count(Sale.id)))
+    return {
+        "first": first,
+        "last": last,
+        "all_time_sales": money(all_time or 0),
+        "tickets": int(tickets or 0),
+    }
+
+
+def catalog_counts(db: Session) -> dict:
+    recipes = db.scalar(select(func.count(Recipe.id))) or 0
+    invoices = db.scalar(select(func.count(Invoice.id))) or 0
+    invoices_with_total = (
+        db.scalar(select(func.count(Invoice.id)).where(Invoice.total > 0)) or 0
+    )
+    unmatched = (
+        db.scalar(
+            select(func.count(SellableItem.id)).where(
+                SellableItem.recipe_id.is_(None),
+                SellableItem.product_id.is_(None),
+            )
+        )
+        or 0
+    )
+    linked = (
+        db.scalar(
+            select(func.count(SellableItem.id)).where(
+                (SellableItem.recipe_id.is_not(None)) | (SellableItem.product_id.is_not(None))
+            )
+        )
+        or 0
+    )
+    return {
+        "recipes": int(recipes),
+        "invoices": int(invoices),
+        "invoices_with_total": int(invoices_with_total),
+        "unmatched": int(unmatched),
+        "linked": int(linked),
+    }

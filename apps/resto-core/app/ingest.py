@@ -1,10 +1,50 @@
+import re
 from datetime import datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from sqlalchemy.orm import Session
 
+from app.costing import money
 from app.models import Invoice, InvoiceLine, Product, Recipe, RecipeLine, Sale, SellableItem, StockMove, Supplier
 from app.vendors import VENDORS, vendor_names
+
+_DOLLAR = re.compile(r"\$\s*(\d{1,3}(?:,\d{3})*(?:\.\d{2})|\d+\.\d{2})")
+_LABELED = re.compile(
+    r"(?:invoice\s+total|amount\s+due|balance\s+due|total\s+due|\btotal\b|\bamount\b|\bbalance\b)"
+    r"[^\d$]{0,24}(\d{1,3}(?:,\d{3})*\.\d{2}|\d+\.\d{2})",
+    re.I,
+)
+
+
+def parse_invoice_amount(*parts) -> Decimal:
+    blob = " ".join(str(part or "") for part in parts)
+    if not blob.strip():
+        return Decimal("0")
+    dollars = _DOLLAR.findall(blob)
+    if dollars:
+        return money(dollars[-1].replace(",", ""))
+    labeled = _LABELED.findall(blob)
+    if labeled:
+        return money(labeled[-1].replace(",", ""))
+    return Decimal("0")
+
+
+def coerce_money(value) -> Decimal:
+    if value is None or value == "":
+        return Decimal("0")
+    if isinstance(value, Decimal):
+        return money(value)
+    if isinstance(value, (int, float)):
+        return money(value)
+    text = str(value).strip()
+    parsed = parse_invoice_amount(text)
+    if parsed:
+        return parsed
+    cleaned = text.replace("$", "").replace(",", "").replace("USD", "").strip()
+    try:
+        return money(cleaned)
+    except (InvalidOperation, ValueError):
+        return Decimal("0")
 
 
 def match_supplier(db: Session, correspondent: str | None, invoice_type: str = "food") -> Supplier | None:
@@ -114,12 +154,34 @@ def ingest_sales(db: Session, sales: list[dict]) -> dict:
     return {"created": created, "skipped": skipped}
 
 
+def _invoice_total(doc: dict) -> Decimal:
+    total = coerce_money(doc.get("total"))
+    if total > 0:
+        return total
+    return parse_invoice_amount(doc.get("title"), doc.get("content"), doc.get("correspondent"))
+
+
 def ingest_paperless_doc(db: Session, doc: dict) -> dict:
     paperless_id = str(doc.get("id") or "")
+    invoice_type = str(doc.get("invoice_type") or "food")
+    total = _invoice_total(doc)
     existing = db.query(Invoice).filter(Invoice.paperless_id == paperless_id).first()
     if existing:
-        return {"status": "duplicate", "invoice_id": existing.id}
-    invoice_type = str(doc.get("invoice_type") or "food")
+        status = "duplicate"
+        if Decimal(existing.total or 0) == 0 and total > 0:
+            existing.total = total
+            status = "updated"
+        if not existing.supplier_id:
+            supplier = match_supplier(db, doc.get("correspondent"), invoice_type)
+            if supplier:
+                existing.supplier_id = supplier.id
+                status = "updated"
+        if doc.get("title") and not existing.title:
+            existing.title = str(doc.get("title") or "")[:240]
+            status = "updated"
+        if status == "updated":
+            db.commit()
+        return {"status": status, "invoice_id": existing.id}
     supplier = match_supplier(db, doc.get("correspondent"), invoice_type)
     issued_on = None
     created = doc.get("created")
@@ -133,10 +195,10 @@ def ingest_paperless_doc(db: Session, doc: dict) -> dict:
         paperless_id=paperless_id,
         number=str(doc.get("invoice_number") or ""),
         issued_on=issued_on,
-        total=Decimal(str(doc.get("total") or 0)),
+        total=total,
         invoice_type=invoice_type,
         status="filed",
-        title=str(doc.get("title") or ""),
+        title=str(doc.get("title") or "")[:240],
     )
     db.add(invoice)
     db.flush()
