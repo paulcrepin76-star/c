@@ -36,6 +36,8 @@ class Supplier(Base):
     delivery_fee: Mapped[Decimal] = mapped_column(Money, default=0)
     min_order: Mapped[Decimal] = mapped_column(Money, default=0)
     trip_cost: Mapped[Decimal] = mapped_column(Money, default=0)
+    city: Mapped[str] = mapped_column(String(80), default="")
+    miles: Mapped[Decimal] = mapped_column(Numeric(8, 1), default=0)
 
     invoices: Mapped[list[Invoice]] = relationship(back_populates="supplier")
 
@@ -193,6 +195,9 @@ class PurchasePrice(Base):
     confidence: Mapped[Decimal] = mapped_column(Numeric(4, 3), default=1)
     source: Mapped[str] = mapped_column(String(20), default="invoice")
     url: Mapped[str] = mapped_column(String(400), default="")
+    miles: Mapped[Decimal] = mapped_column(Numeric(8, 1), default=0)
+    location_label: Mapped[str] = mapped_column(String(160), default="")
+    is_discounted: Mapped[bool] = mapped_column(Boolean, default=False)
 
     product: Mapped[Product] = relationship()
     supplier: Mapped[Supplier] = relationship()

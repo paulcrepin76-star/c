@@ -175,7 +175,14 @@ def _supplier_for(db: Session, label: str) -> Supplier | None:
     return db.query(Supplier).filter(Supplier.name == label).first()
 
 
-def record_catalog_quote(db: Session, product: Product, supplier: Supplier, item: dict, scanned_on: date) -> PurchasePrice | None:
+def record_catalog_quote(
+    db: Session,
+    product: Product,
+    supplier: Supplier,
+    item: dict,
+    scanned_on: date,
+    source: str = "catalog",
+) -> PurchasePrice | None:
     pack_qty = Decimal(str(item.get("pack_qty") or 0))
     pack_unit = str(item.get("pack_unit") or "")
     pack_price = Decimal(str(item.get("pack_price") or 0))
@@ -193,7 +200,7 @@ def record_catalog_quote(db: Session, product: Product, supplier: Supplier, item
         .filter(
             PurchasePrice.product_id == product.id,
             PurchasePrice.supplier_id == supplier.id,
-            PurchasePrice.source == "catalog",
+            PurchasePrice.source == source,
             PurchasePrice.purchased_on == scanned_on,
         )
         .order_by(PurchasePrice.unit_cost_compare.asc(), PurchasePrice.id.asc())
@@ -209,7 +216,7 @@ def record_catalog_quote(db: Session, product: Product, supplier: Supplier, item
         product_id=product.id,
         supplier_id=supplier.id,
         purchased_on=scanned_on,
-        source="catalog",
+        source=source,
     )
     row.sku = str(item.get("sku") or "")[:80]
     row.raw_description = str(item.get("description") or "")[:240]
@@ -220,8 +227,21 @@ def record_catalog_quote(db: Session, product: Product, supplier: Supplier, item
     row.unit_cost_base = unit_base
     row.compare_qty = to_base(pack_qty, pack_unit, compare_unit) or Decimal("0")
     row.unit_cost_compare = unit_compare
-    row.confidence = Decimal("0.8")
+    row.confidence = {
+        "invoice": Decimal("1.00"),
+        "extension": Decimal("0.95"),
+        "auth_browser": Decimal("0.95"),
+        "bls": Decimal("0.90"),
+        "usda": Decimal("0.90"),
+        "instacart": Decimal("0.90"),
+        "catalog": Decimal("0.80"),
+        "playwright": Decimal("0.80"),
+        "open_prices": Decimal("0.70"),
+    }.get(source, Decimal("0.80"))
     row.url = url
+    row.miles = Decimal(str(item.get("miles") or supplier.miles or 0))
+    row.location_label = str(item.get("location_label") or supplier.city or "")[:160]
+    row.is_discounted = bool(item.get("is_discounted"))
     if existing is None:
         db.add(row)
     db.flush()

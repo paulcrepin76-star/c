@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Price Collector{% endblock %}
+{% block content %}
+<p class="eyebrow">{{ market }}</p>
+<h1>Price Collector</h1>
+<p class="lede">Four ways into the same table: official APIs, a full Chromium browser for public JavaScript sites, your own logged-in Chrome session, and Paperless receipts. We do not solve CAPTCHAs or rotate proxies.</p>
+{% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
+{% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
+
+<section class="kpis">
+  <article>
+    <span>Priority 1</span>
+    <strong>0–{{ near }} miles</strong>
+    <em>Bonita Springs / Estero first</em>
+  </article>
+  <article>
+    <span>Priority 2–3</span>
+    <strong>to {{ far }} miles</strong>
+    <em>Fort Myers, then farther only if nothing local exists</em>
+  </article>
+  <article>
+    <span>Playwright on this server</span>
+    <strong>{% if playwright_ready %}Installed{% else %}Not in this image{% endif %}</strong>
+    <em>Public JS sites can still use the Chrome extension</em>
+  </article>
+</section>
+
+<div class="card">
+  <h2>1 · Chrome extension (Sam’s, Costco, Chef’s, Gordon)</h2>
+  <p>Install <b>Restaurant Price Collector</b> in Chrome on the Mac you already shop from:</p>
+  <ol class="plain">
+    <li>Open <code>chrome://extensions</code></li>
+    <li>Turn on Developer mode</li>
+    <li>Load unpacked → <code>/mnt/user/appdata/resto/apps/resto-core/app/static/extension</code> on Unraid, or copy <a href="/static/extension/manifest.json">the extension folder</a> from this site</li>
+    <li>Open the extension options. Cellar URL: <code>{{ cellar_url }}</code>. Paste the same API key as n8n (<code>RESTO_API_KEY</code>).</li>
+    <li>Log in to Sam’s or Chef’s yourself, search butter, click <b>Send visible prices</b>.</li>
+  </ol>
+  <p class="muted">The extension only sends what you can already see. Session cookies stay in Chrome. Treat the API key like a password.</p>
+</div>
+
+<div class="card">
+  <h2>2 · Official APIs (no login)</h2>
+  <p>Open Prices (crowdsourced, geo-filtered) and the US retail average (BLS) run with the nightly scan. USDA MyMarketNews wholesale waits on <code>USDA_MMN_API_KEY</code>. Instacart waits on their 30–40 day developer approval — the collector row is already there.</p>
+  <form method="post" action="/purchasing/scan">
+    <button type="submit" class="btn">Run API scan now</button>
+  </form>
+</div>
+
+<div class="card">
+  <h2>3 · Full browser for public JS (Publix, Target, Aldi)</h2>
+  <p>Those sites hide dollars until JavaScript runs. Playwright Chromium can render them <em>without logging in</em>. This cellar image does not bundle Chromium (it is huge). Use the extension today, or add a <code>collector</code> Compose profile later with the official Playwright image. We still will not fight PerimeterX on Sam’s or Costco that way.</p>
+</div>
+
+<div class="card">
+  <h2>4 · Receipts</h2>
+  <p>Paperless OCR remains the highest-confidence price. After Costco, drop the PDF or photograph the receipt. That pack is what you actually paid.</p>
+  <p><a class="btn" href="/invoices/scan">Photograph an invoice</a></p>
+</div>
+
+<div class="card">
+  <h2>Supplier connections</h2>
+  <table class="wide">
+    <thead><tr><th>Source</th><th>Collector</th><th>How</th></tr></thead>
+    <tbody>
+    {% for source in collectors %}
+      <tr>
+        <td>{% if source.home %}<a href="{{ source.home }}" target="_blank" rel="noreferrer">{{ source.label }}</a>{% else %}{{ source.label }}{% endif %}</td>
+        <td>{{ source.adapter_title }}</td>
+        <td class="muted">{{ source.blurb }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

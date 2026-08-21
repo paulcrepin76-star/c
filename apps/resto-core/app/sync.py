@@ -12,6 +12,7 @@ from app.matching import match_sellables
 from app.models import Sale
 from app.purchasing import backfill_purchase_prices
 from app.catalog import scan_catalogs
+from app.market import scan_external_prices
 
 TIMEOUT = httpx.Timeout(30.0, connect=10.0)
 
@@ -303,6 +304,13 @@ def sync_all(db: Session) -> dict:
             catalogs = {"status": "error", "error": str(exc)[:200]}
     else:
         catalogs = {"status": "skipped", "reason": "disabled"}
+    if settings.open_prices_enabled or settings.bls_enabled:
+        try:
+            external = scan_external_prices(db)
+        except Exception as exc:  # noqa: BLE001
+            external = {"status": "error", "error": str(exc)[:200]}
+    else:
+        external = {"status": "skipped", "reason": "disabled"}
     try:
         matched = match_sellables(db)
         matched["status"] = "ok"
@@ -314,6 +322,7 @@ def sync_all(db: Session) -> dict:
         "paperless": paperless,
         "purchasing": prices,
         "catalogs": catalogs,
+        "external": external,
         "matched": matched,
         "ran_at": _now().isoformat(),
     }

@@ -21,6 +21,13 @@ class Settings(BaseSettings):
     paperless_api_token: str = ""
     paperless_public_url: str = ""
     catalog_scan_enabled: bool = True
+    open_prices_enabled: bool = True
+    bls_enabled: bool = True
+    usda_mmn_api_key: str = ""
+    home_market: str = "Bonita Springs, Florida"
+    home_lat: float = 26.3398
+    home_lon: float = -81.7787
+    price_gap_pct: float = 8.0
 
 
 settings = Settings()

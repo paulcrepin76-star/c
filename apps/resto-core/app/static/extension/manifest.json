@@ -1,0 +1,39 @@
+{
+  "manifest_version": 3,
+  "name": "Restaurant Price Collector",
+  "version": "0.1.0",
+  "description": "Send visible grocery and supplier prices to the Survey Cafe cellar. No passwords leave Chrome.",
+  "permissions": ["storage", "activeTab"],
+  "host_permissions": [
+    "http://100.116.48.120:8088/*",
+    "http://127.0.0.1:8088/*",
+    "http://localhost:8088/*"
+  ],
+  "action": {
+    "default_title": "Send visible prices",
+    "default_popup": "popup.html"
+  },
+  "options_page": "options.html",
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.samsclub.com/*",
+        "https://www.costco.com/*",
+        "https://www.walmart.com/*",
+        "https://www.publix.com/*",
+        "https://www.target.com/*",
+        "https://www.aldi.us/*",
+        "https://shop.chefswarehouse.com/*",
+        "https://order.gfs.com/*",
+        "https://www.restaurantdepot.com/*",
+        "https://shop.sysco.com/*",
+        "https://www.webstaurantstore.com/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

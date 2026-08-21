@@ -153,9 +153,9 @@ def test_purchasing_page_shows_catalog_lexicon():
         page = client.get("/purchasing")
         assert page.status_code == 200
         text = unescape(page.text)
-        assert "Public catalogs" in text
+        assert "Bonita Springs" in text
         assert "WebstaurantStore" in text
         assert "Sam's Club" in text
-        assert "Scan public prices now" in text
-        assert "Scanned nightly" in text
-        assert "Needs a login" in text
+        assert "Scan APIs and public catalogs" in text
+        assert "BROWSER EXTENSION" in text
+        assert "Open Prices" in text

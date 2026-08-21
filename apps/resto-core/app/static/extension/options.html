@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Collector options</title>
+  <style>
+    body { font: 16px/1.45 system-ui, sans-serif; max-width: 520px; margin: 32px; color: #241c16; }
+    label { display: block; margin: 12px 0 6px; }
+    input { width: 100%; padding: 8px; }
+    button { margin-top: 16px; padding: 10px 16px; }
+  </style>
+</head>
+<body>
+  <h1>Restaurant Price Collector</h1>
+  <p>Prices go to your Unraid cellar. The API key is the same <code>RESTO_API_KEY</code> n8n already uses. Do not put supplier passwords here.</p>
+  <label>Cellar URL
+    <input id="cellarUrl" placeholder="http://100.116.48.120:8088">
+  </label>
+  <label>API key
+    <input id="apiKey" type="password" autocomplete="off">
+  </label>
+  <button id="save" type="button">Save</button>
+  <p id="status"></p>
+  <script src="options.js"></script>
+</body>
+</html>

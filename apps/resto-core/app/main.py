@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -15,6 +16,7 @@ from app.matching import match_sellables
 from app.paperless_hook import ensure_paperless_sync_workflow
 from app.purchasing import backfill_purchase_prices, ensure_purchasing
 from app.catalog import ensure_catalog_suppliers
+from app.collector import source_label
 from app.schema import ensure_schema
 from app.seed import ensure_connections, seed_if_empty
 from app.web import router as web_router
@@ -37,6 +39,7 @@ def _unit_cost(value) -> str:
 
 
 templates.env.filters["unitcost"] = _unit_cost
+templates.env.filters["sourcelabel"] = source_label
 
 
 @asynccontextmanager
@@ -59,6 +62,12 @@ async def lifespan(_app: FastAPI):
 
 def create_app() -> FastAPI:
     app = FastAPI(title="Restaurant back office", version="0.1.0", lifespan=lifespan)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_headers=["*"],
+    )
     app.add_middleware(SessionMiddleware, secret_key=settings.secret_key)
     app.state.templates = templates
     app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")

@@ -5,6 +5,8 @@ os.environ.setdefault("SECRET_KEY", "test")
 os.environ.setdefault("RESTO_API_KEY", "test")
 os.environ.setdefault("RESTO_PUBLIC_URL", "http://100.116.48.120:8088")
 os.environ["CATALOG_SCAN_ENABLED"] = "false"
+os.environ["OPEN_PRICES_ENABLED"] = "false"
+os.environ["BLS_ENABLED"] = "false"
 
 import pytest
 

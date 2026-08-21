@@ -1,9 +1,9 @@
 {% extends "base.html" %}
 {% block title %}Purchasing{% endblock %}
 {% block content %}
-<p class="eyebrow">Price intelligence</p>
+<p class="eyebrow">{{ board.market }} · {{ board.gap_pct_threshold }}% and {{ board.stay_threshold | money }}/month</p>
 <h1>Supplier price comparison</h1>
-<p class="lede">Paid invoice packs stay on the left. Public catalogs are scanned every night — no club login. A listed case is converted to the same unit as what you actually paid.</p>
+<p class="lede">Your invoices are the source of truth. Public APIs, a full browser, and the Chrome extension fill in nearby listed prices. Alerts only fire when another source is at least {{ board.gap_pct_threshold }}% cheaper and the monthly saving is over {{ board.stay_threshold | money }}.</p>
 {% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
 {% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
 
@@ -20,30 +20,30 @@
   <article>
     <span>Potential savings this month</span>
     <strong>{{ board.monthly_total | money }}</strong>
-    <em>After trip / delivery, only when the switch is worth it</em>
+    <em>After trip cost, only 8% and $25+</em>
   </article>
   <article>
-    <span>Products cheaper elsewhere</span>
+    <span>Worth a look</span>
     <strong>{{ board.cheaper_elsewhere }}</strong>
-    <em>Stay if the monthly gain is under {{ board.stay_threshold | money }}</em>
+    <em>Green = switch · Yellow = combine with a trip</em>
   </article>
   <article>
-    <span>Public catalogs</span>
-    <strong>{{ catalogs | selectattr("fetchable") | list | length }} / {{ catalogs | length }}</strong>
-    <em>Sites we can read without your account</em>
+    <span>Home market</span>
+    <strong>{{ board.market }}</strong>
+    <em>0–15 mi first, then 15–50. Farther is fallback only.</em>
   </article>
 </section>
 
 <form method="post" action="/purchasing/scan" class="inline" style="margin-bottom: 16px;">
-  <button type="submit" class="btn">Scan public prices now</button>
-  <span class="muted">Nightly 02:10 already does this. Grocery club sites usually block the server; restaurant catalogs often do not.</span>
+  <button type="submit" class="btn">Scan APIs and public catalogs</button>
+  <span class="muted">Nightly 02:10 already does this. Sam’s, Costco, Chef’s and Gordon use the <a href="/collector">Price Collector extension</a> while you browse.</span>
 </form>
 
 {% if not board.cards %}
 <div class="card">
   <h2>Waiting on comparable packs</h2>
-  <p>Invoice totals are not enough, and most grocery homepages hide the price until you open a browser. Scan public restaurant catalogs, or photograph a Chef's / Sam's invoice with a pack size.</p>
-  <p><a class="btn" href="/invoices/scan">Photograph an invoice</a></p>
+  <p>Photograph a Chef's / Sam's invoice, or install the collector extension and search butter on Sam's while you are logged in.</p>
+  <p><a class="btn" href="/invoices/scan">Photograph an invoice</a> <a class="btn secondary" href="/collector">Install collector</a></p>
 </div>
 {% endif %}
 
@@ -51,26 +51,28 @@
 <article class="card">
   <div class="row-head">
     <div>
-      <p class="eyebrow">{{ card.product.purchasing_category or card.product.category }}</p>
+      <p class="eyebrow">{{ card.product.purchasing_category or card.product.category }} · {{ card.market_label }}</p>
       <h2>{{ card.product.name }}</h2>
     </div>
-    {% if card.recommend == "switch" %}
-      <strong class="badge-switch">Switch recommended</strong>
-    {% elif card.recommend == "consider" %}
-      <strong class="badge-switch">Listed cheaper — check the trip</strong>
+    {% if card.trip_class == "go" %}
+      <strong class="badge-switch">Worth changing</strong>
+    {% elif card.trip_class == "maybe" %}
+      <strong class="badge-maybe">Maybe — combine with a trip</strong>
     {% else %}
-      <strong class="badge-stay">Stay with current</strong>
+      <strong class="badge-stay">Not worth driving for</strong>
     {% endif %}
   </div>
   <p class="lede">
     You pay: {{ card.current.supplier.name if card.current.supplier else "Unknown" }}
     {{ card.current.unit_cost_compare | unitcost }}/{{ card.compare_unit }}
-    {% if card.current.source == "catalog" %}<em>(listed, not a receipt)</em>{% endif %}
+    {% if card.current.source != "invoice" %}<em>({{ card.current.source | sourcelabel }})</em>{% endif %}
     · Best known: {{ card.cheapest.supplier.name if card.cheapest.supplier else "Unknown" }}
     {{ card.cheapest.unit_cost_compare | unitcost }}/{{ card.compare_unit }}
-    {% if card.cheapest.source == "catalog" %} listed{% endif %}
     {% if card.gap > 0 %}
     · {{ card.gap_pct | pct }} cheaper
+    {% endif %}
+    {% if card.miles and card.miles > 0 %}
+    · {{ card.miles }} mi
     {% endif %}
   </p>
   <table class="wide">
@@ -80,18 +82,28 @@
         <th>Pack</th>
         <th>Price</th>
         <th>Per {{ card.compare_unit }}</th>
-        <th>Kind</th>
+        <th>Source</th>
         <th>Date</th>
       </tr>
     </thead>
     <tbody>
     {% for offer in card.offers %}
       <tr class="{% if offer.id == card.cheapest.id %}warn{% endif %}">
-        <td>{{ offer.supplier.name if offer.supplier else "Unknown" }}</td>
+        <td>{{ offer.supplier.name if offer.supplier else "Unknown" }}{% if offer.location_label %} <span class="muted">{{ offer.location_label }}</span>{% endif %}</td>
         <td>{{ offer.pack_qty }} {{ offer.pack_unit }}</td>
         <td>{{ offer.pack_price | money }}</td>
         <td>{{ offer.unit_cost_compare | unitcost }}</td>
-        <td>{% if offer.source == "catalog" %}Listed{% else %}Paid{% endif %}</td>
+        <td>{{ offer.source | sourcelabel }}{% if offer.is_discounted %} promo{% endif %}</td>
+        <td>{{ offer.purchased_on or "—" }}</td>
+      </tr>
+    {% endfor %}
+    {% for offer in card.benchmark %}
+      <tr>
+        <td>{{ offer.supplier.name if offer.supplier else "Benchmark" }}</td>
+        <td>{{ offer.pack_qty }} {{ offer.pack_unit }}</td>
+        <td>{{ offer.pack_price | money }}</td>
+        <td>{{ offer.unit_cost_compare | unitcost }}</td>
+        <td>{{ offer.source | sourcelabel }}</td>
         <td>{{ offer.purchased_on or "—" }}</td>
       </tr>
     {% endfor %}
@@ -106,9 +118,9 @@
   {% if card.recommend == "switch" %}
     <p><b>Potential saving {{ card.net | money }}/month — change supplier recommended.</b></p>
   {% elif card.recommend == "consider" %}
-    <p><b>{{ card.cheapest.supplier.name }} lists this cheaper than your last paid pack.</b> Confirm case size, shipping, and whether the cafe will actually buy it before you switch.</p>
+    <p><b>{{ card.cheapest.supplier.name }} looks cheaper ({{ card.cheapest.source | sourcelabel }}).</b> Confirm the pack, the trip, and whether the cafe will actually buy it.</p>
   {% elif card.gap > 0 %}
-    <p class="muted">Saving only {{ card.net | money }}/month after trip cost — stay with {{ card.current.supplier.name if card.current.supplier else "the current supplier" }}.</p>
+    <p class="muted">Under 8% or under {{ board.stay_threshold | money }}/month after the trip — stay with {{ card.current.supplier.name if card.current.supplier else "the current supplier" }}.</p>
   {% endif %}
   {% if card.impacts %}
     <p class="muted">If you bought at the best known price, Mealie recipes move:</p>
@@ -122,19 +134,20 @@
 {% endfor %}
 
 <div class="card">
-  <h2>Where we look (no account)</h2>
-  <p class="muted">A 24-hour scan does not mean 40 logins. It means: hit every site whose prices are actually in the HTML, skip the rest, and keep the lexicon honest.</p>
+  <h2>How prices get in</h2>
+  <p class="muted">Four adapters, one Postgres table. No CAPTCHA solving, no stealth browsers.</p>
   <table class="wide">
-    <thead><tr><th>Site</th><th>Status</th><th>Why</th></tr></thead>
+    <thead><tr><th>Source</th><th>Method</th><th>Why</th></tr></thead>
     <tbody>
-    {% for source in catalogs %}
+    {% for source in collectors %}
       <tr>
         <td>{% if source.home %}<a href="{{ source.home }}" target="_blank" rel="noreferrer">{{ source.label }}</a>{% else %}{{ source.label }}{% endif %}</td>
-        <td>{% if source.fetchable %}Scanned nightly{% elif source.kind == "login" %}Needs a login{% elif source.kind == "js" %}Browser only{% else %}Blocked{% endif %}</td>
+        <td>{{ source.adapter_title }}</td>
         <td class="muted">{{ source.blurb }}</td>
       </tr>
     {% endfor %}
     </tbody>
   </table>
+  <p><a class="btn" href="/collector">Open the Price Collector</a></p>
 </div>
 {% endblock %}

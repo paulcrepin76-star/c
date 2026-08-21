@@ -7,6 +7,8 @@ NEW_COLUMNS = {
         ("delivery_fee", "NUMERIC(12, 2) DEFAULT 0"),
         ("min_order", "NUMERIC(12, 2) DEFAULT 0"),
         ("trip_cost", "NUMERIC(12, 2) DEFAULT 0"),
+        ("city", "VARCHAR(80) DEFAULT ''"),
+        ("miles", "NUMERIC(8, 1) DEFAULT 0"),
     ),
     "products": (
         ("compare_unit", "VARCHAR(20) DEFAULT ''"),
@@ -14,6 +16,9 @@ NEW_COLUMNS = {
     ),
     "purchase_prices": (
         ("url", "VARCHAR(400) DEFAULT ''"),
+        ("miles", "NUMERIC(8, 1) DEFAULT 0"),
+        ("location_label", "VARCHAR(160) DEFAULT ''"),
+        ("is_discounted", "BOOLEAN DEFAULT FALSE"),
     ),
 }
 

@@ -11,6 +11,8 @@ from app.ingest import ingest_paperless_doc, ingest_recipes, ingest_sales
 from app.paperless_hook import ensure_paperless_sync_workflow, sync_paperless_now
 from app.purchasing import board_payload, purchasing_board
 from app.catalog import scan_catalogs
+from app.collector import ingest_collected_items
+from app.market import scan_external_prices
 from app.services import period_costing, wine_rows
 from app.sync import sync_all, sync_paperless
 
@@ -132,9 +134,38 @@ def sync_paperless_job(
     return sync_paperless(db, max_pages=15)
 
 
+class CollectItem(BaseModel):
+    name: str
+    pack: str = ""
+    price: Decimal
+    qty: Decimal | None = None
+    unit: str = ""
+    upc: str = ""
+    sku: str = ""
+    url: str = ""
+    discount: bool = False
+
+
+class CollectBatch(BaseModel):
+    supplier: str
+    store: str = ""
+    source: str = "extension"
+    miles: Decimal = Decimal("0")
+    captured_on: str = ""
+    page_url: str = ""
+    items: list[CollectItem] = Field(default_factory=list)
+
+
+@router.post("/prices/collect", dependencies=[Depends(require_key)])
+def collect_prices(batch: CollectBatch, db: Session = Depends(get_db)):
+    return ingest_collected_items(db, batch.model_dump())
+
+
 @router.post("/jobs/scan-catalogs", dependencies=[Depends(require_key)])
 def scan_catalogs_job(db: Session = Depends(get_db)):
-    return scan_catalogs(db)
+    catalogs = scan_catalogs(db)
+    external = scan_external_prices(db)
+    return {"catalogs": catalogs, "external": external}
 
 
 @router.post("/jobs/nightly", dependencies=[Depends(require_key)])

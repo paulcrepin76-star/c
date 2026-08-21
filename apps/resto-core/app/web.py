@@ -8,7 +8,10 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.catalog import catalog_lexicon, scan_catalogs
+from app.collector import collector_rows, playwright_available, source_label
 from app.config import settings
+from app.geo import FAR_MILES, HOME_MARKET, NEAR_MILES
+from app.market import scan_external_prices
 from app.connections import access_token_for
 from app.costing import money
 from app.db import get_db
@@ -491,6 +494,10 @@ def purchasing_page(request: Request, category: str = "", db: Session = Depends(
         board=board,
         categories=CATEGORIES,
         catalogs=catalog_lexicon(),
+        collectors=collector_rows(),
+        source_label=source_label,
+        market=HOME_MARKET,
+        playwright_ready=playwright_available(),
         flash_ok=ok,
         flash_err=err,
         page="purchasing",
@@ -500,10 +507,35 @@ def purchasing_page(request: Request, category: str = "", db: Session = Depends(
 @router.post("/purchasing/scan")
 def purchasing_scan(request: Request, db: Session = Depends(get_db)):
     try:
-        result = scan_catalogs(db)
-        quotes = int(result.get("quotes") or 0)
-        _flash(request, ok=f"Public catalog scan finished. {quotes} listed pack(s) recorded today.")
+        catalogs = scan_catalogs(db)
+        external = scan_external_prices(db)
+        listed = int(catalogs.get("quotes") or 0) + int(external.get("quotes") or 0)
+        _flash(
+            request,
+            ok=(
+                f"Price collector finished. {listed} listed pack(s) today "
+                f"({HOME_MARKET}: Open Prices {external.get('open_prices', {}).get('locations', 0)} store(s))."
+            ),
+        )
     except Exception:  # noqa: BLE001
-        _flash(request, err="Catalog scan failed. Public sites block bots more often than they list prices.")
+        _flash(request, err="Collector scan failed. APIs and public HTML are tried; club sites still need the Chrome extension.")
     return RedirectResponse("/purchasing", status_code=303)
+
+
+@router.get("/collector")
+def collector_page(request: Request, db: Session = Depends(get_db)):
+    ok, err = _pop_flash(request)
+    return render(
+        request,
+        "collector.html",
+        page="collector",
+        collectors=collector_rows(),
+        market=HOME_MARKET,
+        near=NEAR_MILES,
+        far=FAR_MILES,
+        playwright_ready=playwright_available(),
+        cellar_url=settings.resto_public_url,
+        flash_ok=ok,
+        flash_err=err,
+    )
 

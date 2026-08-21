@@ -7,10 +7,16 @@ import re
 from sqlalchemy.orm import Session
 
 from app.costing import cost_percent, money
+from app.geo import FAR_MILES, HOME_MARKET, LOCAL_SUPPLIERS, MID_MILES, NEAR_MILES, radius_band
 from app.models import Invoice, InvoiceLine, Product, ProductAlias, PurchasePrice, Recipe, RecipeLine, Supplier
 from app.units import comparable_cost, parse_pack, to_base
 
 STAY_THRESHOLD = Decimal("25")  # monthly saving below this: stay with the current supplier
+GAP_PCT_THRESHOLD = Decimal("8")  # also require 8% cheaper so $0.03 gaps do not alert
+PAID_SOURCES = ("invoice",)
+ACCOUNT_SOURCES = ("extension", "auth_browser")
+PUBLIC_SOURCES = ("catalog", "open_prices", "playwright")
+BENCHMARK_SOURCES = ("bls", "usda")
 BUTTER_EXCLUDES = (
     "peanut",
     "cacao",
@@ -270,12 +276,18 @@ def backfill_purchase_prices(db: Session) -> int:
     return created
 
 
-def latest_by_supplier(db: Session, product_id: int, source: str | None = None, days: int | None = None) -> list[PurchasePrice]:
+def latest_by_supplier(db: Session, product_id: int, source: str | None = None, days: int | None = None, sources: tuple[str, ...] | None = None) -> list[PurchasePrice]:
     query = db.query(PurchasePrice).filter(PurchasePrice.product_id == product_id)
-    if source == "catalog":
-        query = query.filter(PurchasePrice.source == "catalog")
+    if sources:
+        query = query.filter(PurchasePrice.source.in_(sources))
+    elif source == "catalog":
+        query = query.filter(PurchasePrice.source.in_(PUBLIC_SOURCES))
     elif source == "invoice":
-        query = query.filter(PurchasePrice.source != "catalog")
+        query = query.filter(PurchasePrice.source.in_(PAID_SOURCES))
+    elif source == "account":
+        query = query.filter(PurchasePrice.source.in_(ACCOUNT_SOURCES))
+    elif source == "benchmark":
+        query = query.filter(PurchasePrice.source.in_(BENCHMARK_SOURCES))
     if days is not None:
         query = query.filter(PurchasePrice.purchased_on >= _cutoff(days))
     rows = query.order_by(PurchasePrice.purchased_on.desc(), PurchasePrice.id.desc()).all()
@@ -299,6 +311,8 @@ def monthly_usage_compare(db: Session, product: Product, days: int = USAGE_DAYS)
     rows = db.query(PurchasePrice).filter(PurchasePrice.product_id == product.id).all()
     for row in rows:
         if row.source == "catalog":
+            continue
+        if row.source in PUBLIC_SOURCES or row.source in BENCHMARK_SOURCES:
             continue
         if row.purchased_on is None or row.purchased_on < cutoff:
             continue
@@ -337,16 +351,41 @@ def _volume_by_supplier(db: Session, product_id: int, days: int = USAGE_DAYS) ->
     for row in rows:
         if row.source == "catalog":
             continue
+        if row.source in PUBLIC_SOURCES or row.source in BENCHMARK_SOURCES:
+            continue
         if row.purchased_on is None or row.purchased_on < cutoff:
             continue
         volumes[row.supplier_id] = volumes.get(row.supplier_id, Decimal("0")) + Decimal(str(row.compare_qty or 0))
     return volumes
 
 
+def offer_miles(row: PurchasePrice) -> Decimal:
+    if row.miles and Decimal(str(row.miles)) > 0:
+        return Decimal(str(row.miles))
+    if row.supplier is not None and row.supplier.miles:
+        return Decimal(str(row.supplier.miles))
+    return Decimal("0")
+
+
+def classify_trip(row: PurchasePrice, gap_pct: Decimal, net: Decimal) -> str:
+    miles = offer_miles(row)
+    if gap_pct < GAP_PCT_THRESHOLD or net < STAY_THRESHOLD:
+        return "skip"
+    if row.source in BENCHMARK_SOURCES:
+        return "skip"
+    if miles > FAR_MILES:
+        return "skip"
+    if row.source in PAID_SOURCES and miles <= NEAR_MILES:
+        return "go"
+    return "maybe"
+
+
 def product_comparison(db: Session, product: Product) -> dict | None:
     paid = latest_by_supplier(db, product.id, source="invoice")
-    market = latest_by_supplier(db, product.id, source="catalog", days=3)
-    if not paid and not market:
+    account = latest_by_supplier(db, product.id, source="account", days=21)
+    public = latest_by_supplier(db, product.id, source="catalog", days=21)
+    benchmark = latest_by_supplier(db, product.id, source="benchmark", days=400)
+    if not paid and not account and not public:
         return None
     compare_unit = compare_unit_for(product)
     volumes = _volume_by_supplier(db, product.id)
@@ -359,8 +398,9 @@ def product_comparison(db: Session, product: Product) -> dict | None:
             ),
         )
     else:
-        current = min(market, key=lambda row: Decimal(str(row.unit_cost_compare)))
-    offers = paid + market
+        pool = account + public
+        current = min(pool, key=lambda row: Decimal(str(row.unit_cost_compare)))
+    offers = paid + account + public
     cheapest = min(offers, key=lambda row: Decimal(str(row.unit_cost_compare)))
     gap = money(Decimal(str(current.unit_cost_compare)) - Decimal(str(cheapest.unit_cost_compare)))
     usage = monthly_usage_compare(db, product)
@@ -373,17 +413,30 @@ def product_comparison(db: Session, product: Product) -> dict | None:
     if current_supplier and cheapest_supplier and cheapest_supplier.id != current_supplier.id:
         extra -= Decimal(str(current_supplier.delivery_fee or 0))
     net = money(monthly_unit - extra)
+    gap_pct = cost_percent(gap, current.unit_cost_compare)
+    trip_class = "skip"
     recommend = "stay"
     if cheapest.supplier_id != current.supplier_id and gap > 0:
-        if cheapest.source == "catalog":
-            recommend = "consider" if net >= STAY_THRESHOLD else "stay"
-        elif net >= STAY_THRESHOLD:
+        trip_class = classify_trip(cheapest, gap_pct, net)
+        if trip_class == "go":
             recommend = "switch"
+        elif trip_class == "maybe":
+            recommend = "consider"
+        else:
+            recommend = "stay"
+            net = money(0)
     if cheapest.supplier_id == current.supplier_id:
         recommend = "stay"
+        trip_class = "skip"
         net = money(0)
         monthly_unit = money(0)
         gap = money(0)
+        gap_pct = money(0)
+    nearby = [
+        row
+        for row in offers
+        if row.supplier_id != current.supplier_id and offer_miles(row) <= FAR_MILES
+    ]
     return {
         "product": product,
         "compare_unit": compare_unit,
@@ -391,16 +444,23 @@ def product_comparison(db: Session, product: Product) -> dict | None:
         "cheapest": cheapest,
         "offers": sorted(offers, key=lambda row: Decimal(str(row.unit_cost_compare))),
         "paid": paid,
-        "market": sorted(market, key=lambda row: Decimal(str(row.unit_cost_compare))),
+        "account": account,
+        "market": sorted(public, key=lambda row: Decimal(str(row.unit_cost_compare))),
+        "benchmark": benchmark,
+        "nearby": sorted(nearby, key=lambda row: Decimal(str(row.unit_cost_compare))),
         "gap": gap,
-        "gap_pct": cost_percent(gap, current.unit_cost_compare),
+        "gap_pct": gap_pct,
         "usage": usage,
         "monthly": monthly_unit,
         "net": net,
         "trip_cost": trip,
         "delivery_fee": delivery,
         "min_order": Decimal(str(cheapest_supplier.min_order or 0)) if cheapest_supplier else Decimal("0"),
+        "miles": offer_miles(cheapest),
+        "band": radius_band(offer_miles(cheapest)),
+        "trip_class": trip_class,
         "recommend": recommend,
+        "market_label": HOME_MARKET,
         "impacts": recipe_impacts(
             db,
             product,
@@ -425,7 +485,7 @@ def purchasing_board(db: Session, category: str = "") -> dict:
             continue
         cards.append(card)
         monthly_total += Decimal(str(card["net"] if card["recommend"] in ("switch", "consider") else 0))
-        if card["cheapest"].supplier_id != card["current"].supplier_id and card["gap"] > 0:
+        if card["recommend"] in ("switch", "consider"):
             cheaper_elsewhere += 1
     cards.sort(key=lambda item: Decimal(str(item["net"])), reverse=True)
     return {
@@ -434,6 +494,8 @@ def purchasing_board(db: Session, category: str = "") -> dict:
         "cheaper_elsewhere": cheaper_elsewhere,
         "category": category,
         "stay_threshold": STAY_THRESHOLD,
+        "gap_pct_threshold": GAP_PCT_THRESHOLD,
+        "market": HOME_MARKET,
     }
 
 
@@ -456,6 +518,8 @@ def board_payload(board: dict) -> dict:
                 "monthly": float(card["monthly"]),
                 "net": float(card["net"]),
                 "recommend": card["recommend"],
+                "trip_class": card.get("trip_class") or "skip",
+                "miles": float(card.get("miles") or 0),
                 "best_source": card["cheapest"].source,
                 "offers": [
                     {
@@ -465,6 +529,9 @@ def board_payload(board: dict) -> dict:
                         "unit_cost": float(row.unit_cost_compare),
                         "purchased_on": row.purchased_on.isoformat() if row.purchased_on else None,
                         "source": row.source,
+                        "miles": float(offer_miles(row)),
+                        "confidence": float(row.confidence or 0),
+                        "kind": row.source,
                     }
                     for row in card["offers"]
                 ],
@@ -530,4 +597,12 @@ def ensure_purchasing(db: Session) -> None:
             exists.exclude = exclude
             continue
         db.add(ProductAlias(product_id=product.id, alias=alias, exclude=exclude))
+    for name, spec in LOCAL_SUPPLIERS.items():
+        supplier = db.query(Supplier).filter(Supplier.name == name).first()
+        if supplier is None:
+            continue
+        if not supplier.city:
+            supplier.city = spec["city"]
+        if not supplier.miles:
+            supplier.miles = spec["miles"]
     db.commit()
