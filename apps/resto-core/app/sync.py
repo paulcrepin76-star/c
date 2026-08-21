@@ -16,7 +16,7 @@ from app.purchasing import backfill_purchase_prices
 from app.catalog import scan_catalogs
 from app.market import scan_external_prices
 
-TIMEOUT = httpx.Timeout(30.0, connect=10.0)
+TIMEOUT = httpx.Timeout(60.0, connect=10.0)
 
 
 def _now() -> datetime:
@@ -97,20 +97,30 @@ def infer_invoice_type(title: str, doc_type: str = "", correspondent: str = "", 
     return "food"
 
 
+def _days_since_year_start(now: datetime | None = None) -> int:
+    now = now or datetime.now(UTC).replace(tzinfo=None)
+    start = datetime(now.year, 1, 1)
+    return max((now - start).days + 1, 1)
+
+
 def _square_lookback_days(db: Session, days: int | None) -> int:
     if days is not None:
         return days
+    now = datetime.now(UTC).replace(tzinfo=None)
+    year_days = _days_since_year_start(now)
     last = (
         db.query(func.max(Sale.sold_at))
         .filter(Sale.square_order_id != "", ~Sale.square_order_id.like("demo-%"))
         .scalar()
     )
     if last is None:
-        return 365
+        return year_days
     if getattr(last, "tzinfo", None) is not None:
         last = last.replace(tzinfo=None)
-    age = max((datetime.now(UTC).replace(tzinfo=None) - last).days, 0)
-    return min(max(age + 2, 7), 365)
+    age = max((now - last).days, 0)
+    if age <= 7:
+        return 7
+    return max(age + 2, year_days)
 
 
 def sync_square(db: Session, days: int | None = None) -> dict:
