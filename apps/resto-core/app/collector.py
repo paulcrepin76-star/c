@@ -8,9 +8,9 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 
 from app.catalog import record_catalog_quote
+from app.equivalents import resolve_product, upsert_equivalent
 from app.geo import LOCAL_SUPPLIERS
 from app.models import Connector, Supplier
-from app.purchasing import match_canonical_product
 from app.units import parse_pack
 
 # How a price was collected. Never CAPTCHA, stealth, or proxy rotation.
@@ -58,8 +58,8 @@ COLLECTORS: list[dict] = [
     {"slug": "restaurant-depot", "label": "Restaurant Depot", "adapter": ADAPTER_AUTH, "status": "extension", "home": "https://www.restaurantdepot.com/", "hosts": ["restaurantdepot.com"], "blurb": "Member prices after you log in. Photograph the receipt for paid history."},
     {"slug": "sysco", "label": "Sysco", "adapter": ADAPTER_AUTH, "status": "extension", "home": "https://shop.sysco.com/", "hosts": ["sysco.com"], "blurb": "Customer portal. Extension while you are logged in — no password stored here."},
     {"slug": "us-foods", "label": "US Foods", "adapter": ADAPTER_AUTH, "status": "extension", "home": "https://www.usfoods.com/", "hosts": ["usfoods.com"], "blurb": "Customer portal. Same as Sysco: your browser, not a bot."},
-    {"slug": "sams-club", "label": "Sam's Club", "adapter": ADAPTER_EXTENSION, "status": "extension", "home": "https://www.samsclub.com/", "hosts": ["samsclub.com"], "blurb": "Hard bot wall. Browse normally on your Mac; the extension sends visible packs. Receipts remain highest trust."},
-    {"slug": "costco", "label": "Costco", "adapter": ADAPTER_EXTENSION, "status": "extension", "home": "https://www.costco.com/", "hosts": ["costco.com"], "blurb": "Same as Sam's: extension + receipts. Estero is the local warehouse."},
+    {"slug": "sams-club", "label": "Sam's Club", "adapter": ADAPTER_EXTENSION, "status": "extension", "home": "https://www.samsclub.com/", "hosts": ["samsclub.com"], "blurb": "Connected login files invoices. No catalog crawl. Open Sam's in Chrome; the extension reads hidden JSON on the page you already have open."},
+    {"slug": "costco", "label": "Costco", "adapter": ADAPTER_EXTENSION, "status": "extension", "home": "https://www.costco.com/", "hosts": ["costco.com"], "blurb": "Terms block automated catalog collection. Extension on the current page + receipts."},
     {"slug": "walmart", "label": "Walmart", "adapter": ADAPTER_EXTENSION, "status": "extension", "home": "https://www.walmart.com/", "hosts": ["walmart.com"], "blurb": "No consumer grocery price API. Extension or a receipt, not Marketplace seller APIs."},
 ]
 
@@ -143,31 +143,39 @@ def ingest_collected_items(db: Session, payload: dict) -> dict:
         if pack_qty <= 0 or price <= 0:
             skipped += 1
             continue
-        product, _score = match_canonical_product(db, name)
+        sku = str(raw.get("upc") or raw.get("sku") or "")[:80]
+        product = resolve_product(db, supplier, name, sku)
         if product is None:
             skipped += 1
             continue
         url = str(raw.get("url") or payload.get("page_url") or "")[:400]
+        item = {
+            "sku": sku,
+            "upc": str(raw.get("upc") or "")[:80],
+            "brand": str(raw.get("brand") or "")[:120],
+            "description": name[:240],
+            "pack_qty": pack_qty,
+            "pack_unit": pack_unit,
+            "pack_price": price,
+            "regular_price": raw.get("regular_price") or price,
+            "promo_price": raw.get("promo_price") or 0,
+            "url": url,
+            "miles": miles or supplier.miles or 0,
+            "location_label": store or supplier.city or supplier.name,
+            "is_discounted": bool(raw.get("discount") or raw.get("is_discounted")),
+            "available": bool(raw.get("available", True)),
+        }
         row = record_catalog_quote(
             db,
             product,
             supplier,
-            {
-                "sku": str(raw.get("upc") or raw.get("sku") or "")[:80],
-                "description": name[:240],
-                "pack_qty": pack_qty,
-                "pack_unit": pack_unit,
-                "pack_price": price,
-                "url": url,
-                "miles": miles or supplier.miles or 0,
-                "location_label": store or supplier.city or supplier.name,
-                "is_discounted": bool(raw.get("discount") or raw.get("is_discounted")),
-            },
+            item,
             scanned_on,
             source=source,
         )
         if row:
             row.confidence = confidence_for(source, scanned_on)
+            upsert_equivalent(db, product, supplier, item, seen_on=scanned_on, source=source)
             recorded += 1
     if recorded:
         connector = db.query(Connector).filter(Connector.name == supplier.name).first()

@@ -10,7 +10,11 @@ button.addEventListener("click", async () => {
   }
   let page;
   try {
-    page = await chrome.tabs.sendMessage(tab.id, "collect");
+    const stored = await chrome.storage.local.get(["watchProducts"]);
+    page = await chrome.tabs.sendMessage(tab.id, {
+      type: "collect",
+      watch: stored.watchProducts || [],
+    });
   } catch (err) {
     status.textContent = "This site is not in the collector list, or reload the tab.";
     return;

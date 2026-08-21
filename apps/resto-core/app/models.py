@@ -286,3 +286,59 @@ class Connection(Base):
     extra: Mapped[str] = mapped_column(Text, default="")
     last_error: Mapped[str] = mapped_column(Text, default="")
     updated_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
+class ProductEquivalent(Base):
+    """One supplier pack that maps to a restaurant ingredient (butter at Chef's vs Costco)."""
+
+    __tablename__ = "product_equivalents"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"))
+    supplier_id: Mapped[int] = mapped_column(ForeignKey("suppliers.id"))
+    sku: Mapped[str] = mapped_column(String(80), default="")
+    upc: Mapped[str] = mapped_column(String(80), default="")
+    brand: Mapped[str] = mapped_column(String(120), default="")
+    description: Mapped[str] = mapped_column(String(240), default="")
+    pack_qty: Mapped[Decimal] = mapped_column(Qty, default=0)
+    pack_unit: Mapped[str] = mapped_column(String(20), default="")
+    case_qty: Mapped[Decimal] = mapped_column(Qty, default=0)
+    last_price: Mapped[Decimal] = mapped_column(Money, default=0)
+    last_seen: Mapped[date | None] = mapped_column(Date)
+    source: Mapped[str] = mapped_column(String(20), default="catalog")
+    url: Mapped[str] = mapped_column(String(400), default="")
+
+    product: Mapped[Product] = relationship()
+    supplier: Mapped[Supplier] = relationship()
+
+    __table_args__ = (UniqueConstraint("supplier_id", "sku", name="uq_equivalent_supplier_sku"),)
+
+
+class CatalogItem(Base):
+    """A listing captured on a given day. Unmatched discovery rows stay here."""
+
+    __tablename__ = "catalog_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    supplier_id: Mapped[int] = mapped_column(ForeignKey("suppliers.id"))
+    product_id: Mapped[int | None] = mapped_column(ForeignKey("products.id"), nullable=True)
+    sku: Mapped[str] = mapped_column(String(80), default="")
+    upc: Mapped[str] = mapped_column(String(80), default="")
+    brand: Mapped[str] = mapped_column(String(120), default="")
+    description: Mapped[str] = mapped_column(String(240), default="")
+    pack_qty: Mapped[Decimal] = mapped_column(Qty, default=0)
+    pack_unit: Mapped[str] = mapped_column(String(20), default="")
+    case_qty: Mapped[Decimal] = mapped_column(Qty, default=0)
+    regular_price: Mapped[Decimal] = mapped_column(Money, default=0)
+    promo_price: Mapped[Decimal] = mapped_column(Money, default=0)
+    location_label: Mapped[str] = mapped_column(String(160), default="")
+    available: Mapped[bool] = mapped_column(Boolean, default=True)
+    captured_on: Mapped[date | None] = mapped_column(Date)
+    source: Mapped[str] = mapped_column(String(20), default="catalog")
+    scan_mode: Mapped[str] = mapped_column(String(20), default="refresh")
+    url: Mapped[str] = mapped_column(String(400), default="")
+
+    product: Mapped[Product | None] = relationship()
+    supplier: Mapped[Supplier] = relationship()
+
+    __table_args__ = (UniqueConstraint("supplier_id", "sku", "captured_on", name="uq_catalog_item_day"),)

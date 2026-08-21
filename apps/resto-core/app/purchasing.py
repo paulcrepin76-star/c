@@ -198,6 +198,9 @@ def record_line(db: Session, invoice: Invoice, line: InvoiceLine) -> PurchasePri
     )
     if pack_price <= 0:
         return None
+    from app.equivalents import extract_sku, upsert_equivalent
+
+    sku = extract_sku(line.raw_description)
     if line.product_id:
         product = db.get(Product, line.product_id)
         confidence = Decimal("1")
@@ -227,7 +230,24 @@ def record_line(db: Session, invoice: Invoice, line: InvoiceLine) -> PurchasePri
         existing.unit_cost_compare = unit_compare
         existing.raw_description = str(line.raw_description or "")[:240]
         existing.confidence = confidence
+        if sku:
+            existing.sku = sku
         product.current_cost = unit_base
+        if supplier:
+            upsert_equivalent(
+                db,
+                product,
+                supplier,
+                {
+                    "sku": sku,
+                    "description": line.raw_description,
+                    "pack_qty": pack_qty,
+                    "pack_unit": pack_unit,
+                    "pack_price": pack_price,
+                },
+                seen_on=invoice.issued_on,
+                source="invoice",
+            )
         return existing
     row = PurchasePrice(
         product_id=product.id,
@@ -235,6 +255,7 @@ def record_line(db: Session, invoice: Invoice, line: InvoiceLine) -> PurchasePri
         invoice_id=invoice.id,
         invoice_line_id=line.id,
         purchased_on=invoice.issued_on,
+        sku=sku,
         raw_description=str(line.raw_description or "")[:240],
         pack_qty=pack_qty,
         pack_unit=pack_unit,
@@ -250,6 +271,21 @@ def record_line(db: Session, invoice: Invoice, line: InvoiceLine) -> PurchasePri
     if line.product_id is None:
         line.product_id = product.id
     product.current_cost = unit_base
+    if supplier:
+        upsert_equivalent(
+            db,
+            product,
+            supplier,
+            {
+                "sku": sku,
+                "description": line.raw_description,
+                "pack_qty": pack_qty,
+                "pack_unit": pack_unit,
+                "pack_price": pack_price,
+            },
+            seen_on=invoice.issued_on,
+            source="invoice",
+        )
     return row
 
 
@@ -467,7 +503,35 @@ def product_comparison(db: Session, product: Product) -> dict | None:
             Decimal(str(current.unit_cost_compare)),
             Decimal(str(cheapest.unit_cost_compare)),
         ),
+        "equivalents": _equivalent_rows(db, product, offers),
     }
+
+
+def _equivalent_rows(db: Session, product: Product, offers: list[PurchasePrice]) -> list[dict]:
+    from app.equivalents import equivalents_for
+
+    offer_by_supplier = {}
+    for row in offers:
+        current = offer_by_supplier.get(row.supplier_id)
+        if current is None or Decimal(str(row.unit_cost_compare)) < Decimal(str(current.unit_cost_compare)):
+            offer_by_supplier[row.supplier_id] = row
+    rows = []
+    for equivalent in equivalents_for(db, product):
+        offer = offer_by_supplier.get(equivalent.supplier_id)
+        unit_cost = Decimal(str(offer.unit_cost_compare)) if offer else Decimal("0")
+        rows.append(
+            {
+                "supplier": equivalent.supplier.name if equivalent.supplier else "",
+                "sku": equivalent.sku,
+                "pack": f"{equivalent.pack_qty} {equivalent.pack_unit}".strip(),
+                "unit_cost": unit_cost,
+                "last_price": Decimal(str(equivalent.last_price or 0)),
+                "last_seen": equivalent.last_seen,
+                "source": equivalent.source,
+            }
+        )
+    rows.sort(key=lambda item: (item["unit_cost"] == 0, item["unit_cost"], item["supplier"]))
+    return rows
 
 
 def purchasing_board(db: Session, category: str = "") -> dict:
@@ -521,6 +585,18 @@ def board_payload(board: dict) -> dict:
                 "trip_class": card.get("trip_class") or "skip",
                 "miles": float(card.get("miles") or 0),
                 "best_source": card["cheapest"].source,
+                "equivalents": [
+                    {
+                        "supplier": item["supplier"],
+                        "sku": item["sku"],
+                        "pack": item["pack"],
+                        "unit_cost": float(item["unit_cost"] or 0),
+                        "last_price": float(item["last_price"] or 0),
+                        "last_seen": item["last_seen"].isoformat() if item["last_seen"] else None,
+                        "source": item["source"],
+                    }
+                    for item in card.get("equivalents") or []
+                ],
                 "offers": [
                     {
                         "supplier": row.supplier.name if row.supplier else "",

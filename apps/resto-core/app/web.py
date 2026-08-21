@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.catalog import catalog_lexicon, scan_catalogs
 from app.collector import collector_rows, playwright_available, source_label
 from app.config import settings
+from app.equivalents import connection_status, relevant_products, watch_payload
 from app.geo import FAR_MILES, HOME_MARKET, NEAR_MILES
 from app.market import scan_external_prices
 from app.connections import access_token_for
@@ -488,16 +489,19 @@ def purchasing_page(request: Request, category: str = "", db: Session = Depends(
     ok, err = _pop_flash(request)
     chosen = category if category in CATEGORIES else ""
     board = purchasing_board(db, chosen)
+    relevant = relevant_products(db, mode="refresh")
     return render(
         request,
         "purchasing.html",
         board=board,
         categories=CATEGORIES,
-        catalogs=catalog_lexicon(),
+        catalogs=catalog_lexicon(db),
         collectors=collector_rows(),
         source_label=source_label,
         market=HOME_MARKET,
         playwright_ready=playwright_available(),
+        relevant_count=len(relevant),
+        sams_connected=connection_status(db, "sams-club") == "connected",
         flash_ok=ok,
         flash_err=err,
         page="purchasing",
@@ -505,20 +509,23 @@ def purchasing_page(request: Request, category: str = "", db: Session = Depends(
 
 
 @router.post("/purchasing/scan")
-def purchasing_scan(request: Request, db: Session = Depends(get_db)):
+def purchasing_scan(request: Request, mode: str = Form("refresh"), db: Session = Depends(get_db)):
     try:
-        catalogs = scan_catalogs(db)
+        chosen = "discovery" if mode == "discovery" else "refresh"
+        catalogs = scan_catalogs(db, mode=chosen)
         external = scan_external_prices(db)
         listed = int(catalogs.get("quotes") or 0) + int(external.get("quotes") or 0)
+        skipped = len(catalogs.get("skipped") or [])
+        label = "Discovery" if chosen == "discovery" else "Daily refresh"
         _flash(
             request,
             ok=(
-                f"Price collector finished. {listed} listed pack(s) today "
-                f"({HOME_MARKET}: Open Prices {external.get('open_prices', {}).get('locations', 0)} store(s))."
+                f"{label}: {listed} listed pack(s) for {catalogs.get('relevant') or 0} item(s) you buy. "
+                f"{skipped} source(s) stay on receipts/extension (Sam's/Costco are not crawled)."
             ),
         )
     except Exception:  # noqa: BLE001
-        _flash(request, err="Collector scan failed. APIs and public HTML are tried; club sites still need the Chrome extension.")
+        _flash(request, err="Collector scan failed. Public catalogs and APIs are tried; club sites still need the Chrome extension.")
     return RedirectResponse("/purchasing", status_code=303)
 
 
@@ -536,6 +543,8 @@ def collector_page(request: Request, db: Session = Depends(get_db)):
         playwright_ready=playwright_available(),
         cellar_url=settings.resto_public_url,
         cellar_api_key=settings.resto_api_key,
+        relevant=watch_payload(db),
+        sams_connected=connection_status(db, "sams-club") == "connected",
         flash_ok=ok,
         flash_err=err,
     )

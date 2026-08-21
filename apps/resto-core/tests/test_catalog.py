@@ -156,6 +156,7 @@ def test_purchasing_page_shows_catalog_lexicon():
         assert "Bonita Springs" in text
         assert "WebstaurantStore" in text
         assert "Sam's Club" in text
-        assert "Scan APIs and public catalogs" in text
+        assert "Daily refresh" in text
+        assert "receipts + extension" in text or "Sam's Club" in text
         assert "BROWSER EXTENSION" in text
         assert "Open Prices" in text

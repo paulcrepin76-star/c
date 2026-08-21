@@ -9,8 +9,18 @@ from urllib.parse import quote_plus
 import httpx
 from sqlalchemy.orm import Session
 
+from app.equivalents import (
+    connection_status,
+    dedupe_products,
+    resolve_product,
+    search_queries,
+    store_catalog_item,
+    relevant_products,
+    upsert_equivalent,
+    walk_json_products,
+)
 from app.models import Connector, Product, PurchasePrice, Supplier
-from app.purchasing import compare_unit_for, match_canonical_product
+from app.purchasing import compare_unit_for
 from app.units import comparable_cost, parse_pack, to_base
 
 USER_AGENT = (
@@ -19,24 +29,26 @@ USER_AGENT = (
 )
 TIMEOUT = httpx.Timeout(20.0, connect=8.0)
 
-# Public pages only. No logins, no CAPTCHA bypass, no 2FA.
-# fetchable sources are hit every night; the rest stay on the lexicon as honest status.
+# Public pages only. No logins, no CAPTCHA bypass, no 2FA, no stealth.
+# Nightly refresh only searches products the cafe already buys.
+# Blocked club sites (Sam's, Costco) stay on receipts + the Chrome extension even if Connect says connected.
 CATALOGS: list[dict] = [
     {
         "slug": "webstaurantstore",
         "label": "WebstaurantStore",
         "parser": "webstaurant",
         "kind": "public",
+        "method": "public JSON/HTML",
         "blurb": "Restaurant cases with public prices. Best public match for cafe packs.",
         "search": "https://www.webstaurantstore.com/search/{slug}.html",
         "home": "https://www.webstaurantstore.com/",
     },
-    {"slug": "sams-club", "label": "Sam's Club", "kind": "blocked", "blurb": "Member price is public in a browser, but the site blocks bots (PerimeterX).", "home": "https://www.samsclub.com/"},
-    {"slug": "costco", "label": "Costco", "kind": "blocked", "blurb": "Warehouse prices need a membership session. Email receipts already feed paid history.", "home": "https://www.costco.com/"},
-    {"slug": "walmart", "label": "Walmart", "kind": "blocked", "blurb": "Search redirects to a bot wall from a server.", "home": "https://www.walmart.com/"},
-    {"slug": "publix", "label": "Publix", "kind": "js", "blurb": "Weekly ad is public in a browser; HTML has no dollars until JavaScript runs.", "home": "https://www.publix.com/"},
-    {"slug": "target", "label": "Target", "kind": "js", "blurb": "Prices load in the app shell, not in the first HTML.", "home": "https://www.target.com/"},
-    {"slug": "aldi", "label": "Aldi", "kind": "js", "blurb": "Store finder first; no stable public search HTML.", "home": "https://www.aldi.us/"},
+    {"slug": "sams-club", "label": "Sam's Club", "kind": "blocked", "method": "receipts + extension", "blurb": "Connected login files invoices. Catalog crawl is not allowed (PerimeterX / terms). Open Sam's in Chrome and send the page.", "home": "https://www.samsclub.com/"},
+    {"slug": "costco", "label": "Costco", "kind": "blocked", "method": "receipts + extension", "blurb": "Costco prohibits automated catalog collection. Email receipts and the extension while you shop.", "home": "https://www.costco.com/"},
+    {"slug": "walmart", "label": "Walmart", "kind": "blocked", "method": "receipts + extension", "blurb": "Search redirects to a bot wall from a server.", "home": "https://www.walmart.com/"},
+    {"slug": "publix", "label": "Publix", "kind": "js", "method": "extension / Playwright", "blurb": "Weekly ad is public in a browser; HTML has no dollars until JavaScript runs.", "home": "https://www.publix.com/"},
+    {"slug": "target", "label": "Target", "kind": "js", "method": "extension / Playwright", "blurb": "Prices load in the app shell, not in the first HTML.", "home": "https://www.target.com/"},
+    {"slug": "aldi", "label": "Aldi", "kind": "js", "method": "extension / Playwright", "blurb": "Store finder first; no stable public search HTML.", "home": "https://www.aldi.us/"},
     {"slug": "heb", "label": "H-E-B", "kind": "blocked", "blurb": "Texas chain; search is not useful from a datacenter IP.", "home": "https://www.heb.com/"},
     {"slug": "bjs", "label": "BJ's Wholesale", "kind": "blocked", "blurb": "Club prices need a membership cookie.", "home": "https://www.bjs.com/"},
     {"slug": "restaurant-depot", "label": "Restaurant Depot", "kind": "login", "blurb": "Cash-and-carry. Prices after a member login, not on the public homepage.", "home": "https://www.restaurantdepot.com/"},
@@ -128,13 +140,37 @@ def parse_webstaurant(html: str) -> list[dict]:
             {
                 "description": description[:240],
                 "sku": str(item.get("itemNumber") or "")[:80],
+                "brand": str(item.get("brand") or item.get("brandName") or "")[:120],
                 "pack_price": amount,
+                "regular_price": amount,
                 "pack_qty": pack_qty,
                 "pack_unit": pack_unit,
+                "case_qty": Decimal(str(units or 0)) if units else Decimal("0"),
                 "url": link[:400],
+                "available": True,
             }
         )
     return found
+
+
+def extract_html_json_products(html: str) -> list[dict]:
+    found: list[dict] = []
+    for raw in re.findall(r"<script[^>]*>(.*?)</script>", html, re.S | re.I):
+        text = raw.strip()
+        if text.startswith("<!--"):
+            text = text[4:]
+        if text.endswith("-->"):
+            text = text[:-3]
+        text = text.strip()
+        if len(text) < 20 or text[0] not in "{[":
+            continue
+        try:
+            payload = json.loads(text)
+        except json.JSONDecodeError:
+            continue
+        found.extend(walk_json_products(payload))
+    return dedupe_products(found)
+
 
 PARSERS = {"webstaurant": parse_webstaurant}
 
@@ -245,6 +281,8 @@ def record_catalog_quote(
     if existing is None:
         db.add(row)
     db.flush()
+    upsert_equivalent(db, product, supplier, item, seen_on=scanned_on, source=source)
+    store_catalog_item(db, supplier, item, scanned_on, product=product, source=source)
     return row
 
 
@@ -266,7 +304,14 @@ def _search_url(source: dict, query: str) -> str:
     return template.replace("{slug}", _slug_query(query)).replace("{query}", quote_plus(query))
 
 
-def scan_source(db: Session, source: dict, product: Product, query: str, scanned_on: date) -> dict:
+def scan_source(
+    db: Session,
+    source: dict,
+    product: Product,
+    query: str,
+    scanned_on: date,
+    mode: str = "refresh",
+) -> dict:
     parser = PARSERS.get(source.get("parser") or "")
     if parser is None:
         return {"status": source.get("kind") or "skipped", "quotes": 0}
@@ -280,33 +325,77 @@ def scan_source(db: Session, source: dict, product: Product, query: str, scanned
     supplier = _supplier_for(db, source["label"])
     if supplier is None:
         return {"status": "error", "error": "missing supplier", "quotes": 0}
-    recorded = False
-    for item in parser(html):
+    items = parser(html)
+    if not items:
+        items = extract_html_json_products(html)
+    recorded = 0
+    unmatched = 0
+    for item in items:
         if not _query_hits(item["description"], query):
             continue
-        matched, _score = match_canonical_product(db, item["description"])
+        if item.get("url", "").startswith("/"):
+            item["url"] = "https://www.webstaurantstore.com" + item["url"]
+        matched = resolve_product(db, supplier, item["description"], str(item.get("sku") or ""))
         if matched is None or matched.id != product.id:
+            if mode == "discovery" and matched is None:
+                store_catalog_item(db, supplier, item, scanned_on, source="catalog", scan_mode=mode)
+                unmatched += 1
             continue
         if record_catalog_quote(db, product, supplier, item, scanned_on):
-            recorded = True
-    if recorded:
+            recorded += 1
+    if recorded or unmatched:
         db.commit()
-    return {"status": "ok", "http": status, "quotes": int(recorded), "url": url}
+    return {"status": "ok", "http": status, "quotes": recorded, "unmatched": unmatched, "url": url}
 
 
-def scan_catalogs(db: Session) -> dict:
+def _source_skip(db: Session, source: dict) -> dict | None:
+    kind = source.get("kind") or "listed"
+    if source.get("parser"):
+        return None
+    connected = connection_status(db, source.get("slug") or "")
+    if kind in ("blocked", "login"):
+        return {
+            "source": source["label"],
+            "status": "receipts_or_extension",
+            "quotes": 0,
+            "connected": connected,
+            "reason": source.get("blurb") or kind,
+        }
+    if kind == "js":
+        return {
+            "source": source["label"],
+            "status": "needs_browser",
+            "quotes": 0,
+            "connected": connected,
+            "reason": "Public JS prices: use the Chrome extension on the page, or Playwright later. No login crawl.",
+        }
+    return {
+        "source": source["label"],
+        "status": "listed",
+        "quotes": 0,
+        "connected": connected,
+        "reason": source.get("blurb") or "",
+    }
+
+
+def scan_catalogs(db: Session, mode: str = "refresh") -> dict:
     ensure_catalog_suppliers(db)
     scanned_on = date.today()
+    mode = "discovery" if mode == "discovery" else "refresh"
+    watched = relevant_products(db, mode=mode)
     fetchable = [source for source in CATALOGS if source.get("parser")]
     results = []
+    skipped = []
     quotes = 0
-    for source in fetchable:
+    unmatched = 0
+    for source in CATALOGS:
+        skip = _source_skip(db, source)
+        if skip:
+            skipped.append(skip)
+            continue
         source_quotes = 0
         last_error = ""
-        for sku, queries in WATCH.items():
-            product = db.query(Product).filter(Product.sku == sku).first()
-            if product is None:
-                continue
+        for product in watched:
             supplier = _supplier_for(db, source["label"])
             if supplier is not None:
                 db.query(PurchasePrice).filter(
@@ -316,9 +405,15 @@ def scan_catalogs(db: Session) -> dict:
                     PurchasePrice.purchased_on == scanned_on,
                 ).delete(synchronize_session=False)
                 db.flush()
+            queries = search_queries(db, product, mode=mode)
+            extra = WATCH.get(product.sku) or ()
+            for query in extra:
+                if query.lower() not in queries:
+                    queries.append(query)
             for query in queries:
-                outcome = scan_source(db, source, product, query, scanned_on)
+                outcome = scan_source(db, source, product, query, scanned_on, mode=mode)
                 source_quotes += int(outcome.get("quotes") or 0)
+                unmatched += int(outcome.get("unmatched") or 0)
                 if outcome.get("status") not in ("ok", "skipped") and not last_error:
                     last_error = str(outcome.get("error") or outcome.get("status") or "")
         quotes += source_quotes
@@ -327,6 +422,7 @@ def scan_catalogs(db: Session) -> dict:
             connector.status = "ready" if source_quotes or not last_error else "error"
             connector.last_error = last_error[:300]
             connector.last_run_at = datetime.now(UTC).replace(tzinfo=None)
+            connector.notes = f"{mode} scan · {source_quotes} pack(s) for {len(watched)} relevant item(s)"
         results.append({"source": source["label"], "quotes": source_quotes, "error": last_error})
     db.commit()
     stored = (
@@ -339,23 +435,40 @@ def scan_catalogs(db: Session) -> dict:
     )
     return {
         "status": "ok",
+        "mode": mode,
+        "relevant": len(watched),
         "quotes": stored,
         "matched": quotes,
+        "unmatched": unmatched,
         "sources": results,
+        "skipped": skipped,
         "lexicon": len(CATALOGS),
         "fetchable": len(fetchable),
         "scanned_on": scanned_on.isoformat(),
     }
 
 
-def catalog_lexicon() -> list[dict]:
-    return [
-        {
-            "label": source["label"],
-            "kind": source.get("kind") or ("public" if source.get("parser") else "listed"),
-            "blurb": source.get("blurb") or "",
-            "home": source.get("home") or "",
-            "fetchable": bool(source.get("parser")),
-        }
-        for source in CATALOGS
-    ]
+def catalog_lexicon(db: Session | None = None) -> list[dict]:
+    method_for = {
+        "public": "public JSON/HTML",
+        "js": "extension / Playwright",
+        "login": "extension while logged in",
+        "blocked": "receipts + extension",
+    }
+    rows = []
+    for source in CATALOGS:
+        kind = source.get("kind") or ("public" if source.get("parser") else "listed")
+        connected = connection_status(db, source.get("slug") or "") if db is not None else ""
+        rows.append(
+            {
+                "label": source["label"],
+                "slug": source.get("slug") or "",
+                "kind": kind,
+                "method": source.get("method") or method_for.get(kind, kind),
+                "blurb": source.get("blurb") or "",
+                "home": source.get("home") or "",
+                "fetchable": bool(source.get("parser")),
+                "connected": connected,
+            }
+        )
+    return rows

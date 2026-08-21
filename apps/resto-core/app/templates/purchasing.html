@@ -3,7 +3,7 @@
 {% block content %}
 <p class="eyebrow">{{ board.market }} · {{ board.gap_pct_threshold }}% and {{ board.stay_threshold | money }}/month</p>
 <h1>Supplier price comparison</h1>
-<p class="lede">Your invoices are the source of truth. Public APIs, a full browser, and the Chrome extension fill in nearby listed prices. Alerts only fire when another source is at least {{ board.gap_pct_threshold }}% cheaper and the monthly saving is over {{ board.stay_threshold | money }}.</p>
+<p class="lede">Find the cheapest equivalent of what Survey Cafe actually buys. Invoices are the paid source of truth. Public catalogs refresh those items daily. Sam's and Costco are never crawled.</p>
 {% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
 {% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
 
@@ -35,8 +35,13 @@
 </section>
 
 <form method="post" action="/purchasing/scan" class="inline" style="margin-bottom: 16px;">
-  <button type="submit" class="btn">Scan APIs and public catalogs</button>
-  <span class="muted">Nightly 02:10 already does this. Sam’s, Costco, Chef’s and Gordon use the <a href="/collector">Price Collector extension</a> while you browse.</span>
+  <input type="hidden" name="mode" value="refresh">
+  <button type="submit" class="btn">Daily refresh · {{ relevant_count }} item(s) we buy</button>
+</form>
+<form method="post" action="/purchasing/scan" class="inline" style="margin-bottom: 16px;">
+  <input type="hidden" name="mode" value="discovery">
+  <button type="submit" class="btn secondary">Monthly discovery · public catalogs only</button>
+  <span class="muted">Nightly 02:10 already refreshes what you buy. Sam’s and Costco stay on receipts and the <a href="/collector">extension</a>{% if sams_connected %} — Sam’s is connected for invoices, not for crawling{% endif %}.</span>
 </form>
 
 {% if not board.cards %}
@@ -75,6 +80,16 @@
     · {{ card.miles }} mi
     {% endif %}
   </p>
+  {% if card.equivalents %}
+  <p class="muted">
+    Equivalents:
+    {% for eq in card.equivalents %}
+      {{ eq.supplier }}{% if eq.sku %} SKU {{ eq.sku }}{% endif %}
+      {% if eq.pack %} {{ eq.pack }}{% endif %}
+      {% if eq.unit_cost %} {{ eq.unit_cost | unitcost }}/{{ card.compare_unit }}{% endif %}{% if not loop.last %} · {% endif %}
+    {% endfor %}
+  </p>
+  {% endif %}
   <table class="wide">
     <thead>
       <tr>

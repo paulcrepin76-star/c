@@ -76,6 +76,18 @@ document.getElementById("test").addEventListener("click", async () => {
       return;
     }
     store().set({ cellarUrl: url, apiKey: key });
+    try {
+      const watch = await fetch(`${url}/api/prices/watch`, { headers: { "X-API-Key": key } });
+      if (watch.ok) {
+        const body = await watch.json();
+        store().set({ watchProducts: body.products || [] });
+        status.className = "ok";
+        status.textContent = `Connected to the cellar. Watching ${body.count || 0} item(s) you buy.`;
+        return;
+      }
+    } catch (_err) {
+      /* ping already succeeded */
+    }
     status.className = "ok";
     status.textContent = "Connected to the cellar.";
   } catch (err) {

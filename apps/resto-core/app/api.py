@@ -12,6 +12,7 @@ from app.paperless_hook import ensure_paperless_sync_workflow, sync_paperless_no
 from app.purchasing import board_payload, purchasing_board
 from app.catalog import scan_catalogs
 from app.collector import ingest_collected_items
+from app.equivalents import watch_payload
 from app.market import scan_external_prices
 from app.services import period_costing, wine_rows
 from app.sync import sync_all, sync_paperless
@@ -142,8 +143,12 @@ class CollectItem(BaseModel):
     unit: str = ""
     upc: str = ""
     sku: str = ""
+    brand: str = ""
     url: str = ""
     discount: bool = False
+    available: bool = True
+    regular_price: Decimal | None = None
+    promo_price: Decimal | None = None
 
 
 class CollectBatch(BaseModel):
@@ -161,14 +166,19 @@ def prices_ping():
     return {"ok": True, "app": "cellar"}
 
 
+@router.get("/prices/watch", dependencies=[Depends(require_key)])
+def prices_watch(db: Session = Depends(get_db)):
+    return watch_payload(db)
+
+
 @router.post("/prices/collect", dependencies=[Depends(require_key)])
 def collect_prices(batch: CollectBatch, db: Session = Depends(get_db)):
     return ingest_collected_items(db, batch.model_dump())
 
 
 @router.post("/jobs/scan-catalogs", dependencies=[Depends(require_key)])
-def scan_catalogs_job(db: Session = Depends(get_db)):
-    catalogs = scan_catalogs(db)
+def scan_catalogs_job(mode: str = "refresh", db: Session = Depends(get_db)):
+    catalogs = scan_catalogs(db, mode=mode)
     external = scan_external_prices(db)
     return {"catalogs": catalogs, "external": external}
 

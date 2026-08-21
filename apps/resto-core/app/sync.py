@@ -352,7 +352,7 @@ def sync_all(db: Session) -> dict:
     prices = {"status": "ok", "created": backfill_purchase_prices(db)}
     if settings.catalog_scan_enabled:
         try:
-            catalogs = scan_catalogs(db)
+            catalogs = scan_catalogs(db, mode="refresh")
         except Exception as exc:  # noqa: BLE001
             catalogs = {"status": "error", "error": str(exc)[:200]}
     else:

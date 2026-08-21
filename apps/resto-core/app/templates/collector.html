@@ -3,9 +3,12 @@
 {% block content %}
 <p class="eyebrow">{{ market }}</p>
 <h1>Price Collector</h1>
-<p class="lede">Four ways into the same table: official APIs, a full Chromium browser for public JavaScript sites, your own logged-in Chrome session, and Paperless receipts. We do not solve CAPTCHAs or rotate proxies.</p>
+<p class="lede">Four ways into the same table: official APIs, a full Chromium browser for public JavaScript sites, your own logged-in Chrome session, and Paperless receipts. We do not crawl Sam's or Costco, solve CAPTCHAs, or rotate proxies.</p>
 {% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
 {% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
+{% if sams_connected %}
+<div class="flash ok">Sam's is connected for invoices. The cellar will not open samsclub.com. Stay logged in on this Mac, open butter/dairy (or any page you already shop), and click Send visible prices. Hidden JSON on that page is used when the site loads it.</div>
+{% endif %}
 
 <section class="kpis">
   <article>
@@ -36,9 +39,12 @@
     <li>Paste this cellar key — not an n8n API key:
       <p><code id="cellar-api-key">{{ cellar_api_key }}</code></p>
     </li>
-    <li>Click <b>Test connection</b> in the extension. Then log in to Sam’s or Chef’s and click <b>Send visible prices</b>.</li>
+    <li>Click <b>Test connection</b> in the extension. Then log in to Sam’s or Chef’s and click <b>Send visible prices</b> on the page you are already looking at. The extension does not click through the whole catalog.</li>
   </ol>
-  <p class="muted">The extension only sends what you can already see. Session cookies stay in Chrome. Treat the API key like a password.</p>
+  <p class="muted">The extension only sends what this page already loaded (preferring the site's own JSON). Session cookies stay in Chrome. Treat the API key like a password.</p>
+  {% if relevant and relevant.products %}
+  <p class="muted">Daily watch list ({{ relevant.count }}): {% for item in relevant.products %}{{ item.name }}{% if not loop.last %}, {% endif %}{% endfor %}</p>
+  {% endif %}
 </div>
 
 <div class="card">
