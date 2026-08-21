@@ -158,3 +158,21 @@ def test_vendor_connect_uses_the_same_login_you_already_have():
         assert "Chef's Warehouse is connected" in unescape(warehouse.text)
 
 
+def test_recipe_import_survives_long_mealie_ingredient_notes():
+    long = (
+        "/ Pinch of Salt / Pizca de Sal · Pinch of Salt / Pizca de Sal · REVIEW REQUIRED: "
+        "The quantity is given as a fraction ('/') and is not quantified. " + ("note " * 40)
+    )
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/recipes/import",
+            headers={"X-API-Key": "test"},
+            json={"recipes": [{"name": "Huevos", "mealie_id": "huevos-1", "lines": [{"name": long, "qty": 1, "unit": "g"}]}]},
+        )
+        assert response.status_code == 200
+        assert response.json()["created"] == 1
+        sync = client.post("/connect/sync", follow_redirects=True)
+        assert sync.status_code == 200
+
+
+

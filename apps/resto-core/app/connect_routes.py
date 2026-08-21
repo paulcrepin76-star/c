@@ -352,7 +352,15 @@ def disconnect_service(name: str, request: Request, db: Session = Depends(get_db
 
 @router.post("/connect/sync")
 def sync_now(request: Request, db: Session = Depends(get_db)):
-    result = sync_all(db)
+    try:
+        result = sync_all(db)
+    except Exception:  # noqa: BLE001
+        try:
+            db.rollback()
+        except Exception:  # noqa: BLE001
+            pass
+        _flash(request, err="Sync hit a snag. Try Sync now again.")
+        return _redirect_connect()
     parts = []
     errors = []
     for name, payload in result.items():

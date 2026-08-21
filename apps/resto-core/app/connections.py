@@ -95,6 +95,10 @@ def mark_connected(db: Session, name: str, access_token: str, refresh_token: str
 
 
 def mark_error(db: Session, name: str, message: str) -> Connection:
+    try:
+        db.rollback()
+    except Exception:  # noqa: BLE001
+        pass
     row = get_connection(db, name)
     row.last_error = message[:500]
     row.updated_at = datetime.now(UTC).replace(tzinfo=None)

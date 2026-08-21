@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.connections import access_token_for, extra_dict, get_connection, mark_error, set_extra, square_host
-from app.ingest import ingest_paperless_doc, ingest_recipes, ingest_sales
+from app.ingest import clean_food_name, ingest_paperless_doc, ingest_recipes, ingest_sales
 
 TIMEOUT = httpx.Timeout(30.0, connect=10.0)
 
@@ -126,7 +126,11 @@ def _mealie_recipe_payload(detail: dict) -> dict:
         food = ""
         if isinstance(ingredient.get("food"), dict):
             food = str(ingredient["food"].get("name") or "")
-        food = food or str(ingredient.get("display") or ingredient.get("note") or "")
+        if not food:
+            food = str(ingredient.get("display") or ingredient.get("note") or "")
+        food = clean_food_name(food)
+        if not food:
+            continue
         unit_obj = ingredient.get("unit") or {}
         unit = ""
         if isinstance(unit_obj, dict):
@@ -145,7 +149,7 @@ def _mealie_recipe_payload(detail: dict) -> dict:
         "costing_group": infer_costing_group(name) if infer_costing_group(name) != "food" else (
             "beverage" if any(word in name.lower() for word in ("sangria", "cocktail", "drink")) else "food"
         ),
-        "lines": [line for line in lines if line["name"]],
+        "lines": lines,
     }
 
 

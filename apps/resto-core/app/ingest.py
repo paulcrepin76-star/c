@@ -27,7 +27,25 @@ def match_supplier(db: Session, correspondent: str | None, invoice_type: str = "
     return supplier
 
 
-def match_sellable(db: Session, name: str, square_item_id: str = "") -> SellableItem | None:
+def clip(value, limit: int) -> str:
+    return str(value or "").strip()[:limit]
+
+
+def clean_food_name(raw: str) -> str:
+    text = str(raw or "").strip()
+    if "REVIEW REQUIRED" in text.upper():
+        text = text.split("REVIEW REQUIRED")[0]
+        text = text.split("review required")[0]
+    text = text.split("·")[0]
+    text = text.replace("/", " ")
+    text = " ".join(text.split()).strip(" -·,;")
+    return clip(text, 180)
+
+
+def product_sku(food: str) -> str:
+    slug = "".join(ch if ch.isalnum() else "-" for ch in food.upper())
+    slug = "-".join(part for part in slug.split("-") if part)
+    return clip(slug or "FOOD", 70)
     if square_item_id:
         item = db.query(SellableItem).filter(SellableItem.square_item_id == square_item_id).first()
         if item:
@@ -141,15 +159,15 @@ def ingest_recipes(db: Session, recipes: list[dict]) -> dict:
     created = 0
     updated = 0
     for incoming in recipes:
-        name = str(incoming.get("name") or "").strip()
+        name = clip(str(incoming.get("name") or "").strip(), 200)
         if not name:
             continue
-        mealie_id = str(incoming.get("mealie_id") or "")
+        mealie_id = clip(str(incoming.get("mealie_id") or ""), 80)
         recipe = db.query(Recipe).filter(Recipe.mealie_id == mealie_id).first() if mealie_id else None
         if recipe is None:
             recipe = db.query(Recipe).filter(Recipe.name.ilike(name)).first()
         if recipe is None:
-            recipe = Recipe(name=name, mealie_id=mealie_id, yield_qty=incoming.get("yield_qty") or 1, yield_unit=incoming.get("yield_unit") or "portion")
+            recipe = Recipe(name=name, mealie_id=mealie_id, yield_qty=incoming.get("yield_qty") or 1, yield_unit=clip(str(incoming.get("yield_unit") or "portion"), 20) or "portion")
             db.add(recipe)
             db.flush()
             created += 1
@@ -159,22 +177,43 @@ def ingest_recipes(db: Session, recipes: list[dict]) -> dict:
             updated += 1
             db.query(RecipeLine).filter(RecipeLine.recipe_id == recipe.id).delete()
         for line in incoming.get("lines") or []:
-            food = str(line.get("name") or line.get("food") or "").strip()
+            food = clean_food_name(str(line.get("name") or line.get("food") or ""))
             if not food:
                 continue
             product = db.query(Product).filter(Product.name.ilike(food)).first()
             if product is None:
-                product = Product(sku=food.upper().replace(" ", "-")[:70], name=food, category="food", base_unit=str(line.get("unit") or "g"))
-                db.add(product)
-                db.flush()
-            db.add(RecipeLine(recipe_id=recipe.id, product_id=product.id, qty=line.get("qty") or 0, unit=str(line.get("unit") or "g")))
+                sku = product_sku(food)
+                taken = db.query(Product).filter(Product.sku == sku).first()
+                if taken:
+                    product = taken
+                else:
+                    product = Product(
+                        sku=sku,
+                        name=food,
+                        category="food",
+                        base_unit=clip(str(line.get("unit") or "g"), 20) or "g",
+                    )
+                    db.add(product)
+                    db.flush()
+            db.add(
+                RecipeLine(
+                    recipe_id=recipe.id,
+                    product_id=product.id,
+                    qty=line.get("qty") or 0,
+                    unit=clip(str(line.get("unit") or "g"), 20) or "g",
+                )
+            )
         price = incoming.get("selling_price")
         if price is not None:
             item = db.query(SellableItem).filter(SellableItem.recipe_id == recipe.id).first()
             if item is None:
-                item = SellableItem(recipe_id=recipe.id, name=name, costing_group=incoming.get("costing_group") or "food")
+                item = SellableItem(
+                    recipe_id=recipe.id,
+                    name=clip(name, 200),
+                    costing_group=incoming.get("costing_group") or "food",
+                )
                 db.add(item)
             item.selling_price = price
-            item.name = name
+            item.name = clip(name, 200)
     db.commit()
     return {"created": created, "updated": updated}
