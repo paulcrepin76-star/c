@@ -132,8 +132,10 @@ def bot_password() -> str:
     if BOT_ENV.exists():
         for line in BOT_ENV.read_text().splitlines():
             if line.startswith("MB_BOT_PASSWORD="):
-                return line.split("=", 1)[1].strip()
-    password = uuid.uuid4().hex + "Aa1!"
+                password = line.split("=", 1)[1].strip()
+                if 8 <= len(password) <= 24:
+                    return password
+    password = uuid.uuid4().hex[:16] + "Aa1!"
     BOT_ENV.write_text(f"MB_BOT_EMAIL={BOT_EMAIL}\nMB_BOT_PASSWORD={password}\n")
     os.chmod(BOT_ENV, 0o600)
     return password
