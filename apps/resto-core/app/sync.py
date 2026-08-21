@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.connections import access_token_for, extra_dict, get_connection, mark_error, set_extra, square_host
-from app.ingest import clean_food_name, ingest_paperless_doc, ingest_recipes, ingest_sales, scrub_junk_invoices
+from app.ingest import clean_food_name, ingest_paperless_doc, ingest_recipes, ingest_sales, is_junk_mail, scrub_junk_invoices
 from app.matching import match_sellables
 from app.models import Sale
 from app.purchasing import backfill_purchase_prices
@@ -82,30 +82,10 @@ _FOOD_HINTS = (
 )
 
 
-_IGNORE_HINTS = (
-    "liability",
-    "workers' comp",
-    "workers comp",
-    "simplyinsured",
-    "wage report",
-    "green card",
-    "e2 renewal",
-    "sesac",
-    "music licensing",
-    "berkshire hathaway",
-    "guard insurance",
-    "no action required",
-    "business is covered",
-    "auto-renewal",
-    "policy will renew",
-    "ds156",
-)
-
-
 def infer_invoice_type(title: str, doc_type: str = "", correspondent: str = "", content: str = "") -> str:
     """Food vs wine vs utility from Paperless metadata. A liquor license line is not a wine invoice."""
     head = f"{title} {doc_type} {correspondent}".lower()
-    if any(word in head for word in _IGNORE_HINTS) or re.search(r"\bw-?2\b", head):
+    if is_junk_mail(title, correspondent):
         return "ignore"
     if any(word in head for word in _UTILITY_HINTS):
         return "utility"

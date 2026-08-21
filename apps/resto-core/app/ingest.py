@@ -239,7 +239,7 @@ _JUNK_MAIL = re.compile(
     r"liability|workers'? ?comp|simplyinsured|wage report|\bgreen card\b|"
     r"e2 renewal|sesac|music licensing|berkshire hathaway|guard insurance|"
     r"no action required|business is covered|auto-renewal|policy will renew|"
-    r"\bds156\b|\bw-?2\b|cancellation notice|suwc\d",
+    r"\bds156\b|\bw-?2\b|cancellation notice|suwc\d|\bquote\b",
     re.I,
 )
 
@@ -515,7 +515,9 @@ def scrub_junk_invoices(db: Session) -> dict:
     updated = 0
     for invoice in db.query(Invoice).all():
         dirty = False
-        if is_junk_mail(invoice.title or ""):
+        if is_junk_mail(invoice.title or "") or (
+            not str(invoice.title or "").strip() and Decimal(invoice.total or 0) > Decimal("5000")
+        ):
             if invoice.invoice_type != IGNORE_INVOICE_TYPE or Decimal(invoice.total or 0) != 0:
                 invoice.invoice_type = IGNORE_INVOICE_TYPE
                 invoice.total = Decimal("0")

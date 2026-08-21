@@ -252,3 +252,4 @@ def test_wine_house_and_depot_license_do_not_confuse_types():
     assert infer_invoice_type("fpl-0983944356-2026-08-06", "Utility Bill", "FPL Bonita Springs") == "utility"
     assert infer_invoice_type("sams-club-2026-05-24", "Vendor Invoice", "Sam's Club", "WATERMELON 6.98") == "food"
     assert infer_invoice_type("Your General Liability auto-renewal is here") == "ignore"
+    assert infer_invoice_type("Quote Sphplm LLC") == "ignore"
