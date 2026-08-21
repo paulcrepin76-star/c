@@ -66,6 +66,17 @@ VENDORS: list[dict] = [
         "blurb": "GFS invoices. Log in on Gordon, then come back here.",
         "legacy_names": ["Gordon"],
     },
+    {
+        "slug": "restaurant-depot",
+        "label": "Restaurant Depot",
+        "kind": "food",
+        "invoice_type": "food",
+        "email_domain": "restaurantdepot.com",
+        "login_url": "https://www.restaurantdepot.com/",
+        "blurb": "Cash-and-carry. Photograph the receipt or drop the PDF in Paperless. A cheaper case only wins if the monthly saving beats the drive.",
+        "legacy_names": ["Rest Depot"],
+        "match_needles": ["restaurant depot"],
+    },
 ]
 
 

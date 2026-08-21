@@ -10,6 +10,7 @@ from app.connections import access_token_for, extra_dict, get_connection, mark_e
 from app.ingest import clean_food_name, ingest_paperless_doc, ingest_recipes, ingest_sales
 from app.matching import match_sellables
 from app.models import Sale
+from app.purchasing import backfill_purchase_prices
 
 TIMEOUT = httpx.Timeout(30.0, connect=10.0)
 
@@ -35,7 +36,7 @@ def infer_invoice_type(title: str, doc_type: str = "") -> str:
         return "utility"
     if any(word in blob for word in ("wine", "vin", "champagne")):
         return "wine"
-    if any(word in blob for word in ("costco", "gordon", "gfs", "sam's", "sams", "chef")):
+    if any(word in blob for word in ("costco", "gordon", "gfs", "sam's", "sams", "chef", "depot")):
         return "food"
     return "food"
 
@@ -293,6 +294,7 @@ def sync_all(db: Session) -> dict:
     square = sync_square(db)
     mealie = sync_mealie(db)
     paperless = sync_paperless(db)
+    prices = {"status": "ok", "created": backfill_purchase_prices(db)}
     try:
         matched = match_sellables(db)
         matched["status"] = "ok"
@@ -302,6 +304,7 @@ def sync_all(db: Session) -> dict:
         "square": square,
         "mealie": mealie,
         "paperless": paperless,
+        "purchasing": prices,
         "matched": matched,
         "ran_at": _now().isoformat(),
     }

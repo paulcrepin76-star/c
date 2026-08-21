@@ -110,14 +110,16 @@ def seed_if_empty(db: Session) -> None:
 
     sams = Supplier(name="Sam's Club", category="food", email_domain="samsclub.com", default_invoice_type="food")
     chefs = Supplier(name="Chef's Warehouse", category="food", email_domain="chefswarehouse.com", default_invoice_type="food")
+    costco = Supplier(name="Costco", category="food", email_domain="costco.com", default_invoice_type="food")
+    gordon = Supplier(name="Gordon Food Service", category="food", email_domain="gfs.com", default_invoice_type="food")
     wine_co = Supplier(name="Wine distributor", category="wine", default_invoice_type="wine")
     fpl = Supplier(name="FPL Bonita Springs", category="utility", email_domain="fpl.com", default_invoice_type="utility")
-    db.add_all([sams, chefs, wine_co, fpl])
+    db.add_all([sams, chefs, costco, gordon, wine_co, fpl])
     db.flush()
 
-    eggs = Product(sku="EGG", name="Eggs", category="food", base_unit="g", current_cost=Decimal("0.0060"))
-    milk = Product(sku="MILK", name="Milk", category="dairy", base_unit="ml", current_cost=Decimal("0.0018"))
-    butter = Product(sku="BUTTER", name="Butter", category="dairy", base_unit="g", current_cost=Decimal("0.0120"))
+    eggs = Product(sku="EGG", name="Eggs", category="dairy", base_unit="each", current_cost=Decimal("0.266"), compare_unit="each", purchasing_category="dairy")
+    milk = Product(sku="MILK", name="Milk", category="dairy", base_unit="ml", current_cost=Decimal("0.0018"), compare_unit="gal", purchasing_category="dairy")
+    butter = Product(sku="BUTTER", name="Butter", category="dairy", base_unit="g", current_cost=Decimal("0.0120"), compare_unit="lb", purchasing_category="dairy")
     orange = Product(sku="OJ", name="Orange juice", category="beverage", base_unit="ml", current_cost=Decimal("0.0040"))
     brandy = Product(sku="BRANDY", name="Brandy", category="spirit", base_unit="ml", current_cost=Decimal("0.0293"))
     db.add_all([eggs, milk, butter, orange, brandy])
@@ -264,13 +266,21 @@ def seed_if_empty(db: Session) -> None:
         sellables[f"{item['sku']}-bottle"] = bottle
 
     sangria = Recipe(name="Sangria", mealie_id="", yield_qty=1, yield_unit="glass", notes="Demo cocktail recipe")
-    db.add(sangria)
+    croissant = Recipe(name="Croissant", mealie_id="", yield_qty=1, yield_unit="each", notes="Demo pastry")
+    toast = Recipe(name="French Toast", mealie_id="", yield_qty=1, yield_unit="each")
+    hollandaise = Recipe(name="Hollandaise", mealie_id="", yield_qty=1, yield_unit="each")
+    db.add_all([sangria, croissant, toast, hollandaise])
     db.flush()
     db.add_all(
         [
             RecipeLine(recipe_id=sangria.id, product_id=wine_products["HOUSE-RED"].id, qty=120, unit="ml"),
             RecipeLine(recipe_id=sangria.id, product_id=brandy.id, qty=15, unit="ml"),
             RecipeLine(recipe_id=sangria.id, product_id=orange.id, qty=30, unit="ml"),
+            RecipeLine(recipe_id=croissant.id, product_id=butter.id, qty=50, unit="g"),
+            RecipeLine(recipe_id=toast.id, product_id=butter.id, qty=35, unit="g"),
+            RecipeLine(recipe_id=toast.id, product_id=eggs.id, qty=1, unit="each"),
+            RecipeLine(recipe_id=hollandaise.id, product_id=butter.id, qty=60, unit="g"),
+            RecipeLine(recipe_id=hollandaise.id, product_id=eggs.id, qty=2, unit="each"),
         ]
     )
     sangria_item = SellableItem(
@@ -320,9 +330,47 @@ def seed_if_empty(db: Session) -> None:
     db.flush()
     db.add_all(
         [
-            InvoiceLine(invoice_id=food_invoice.id, raw_description="Eggs", qty=1, unit="case", unit_cost=Decimal("44.98"), line_total=Decimal("44.98"), product_id=eggs.id),
-            InvoiceLine(invoice_id=food_invoice.id, raw_description="Milk", qty=1, unit="case", unit_cost=Decimal("18.42"), line_total=Decimal("18.42"), product_id=milk.id),
-            InvoiceLine(invoice_id=food_invoice.id, raw_description="Butter", qty=1, unit="case", unit_cost=Decimal("63.97"), line_total=Decimal("63.97"), product_id=butter.id),
+            InvoiceLine(invoice_id=food_invoice.id, raw_description="Eggs 15 dozen", qty=15, unit="dozen", unit_cost=Decimal("3.19"), line_total=Decimal("47.88"), product_id=eggs.id),
+            InvoiceLine(invoice_id=food_invoice.id, raw_description="Milk 2 gal", qty=2, unit="gal", unit_cost=Decimal("3.99"), line_total=Decimal("7.98"), product_id=milk.id),
+            InvoiceLine(invoice_id=food_invoice.id, raw_description="Butter 4 lb pack", qty=1, unit="pack", unit_cost=Decimal("21.20"), line_total=Decimal("21.20"), product_id=butter.id),
+        ]
+    )
+
+    chefs_invoice = Invoice(
+        supplier_id=chefs.id,
+        number="CW-48382",
+        issued_on=(now - timedelta(days=5)).date(),
+        total=Decimal("201.60"),
+        invoice_type="food",
+        status="filed",
+        title="Chef's Warehouse butter 36 lb",
+    )
+    gordon_invoice = Invoice(
+        supplier_id=gordon.id,
+        number="GFS-82736",
+        issued_on=(now - timedelta(days=8)).date(),
+        total=Decimal("159.00"),
+        invoice_type="food",
+        status="filed",
+        title="Gordon 30 lb butter",
+    )
+    costco_invoice = Invoice(
+        supplier_id=costco.id,
+        number="C-921",
+        issued_on=(now - timedelta(days=2)).date(),
+        total=Decimal("25.68"),
+        invoice_type="food",
+        status="filed",
+        title="Costco butter and eggs",
+    )
+    db.add_all([chefs_invoice, gordon_invoice, costco_invoice])
+    db.flush()
+    db.add_all(
+        [
+            InvoiceLine(invoice_id=chefs_invoice.id, raw_description="Butter unsalted 36 lb case SKU 48382", qty=1, unit="case", unit_cost=Decimal("201.60"), line_total=Decimal("201.60"), product_id=butter.id),
+            InvoiceLine(invoice_id=gordon_invoice.id, raw_description="Butter 30 lb case SKU 82736", qty=1, unit="case", unit_cost=Decimal("159.00"), line_total=Decimal("159.00"), product_id=butter.id),
+            InvoiceLine(invoice_id=costco_invoice.id, raw_description="Butter 4 lb pack SKU 921", qty=1, unit="pack", unit_cost=Decimal("19.96"), line_total=Decimal("19.96"), product_id=butter.id),
+            InvoiceLine(invoice_id=costco_invoice.id, raw_description="Eggs 24 ct", qty=24, unit="each", unit_cost=Decimal("0.24"), line_total=Decimal("5.72"), product_id=eggs.id),
         ]
     )
 

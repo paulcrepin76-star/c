@@ -63,6 +63,11 @@
     <strong>{{ costing.groups.beverage.cost_pct | pct }}</strong>
     <em>Cocktails, juice, coffee</em>
   </article>
+  <article>
+    <span>Purchasing</span>
+    <strong>{{ purchasing.monthly_total | money }}</strong>
+    <em>{% if purchasing.cheaper_elsewhere %}{{ purchasing.cheaper_elsewhere }} products cheaper elsewhere{% else %}No comparable pack prices yet{% endif %} · <a href="/purchasing">Open</a></em>
+  </article>
 </section>
 
 {% if counts.unmatched %}

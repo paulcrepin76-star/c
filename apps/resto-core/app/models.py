@@ -33,6 +33,9 @@ class Supplier(Base):
     email_domain: Mapped[str] = mapped_column(String(120), default="")
     default_invoice_type: Mapped[str] = mapped_column(String(40), default="food")
     notes: Mapped[str] = mapped_column(Text, default="")
+    delivery_fee: Mapped[Decimal] = mapped_column(Money, default=0)
+    min_order: Mapped[Decimal] = mapped_column(Money, default=0)
+    trip_cost: Mapped[Decimal] = mapped_column(Money, default=0)
 
     invoices: Mapped[list[Invoice]] = relationship(back_populates="supplier")
 
@@ -49,6 +52,8 @@ class Product(Base):
     current_cost: Mapped[Decimal] = mapped_column(UnitCost, default=0)
     mealie_food_id: Mapped[str] = mapped_column(String(80), default="")
     notes: Mapped[str] = mapped_column(Text, default="")
+    compare_unit: Mapped[str] = mapped_column(String(20), default="")
+    purchasing_category: Mapped[str] = mapped_column(String(40), default="")
 
     wine: Mapped[WineProfile | None] = relationship(back_populates="product", uselist=False)
     sellables: Mapped[list[SellableItem]] = relationship(back_populates="product")
@@ -152,6 +157,46 @@ class InvoiceLine(Base):
 
     invoice: Mapped[Invoice] = relationship(back_populates="lines")
     product: Mapped[Product | None] = relationship()
+
+
+class ProductAlias(Base):
+    __tablename__ = "product_aliases"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"))
+    alias: Mapped[str] = mapped_column(String(160))
+    exclude: Mapped[str] = mapped_column(String(240), default="")
+
+    product: Mapped[Product] = relationship()
+
+    __table_args__ = (UniqueConstraint("product_id", "alias", name="uq_product_alias"),)
+
+
+class PurchasePrice(Base):
+    __tablename__ = "purchase_prices"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"))
+    supplier_id: Mapped[int] = mapped_column(ForeignKey("suppliers.id"))
+    invoice_id: Mapped[int | None] = mapped_column(ForeignKey("invoices.id"), nullable=True)
+    invoice_line_id: Mapped[int | None] = mapped_column(ForeignKey("invoice_lines.id"), nullable=True)
+    purchased_on: Mapped[date | None] = mapped_column(Date)
+    sku: Mapped[str] = mapped_column(String(80), default="")
+    raw_description: Mapped[str] = mapped_column(String(240), default="")
+    pack_qty: Mapped[Decimal] = mapped_column(Qty, default=0)
+    pack_unit: Mapped[str] = mapped_column(String(20), default="")
+    pack_price: Mapped[Decimal] = mapped_column(Money, default=0)
+    qty_base: Mapped[Decimal] = mapped_column(Qty, default=0)
+    unit_cost_base: Mapped[Decimal] = mapped_column(UnitCost, default=0)
+    compare_qty: Mapped[Decimal] = mapped_column(Qty, default=0)
+    unit_cost_compare: Mapped[Decimal] = mapped_column(UnitCost, default=0)
+    confidence: Mapped[Decimal] = mapped_column(Numeric(4, 3), default=1)
+    source: Mapped[str] = mapped_column(String(20), default="invoice")
+
+    product: Mapped[Product] = relationship()
+    supplier: Mapped[Supplier] = relationship()
+
+    __table_args__ = (UniqueConstraint("invoice_line_id", name="uq_purchase_invoice_line"),)
 
 
 class StockMove(Base):

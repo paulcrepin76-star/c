@@ -11,6 +11,7 @@ import pytest
 @pytest.fixture(autouse=True)
 def reset_db():
     from app.db import Base, SessionLocal, engine
+    from app.purchasing import backfill_purchase_prices, ensure_purchasing
     from app.seed import ensure_connections, seed_if_empty
 
     Base.metadata.drop_all(bind=engine)
@@ -19,6 +20,8 @@ def reset_db():
     try:
         seed_if_empty(db)
         ensure_connections(db)
+        ensure_purchasing(db)
+        backfill_purchase_prices(db)
     finally:
         db.close()
     yield

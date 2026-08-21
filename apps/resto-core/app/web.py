@@ -13,6 +13,7 @@ from app.costing import money
 from app.db import get_db
 from app.matching import match_sellables
 from app.models import Connector, Invoice, Product, Recipe, SellableItem, StockMove, WineProfile
+from app.purchasing import CATEGORIES, purchasing_board
 from app.services import catalog_counts, period_costing, sales_span, wine_rows
 
 router = APIRouter()
@@ -52,6 +53,7 @@ def dashboard(request: Request, days: int = DEFAULT_DAYS, db: Session = Depends(
     below_par = [row for row in wines if row["below_par"]]
     connectors = db.query(Connector).order_by(Connector.name).all()
     invoices = db.query(Invoice).order_by(Invoice.issued_on.desc()).limit(6).all()
+    purchasing = purchasing_board(db)
     return render(
         request,
         "dashboard.html",
@@ -61,6 +63,7 @@ def dashboard(request: Request, days: int = DEFAULT_DAYS, db: Session = Depends(
         below_par=below_par,
         connectors=connectors,
         invoices=invoices,
+        purchasing=purchasing,
         days=window,
         span=sales_span(db),
         counts=catalog_counts(db),
@@ -474,4 +477,17 @@ def connector_status(connector_id: int, status: str = Form(...), db: Session = D
         connector.status = status
         db.commit()
     return RedirectResponse("/connectors", status_code=303)
+
+
+@router.get("/purchasing")
+def purchasing_page(request: Request, category: str = "", db: Session = Depends(get_db)):
+    chosen = category if category in CATEGORIES else ""
+    board = purchasing_board(db, chosen)
+    return render(
+        request,
+        "purchasing.html",
+        board=board,
+        categories=CATEGORIES,
+        page="purchasing",
+    )
 

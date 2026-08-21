@@ -66,7 +66,7 @@ One Compose stack, one Postgres, these containers:
 
 | Container | Port | Role |
 | --- | --- | --- |
-| resto-core | 8088 | Wine cellar, inventory, costing |
+| resto-core | 8088 | Wine cellar, inventory, costing, purchasing |
 | paperless-ngx | 8010 | Invoice PDF archive + OCR |
 | mealie | 9925 | Recipes |
 | n8n | 5678 | Square / mail / rare portal jobs |

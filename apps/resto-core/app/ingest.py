@@ -6,7 +6,48 @@ from sqlalchemy.orm import Session
 
 from app.costing import money
 from app.models import Invoice, InvoiceLine, Product, Recipe, RecipeLine, Sale, SellableItem, StockMove, Supplier
+from app.units import family, parse_pack
 from app.vendors import VENDORS, vendor_names
+
+_PRICE = re.compile(r"(\d{1,3}(?:,\d{3})*\.\d{2})")
+_SKIP_LINE = re.compile(
+    r"\b(subtotal|total due|invoice total|amount due|balance due|sales tax|payment|invoice\s*#)\b",
+    re.I,
+)
+
+
+def extract_invoice_lines(content: str) -> list[dict]:
+    """Pull pack + price rows out of Paperless OCR. Totals and tax lines are skipped."""
+    found: list[dict] = []
+    seen: set[tuple[str, str, str]] = set()
+    for raw in str(content or "").splitlines():
+        text = " ".join(raw.split())
+        if len(text) < 8 or _SKIP_LINE.search(text):
+            continue
+        pack_qty, pack_unit = parse_pack(text)
+        if pack_qty <= 0 or not pack_unit or family(pack_unit) is None:
+            continue
+        prices = [money(item.replace(",", "")) for item in _PRICE.findall(text)]
+        if not prices:
+            continue
+        price = max(prices)
+        if price <= 0:
+            continue
+        key = (str(pack_qty), pack_unit, str(price))
+        if key in seen:
+            continue
+        seen.add(key)
+        found.append(
+            {
+                "description": text[:240],
+                "qty": pack_qty,
+                "unit": pack_unit,
+                "unit_cost": Decimal("0"),
+                "line_total": price,
+            }
+        )
+    return found
+
 
 _DOLLAR = re.compile(r"\$\s*(\d{1,3}(?:,\d{3})*(?:\.\d{2})|\d+\.\d{2})")
 _LABELED = re.compile(
@@ -161,7 +202,43 @@ def _invoice_total(doc: dict) -> Decimal:
     return parse_invoice_amount(doc.get("title"), doc.get("content"), doc.get("correspondent"))
 
 
+def _add_invoice_lines(db: Session, invoice: Invoice, lines: list[dict]) -> int:
+    added = 0
+    for line in lines:
+        description = str(line.get("description") or line.get("raw_description") or "")
+        if not description:
+            continue
+        item = InvoiceLine(
+            invoice_id=invoice.id,
+            raw_description=description[:240],
+            qty=Decimal(str(line.get("qty") or 0)),
+            unit=str(line.get("unit") or "each")[:20],
+            unit_cost=Decimal(str(line.get("unit_cost") or 0)),
+            line_total=Decimal(str(line.get("line_total") or 0)),
+        )
+        invoice.lines.append(item)
+        db.add(item)
+        added += 1
+    if added:
+        db.flush()
+    return added
+
+
+def _ocr_lines_for(db: Session, invoice: Invoice, doc: dict) -> list[dict]:
+    if invoice.invoice_type not in ("food", "wine"):
+        return []
+    existing = db.query(InvoiceLine).filter(InvoiceLine.invoice_id == invoice.id).count()
+    if existing:
+        return []
+    structured = list(doc.get("lines") or [])
+    if structured:
+        return structured
+    return extract_invoice_lines(str(doc.get("content") or ""))
+
+
 def ingest_paperless_doc(db: Session, doc: dict) -> dict:
+    from app.purchasing import record_invoice_prices
+
     paperless_id = str(doc.get("id") or "")
     invoice_type = str(doc.get("invoice_type") or "food")
     total = _invoice_total(doc)
@@ -179,8 +256,11 @@ def ingest_paperless_doc(db: Session, doc: dict) -> dict:
         if doc.get("title") and not existing.title:
             existing.title = str(doc.get("title") or "")[:240]
             status = "updated"
+        if _add_invoice_lines(db, existing, _ocr_lines_for(db, existing, doc)):
+            status = "updated"
         if status == "updated":
             db.commit()
+            record_invoice_prices(db, existing)
         return {"status": status, "invoice_id": existing.id}
     supplier = match_supplier(db, doc.get("correspondent"), invoice_type)
     issued_on = None
@@ -202,21 +282,9 @@ def ingest_paperless_doc(db: Session, doc: dict) -> dict:
     )
     db.add(invoice)
     db.flush()
-    for line in doc.get("lines") or []:
-        description = str(line.get("description") or line.get("raw_description") or "")
-        product = db.query(Product).filter(Product.name.ilike(f"%{description}%")).first() if description else None
-        db.add(
-            InvoiceLine(
-                invoice_id=invoice.id,
-                raw_description=description,
-                qty=Decimal(str(line.get("qty") or 0)),
-                unit=str(line.get("unit") or "each"),
-                unit_cost=Decimal(str(line.get("unit_cost") or 0)),
-                line_total=Decimal(str(line.get("line_total") or 0)),
-                product_id=product.id if product else None,
-            )
-        )
+    _add_invoice_lines(db, invoice, _ocr_lines_for(db, invoice, doc))
     db.commit()
+    record_invoice_prices(db, invoice)
     return {"status": "created", "invoice_id": invoice.id}
 
 

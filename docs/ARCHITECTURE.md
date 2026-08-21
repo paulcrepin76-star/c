@@ -10,7 +10,7 @@ Each tool does one job. Nothing scrapes a website unless email and APIs have fai
 | Mealie | Food recipes and cocktails | Wine list, costing % |
 | Paperless-ngx | Original PDF, OCR, search, archive | Margin math |
 | n8n | Nightly “go sync” timer | Store logins or the cellar |
-| resto-core | Products, wine, inventory, costing | Document vault |
+| resto-core | Products, wine, inventory, costing, supplier price comparison | Document vault |
 | Postgres | Source of truth for numbers | PDFs |
 | Metabase | Charts on a screen | Data entry |
 
@@ -68,6 +68,14 @@ Inventory is a running sum of `stock_moves`:
 - later: `waste`, `comp`, `breakage`
 
 Food cost, beverage cost and wine cost are theoretical until you count. After a count, variance is counted minus expected.
+
+## Supplier price comparison
+
+Invoice totals are not comparable. A 36 lb Chef's case at $201.60 is $5.60/lb; a 4 lb Costco pack at $19.96 is $4.99/lb. `purchase_prices` stores every paid pack (never overwritten) and converts it to the product's compare unit (lb, oz, g, each, qt, gal).
+
+The current supplier is the one you bought the most volume from recently, not the last $20 Costco run. A switch is recommended only when unit gap × monthly usage, minus trip/delivery, is at least $25. Mealie recipe lines then show the plate impact (croissant −$0.07, and so on).
+
+Promo emails and ntfy alerts come after this history exists. Website catalog scraping is last: logins, CAPTCHA and 2FA break it.
 
 ## Secrets
 

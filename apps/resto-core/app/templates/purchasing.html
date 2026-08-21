@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block title %}Purchasing{% endblock %}
+{% block content %}
+<p class="eyebrow">Price intelligence</p>
+<h1>Supplier price comparison</h1>
+<p class="lede">Every invoice line is kept. Pack sizes are converted to the same unit before anything is called cheaper. A $80 case can beat a $25 pack once you divide by pounds.</p>
+
+<nav class="period" aria-label="Category">
+  <a href="/purchasing" class="{% if not board.category %}on{% endif %}">All</a>
+  {% for name in categories %}
+    {% if name %}
+    <a href="/purchasing?category={{ name }}" class="{% if board.category == name %}on{% endif %}">{{ name | capitalize }}</a>
+    {% endif %}
+  {% endfor %}
+</nav>
+
+<section class="kpis">
+  <article>
+    <span>Potential savings this month</span>
+    <strong>{{ board.monthly_total | money }}</strong>
+    <em>After trip / delivery, only when the switch is worth it</em>
+  </article>
+  <article>
+    <span>Products cheaper elsewhere</span>
+    <strong>{{ board.cheaper_elsewhere }}</strong>
+    <em>Stay if the monthly gain is under {{ board.stay_threshold | money }}</em>
+  </article>
+</section>
+
+{% if not board.cards %}
+<div class="card">
+  <h2>Waiting on invoice lines</h2>
+  <p>Invoice totals are not enough. This page needs a pack size on the line — <code>36 lb case</code>, <code>4 lb pack</code>, <code>15 dozen</code> — so a carton is never compared to a sleeve at face value.</p>
+  <p class="muted">Photograph a Chef's, Gordon, Costco or Sam's invoice, or wait for Paperless OCR. Known products (butter, eggs, milk, heavy cream) are matched automatically. Peanut butter is not butter.</p>
+  <p><a class="btn" href="/invoices/scan">Photograph an invoice</a></p>
+</div>
+{% endif %}
+
+{% for card in board.cards %}
+<article class="card">
+  <div class="row-head">
+    <div>
+      <p class="eyebrow">{{ card.product.purchasing_category or card.product.category }}</p>
+      <h2>{{ card.product.name }}</h2>
+    </div>
+    {% if card.recommend == "switch" %}
+      <strong class="badge-switch">Switch recommended</strong>
+    {% else %}
+      <strong class="badge-stay">Stay with current</strong>
+    {% endif %}
+  </div>
+  <p class="lede">
+    Current: {{ card.current.supplier.name if card.current.supplier else "Unknown" }}
+    {{ card.current.unit_cost_compare | unitcost }}/{{ card.compare_unit }}
+    · Best known: {{ card.cheapest.supplier.name if card.cheapest.supplier else "Unknown" }}
+    {{ card.cheapest.unit_cost_compare | unitcost }}/{{ card.compare_unit }}
+    {% if card.gap > 0 %}
+    · {{ card.gap_pct | pct }} cheaper
+    {% endif %}
+  </p>
+  <table class="wide">
+    <thead>
+      <tr>
+        <th>Supplier</th>
+        <th>Pack</th>
+        <th>Paid</th>
+        <th>Per {{ card.compare_unit }}</th>
+        <th>Date</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for offer in card.offers %}
+      <tr class="{% if offer.id == card.cheapest.id %}warn{% endif %}">
+        <td>{{ offer.supplier.name if offer.supplier else "Unknown" }}</td>
+        <td>{{ offer.pack_qty }} {{ offer.pack_unit }}</td>
+        <td>{{ offer.pack_price | money }}</td>
+        <td>{{ offer.unit_cost_compare | unitcost }}</td>
+        <td>{{ offer.purchased_on or "—" }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p>
+    Usage {{ card.usage }} {{ card.compare_unit }}/month
+    · Unit gap {{ card.gap | money }}/{{ card.compare_unit }}
+    · {{ card.monthly | money }}/month before trip
+    {% if card.trip_cost or card.delivery_fee %}
+    · Trip/delivery {{ card.trip_cost | money }} + {{ card.delivery_fee | money }}
+    {% endif %}
+    · Net {{ card.net | money }}/month
+  </p>
+  {% if card.recommend == "switch" %}
+    <p><b>Potential saving {{ card.net | money }}/month — change supplier recommended.</b></p>
+  {% elif card.gap > 0 %}
+    <p class="muted">Saving only {{ card.net | money }}/month after trip cost — stay with {{ card.current.supplier.name if card.current.supplier else "the current supplier" }}.</p>
+  {% endif %}
+  {% if card.impacts %}
+    <p class="muted">If you bought at the best known price, Mealie recipes move:</p>
+    <ul class="plain">
+      {% for impact in card.impacts %}
+      <li>{{ impact.recipe }} <span>{{ impact.delta | money }} each</span></li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+</article>
+{% endfor %}
+
+<div class="card">
+  <h2>What comes next</h2>
+  <ol class="stack">
+    <li><b>Invoice history</b> — this page. Old prices stay. A new purchase adds a row.</li>
+    <li><b>Promo emails</b> — Costco / Sam's / Gordon “butter $4.49/lb through September 1” compared with what you actually pay. Website scraping is last, not first: logins, CAPTCHA and 2FA break it.</li>
+    <li><b>Alerts</b> — Metabase can email a query. A tiny ntfy container can push to your iPhone later.</li>
+  </ol>
+</div>
+{% endblock %}
