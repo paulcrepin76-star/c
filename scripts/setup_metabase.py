@@ -116,18 +116,15 @@ def set_user_password(password: str, with_salt: bool) -> None:
 
 
 def login(password: str) -> str:
-    last_error = ""
-    for with_salt in (True, False):
-        set_user_password(password, with_salt=with_salt)
-        response = httpx.post(
-            f"{MB_URL}/api/session",
-            json={"username": BOT_EMAIL, "password": password},
-            timeout=30.0,
-        )
-        if response.status_code < 400:
-            return response.json()["id"]
-        last_error = f"{response.status_code} {response.text[:200]}"
-    raise SystemExit(f"Metabase login failed: {last_error}")
+    set_user_password(password, with_salt=True)
+    response = httpx.post(
+        f"{MB_URL}/api/session",
+        json={"username": BOT_EMAIL, "password": password},
+        timeout=30.0,
+    )
+    if response.status_code >= 400:
+        raise SystemExit(f"Metabase login failed: {response.status_code} {response.text[:200]}")
+    return response.json()["id"]
 
 
 def bot_password() -> str:
