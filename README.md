@@ -73,17 +73,17 @@ One Compose stack, one Postgres, these containers:
 | metabase | 3001 | Dashboards |
 | postgres | 5433 | Shared database server |
 
-On Unraid (`ssh root@100.116.48.120`, you should see `root@lerouxfamily`) Paperless is already running. Install the rest **next to it**:
+On Unraid (`ssh root@100.116.48.120`) Paperless and Mealie are already running. Install only the missing pieces:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/paulcrepin76-star/c/main/scripts/on-unraid-install.sh | bash
 ```
 
-Open `http://100.116.48.120:8088` for the cellar. Do not start a second Paperless. Details: [docs/SSH.md](docs/SSH.md).
+Open `http://100.116.48.120:8088` for the cellar. This will not start a second Paperless or Mealie. Details: [docs/SSH.md](docs/SSH.md).
 
 ## What you do on day one
 
-1. Create the Paperless and Mealie admin users.
+1. Keep using your existing Paperless and Mealie.
 2. In Paperless, add the mailbox that receives e-bills.
 3. In resto-core, add your real wines (or edit the demo list).
 4. In n8n, add a Square credential and import sales into `/api/sales/import`.

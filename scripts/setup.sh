@@ -1,11 +1,44 @@
 #!/usr/bin/env bash
-# First-run helper. Safe to re-run: it never overwrites an existing .env.
+# First-run helper. Safe to re-run: it never overwrites passwords in .env.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 hex() { openssl rand -hex "${1:-32}"; }
+
+upsert_env() {
+  local key="$1"
+  local value="$2"
+  if [ ! -f "$ROOT/.env" ]; then
+    return
+  fi
+  if grep -q "^${key}=" "$ROOT/.env"; then
+    sed -i "s|^${key}=.*|${key}=${value}|" "$ROOT/.env"
+  else
+    echo "${key}=${value}" >> "$ROOT/.env"
+  fi
+}
+
+detect_container() {
+  local needle="$1"
+  local skip="$2"
+  docker ps --format '{{.Names}}|{{.Image}}' 2>/dev/null |
+    awk -F'|' -v needle="$needle" -v skip="$skip" '
+      tolower($0) ~ needle && $1 != skip { print $1; exit }
+    ' || true
+}
+
+detect_port() {
+  local name="$1"
+  local internal="$2"
+  local fallback="$3"
+  local port=""
+  if [ -n "$name" ]; then
+    port="$(docker port "$name" "$internal" 2>/dev/null | head -1 | sed -E 's/.*:([0-9]+)$/\1/' || true)"
+  fi
+  echo "${port:-$fallback}"
+}
 
 if [ -d /mnt/user ]; then
   APPDATA="${APPDATA:-/mnt/user/appdata/resto}"
@@ -25,44 +58,69 @@ fi
 
 mkdir -p \
   "$APPDATA/postgres" \
-  "$APPDATA/paperless/data" \
-  "$APPDATA/paperless/media" \
-  "$APPDATA/paperless/export" \
-  "$APPDATA/mealie" \
   "$APPDATA/n8n" \
   "$APPDATA/metabase" \
   "$APPDATA/resto-core" \
   "$CONSUME_DIR"
 
-EXISTING_PAPERLESS="$(
-  docker ps --format '{{.Names}}|{{.Image}}' 2>/dev/null |
-  awk -F'|' 'tolower($0) ~ /paperless/ {print $1; exit}' || true
-)"
-PAPERLESS_PORT="8000"
+EXISTING_PAPERLESS="$(detect_container paperless resto-paperless)"
+EXISTING_MEALIE="$(detect_container mealie resto-mealie)"
+
+PAPERLESS_PORT="8010"
+MEALIE_PORT="9925"
+COMPOSE_PROFILES_VALUE=""
+PAPERLESS_BASE="http://paperless:8000"
+MEALIE_BASE="http://mealie:9000"
+
+append_profile() {
+  if [ -z "$COMPOSE_PROFILES_VALUE" ]; then
+    COMPOSE_PROFILES_VALUE="$1"
+  else
+    COMPOSE_PROFILES_VALUE="${COMPOSE_PROFILES_VALUE},$1"
+  fi
+}
+
 if [ -n "${EXISTING_PAPERLESS:-}" ]; then
-  DETECTED_PORT="$(docker port "$EXISTING_PAPERLESS" 8000 2>/dev/null | head -1 | sed -E 's/.*:([0-9]+)$/\1/' || true)"
-  PAPERLESS_PORT="${DETECTED_PORT:-8000}"
-  echo "Found existing Paperless container: ${EXISTING_PAPERLESS} (port ${PAPERLESS_PORT})"
+  PAPERLESS_PORT="$(detect_port "$EXISTING_PAPERLESS" 8000 8000)"
+  PAPERLESS_BASE="http://host.docker.internal:${PAPERLESS_PORT}"
+  echo "Found existing Paperless: ${EXISTING_PAPERLESS} (port ${PAPERLESS_PORT})"
   echo "Will NOT start a second Paperless."
+  if docker ps -a --format '{{.Names}}' | grep -qx resto-paperless; then
+    echo "Removing leftover resto-paperless container."
+    docker rm -f resto-paperless >/dev/null 2>&1 || true
+  fi
+else
+  append_profile paperless
+  mkdir -p "$APPDATA/paperless/data" "$APPDATA/paperless/media" "$APPDATA/paperless/export"
+fi
+
+if [ -n "${EXISTING_MEALIE:-}" ]; then
+  MEALIE_PORT="$(detect_port "$EXISTING_MEALIE" 9000 9000)"
+  MEALIE_BASE="http://host.docker.internal:${MEALIE_PORT}"
+  echo "Found existing Mealie: ${EXISTING_MEALIE} (port ${MEALIE_PORT})"
+  echo "Will NOT start a second Mealie."
+  if docker ps -a --format '{{.Names}}' | grep -qx resto-mealie; then
+    echo "Removing leftover resto-mealie container."
+    docker rm -f resto-mealie >/dev/null 2>&1 || true
+  fi
+else
+  append_profile mealie
+  mkdir -p "$APPDATA/mealie"
 fi
 
 if [ -f "$ROOT/.env" ]; then
-  echo ".env already exists — leaving your secrets alone."
+  echo ".env already exists — keeping passwords, updating service URLs."
+  upsert_env COMPOSE_PROFILES "$COMPOSE_PROFILES_VALUE"
+  upsert_env PAPERLESS_BASE_URL "$PAPERLESS_BASE"
+  upsert_env PAPERLESS_URL "http://${HOST_HINT}:${PAPERLESS_PORT}"
+  upsert_env MEALIE_BASE_URL "$MEALIE_BASE"
+  upsert_env MEALIE_URL "http://${HOST_HINT}:${MEALIE_PORT}"
 else
   POSTGRES_PASSWORD="$(hex 16)"
   SECRET_KEY="$(hex 32)"
   N8N_ENCRYPTION_KEY="$(hex 32)"
   PAPERLESS_SECRET_KEY="$(hex 32)"
   RESTO_API_KEY="$(hex 16)"
-  COMPOSE_PROFILES_VALUE=""
-  PAPERLESS_BASE="http://paperless:8000"
-  if [ -n "${EXISTING_PAPERLESS:-}" ]; then
-    PAPERLESS_BASE="http://host.docker.internal:${PAPERLESS_PORT}"
-  else
-    COMPOSE_PROFILES_VALUE="paperless"
-    PAPERLESS_PORT="8010"
-    PAPERLESS_BASE="http://paperless:8000"
-  fi
 
   sed \
     -e "s|^APPDATA=.*|APPDATA=${APPDATA}|" \
@@ -74,9 +132,11 @@ else
     -e "s|^RESTO_API_KEY=.*|RESTO_API_KEY=${RESTO_API_KEY}|" \
     -e "s|^COMPOSE_PROFILES=.*|COMPOSE_PROFILES=${COMPOSE_PROFILES_VALUE}|" \
     -e "s|^PAPERLESS_BASE_URL=.*|PAPERLESS_BASE_URL=${PAPERLESS_BASE}|" \
+    -e "s|^MEALIE_BASE_URL=.*|MEALIE_BASE_URL=${MEALIE_BASE}|" \
     -e "s|192.168.1.10|${HOST_HINT}|g" \
-    -e "s|:8010|:${PAPERLESS_PORT}|g" \
     "$ROOT/.env.example" > "$ROOT/.env"
+  upsert_env PAPERLESS_URL "http://${HOST_HINT}:${PAPERLESS_PORT}"
+  upsert_env MEALIE_URL "http://${HOST_HINT}:${MEALIE_PORT}"
   echo "Wrote .env with random passwords. This file stays on the server, not in git."
 fi
 
@@ -84,15 +144,16 @@ chmod 600 "$ROOT/.env" 2>/dev/null || true
 
 cat <<EOF
 
+This stack will start: resto-core, n8n, Metabase, Postgres
+Skipped (already on Unraid): ${EXISTING_PAPERLESS:-} ${EXISTING_MEALIE:-}
+
 Next:
   ./scripts/remote-up.sh
 
 Then open:
   http://${HOST_HINT}:8088   wine cellar + costing
-  http://${HOST_HINT}:${PAPERLESS_PORT}   Paperless (existing)
-  http://${HOST_HINT}:9925   Mealie
+  http://${HOST_HINT}:${PAPERLESS_PORT}   Paperless
+  http://${HOST_HINT}:${MEALIE_PORT}   Mealie
   http://${HOST_HINT}:5678   n8n
   http://${HOST_HINT}:3001   Metabase
-
-Paperless Gmail import stays as it is. This install does not replace it.
 EOF

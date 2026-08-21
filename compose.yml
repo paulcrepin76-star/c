@@ -116,6 +116,7 @@ services:
     image: ghcr.io/mealie-recipes/mealie:latest
     container_name: resto-mealie
     restart: unless-stopped
+    profiles: ["mealie"]
     depends_on:
       postgres:
         condition: service_healthy
@@ -211,7 +212,7 @@ services:
       SECRET_KEY: ${SECRET_KEY}
       RESTO_API_KEY: ${RESTO_API_KEY}
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      MEALIE_BASE_URL: ${MEALIE_BASE_URL:-http://mealie:9000}
+      MEALIE_BASE_URL: ${MEALIE_BASE_URL:-http://host.docker.internal:9000}
       MEALIE_API_TOKEN: ${MEALIE_API_TOKEN:-}
       SQUARE_ACCESS_TOKEN: ${SQUARE_ACCESS_TOKEN:-}
       SQUARE_ENVIRONMENT: ${SQUARE_ENVIRONMENT:-production}

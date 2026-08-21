@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Run this ON Unraid as root (you are already root@lerouxfamily).
-# Installs wine cellar / costing next to the Paperless you already have.
+# Installs wine cellar / costing next to Paperless and Mealie you already have.
 set -euo pipefail
 
 TARGET_DIR="${UNRAID_DIR:-/mnt/user/appdata/resto}"
