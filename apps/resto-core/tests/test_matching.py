@@ -33,6 +33,10 @@ def test_parse_invoice_amount_prefers_dollar_and_total_labels():
     assert parse_invoice_amount("Packing list 2024") == Decimal("0")
     assert coerce_money("$88.10") == Decimal("88.10")
     assert coerce_money(12.5) == Decimal("12.50")
+    assert coerce_money("34008624849.68") == Decimal("0")
+    from app.ingest import should_replace_total
+
+    assert should_replace_total(Decimal("1.45"), coerce_money("34008624849.68")) is False
 
 
 def test_parse_invoice_amount_skips_sams_cash_and_reads_receipt_total():

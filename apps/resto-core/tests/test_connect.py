@@ -3,6 +3,7 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
+from app.db import SessionLocal
 from app.main import app
 
 
@@ -139,6 +140,17 @@ def test_sync_all_skips_until_connected():
         assert body["square"]["status"] == "skipped"
         assert body["mealie"]["status"] == "skipped"
         assert body["paperless"]["status"] == "skipped"
+
+
+def test_square_lookback_is_a_year_until_real_sales_exist():
+    from app.sync import _square_lookback_days
+
+    db = SessionLocal()
+    try:
+        assert _square_lookback_days(db, None) == 365
+        assert _square_lookback_days(db, 30) == 30
+    finally:
+        db.close()
 
 
 def test_vendor_connect_uses_the_same_login_you_already_have():

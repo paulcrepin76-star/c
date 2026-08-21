@@ -230,8 +230,21 @@ def parse_invoice_amount(*parts) -> Decimal:
     return Decimal("0")
 
 
+# Numeric(12, 2) max is just under 10^10. OCR/custom fields sometimes glue
+# digits into a fake billions total; never write those onto invoices.
+INVOICE_TOTAL_MAX = Decimal("9999999.99")
+
+
+def clamp_invoice_money(value: Decimal) -> Decimal:
+    amount = Decimal(value or 0)
+    if amount <= 0 or amount > INVOICE_TOTAL_MAX:
+        return Decimal("0")
+    return money(amount)
+
+
 def should_replace_total(existing, incoming: Decimal) -> bool:
     old = Decimal(existing or 0)
+    incoming = clamp_invoice_money(incoming)
     if incoming <= 0:
         return False
     if old <= 0:
@@ -243,16 +256,16 @@ def coerce_money(value) -> Decimal:
     if value is None or value == "":
         return Decimal("0")
     if isinstance(value, Decimal):
-        return money(value)
+        return clamp_invoice_money(money(value))
     if isinstance(value, (int, float)):
-        return money(value)
+        return clamp_invoice_money(money(value))
     text = str(value).strip()
     parsed = parse_invoice_amount(text)
     if parsed:
-        return parsed
+        return clamp_invoice_money(parsed)
     cleaned = text.replace("$", "").replace(",", "").replace("USD", "").strip()
     try:
-        return money(cleaned)
+        return clamp_invoice_money(money(cleaned))
     except (InvalidOperation, ValueError):
         return Decimal("0")
 
@@ -368,7 +381,9 @@ def _invoice_total(doc: dict) -> Decimal:
     total = coerce_money(doc.get("total"))
     if total > 0:
         return total
-    return parse_invoice_amount(doc.get("title"), doc.get("content"), doc.get("correspondent"))
+    return clamp_invoice_money(
+        parse_invoice_amount(doc.get("title"), doc.get("content"), doc.get("correspondent"))
+    )
 
 
 def _add_invoice_lines(db: Session, invoice: Invoice, lines: list[dict], require_match: bool = False) -> int:

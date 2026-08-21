@@ -4,6 +4,7 @@ import re
 from datetime import UTC, datetime, timedelta
 
 import httpx
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -99,12 +100,17 @@ def infer_invoice_type(title: str, doc_type: str = "", correspondent: str = "", 
 def _square_lookback_days(db: Session, days: int | None) -> int:
     if days is not None:
         return days
-    real = (
-        db.query(Sale)
+    last = (
+        db.query(func.max(Sale.sold_at))
         .filter(Sale.square_order_id != "", ~Sale.square_order_id.like("demo-%"))
-        .count()
+        .scalar()
     )
-    return 365 if real == 0 else 7
+    if last is None:
+        return 365
+    if getattr(last, "tzinfo", None) is not None:
+        last = last.replace(tzinfo=None)
+    age = max((datetime.now(UTC).replace(tzinfo=None) - last).days, 0)
+    return min(max(age + 2, 7), 365)
 
 
 def sync_square(db: Session, days: int | None = None) -> dict:
@@ -283,21 +289,25 @@ def _ingest_paperless_result(db: Session, doc: dict, correspondents: dict, types
         custom_values[fields.get(field_id, field_id).lower()] = entry.get("value")
     invoice_number = custom_values.get("invoice number") or doc.get("archive_serial_number") or doc.get("id")
     total = custom_values.get("invoice total") or 0
-    result = ingest_paperless_doc(
-        db,
-        {
-            "id": doc.get("id"),
-            "title": title,
-            "correspondent": correspondent or None,
-            "created": doc.get("created") or doc.get("added"),
-            "invoice_number": str(invoice_number or ""),
-            "total": total or 0,
-            "invoice_type": infer_invoice_type(title, doc_type, correspondent, doc.get("content") or ""),
-            "content": doc.get("content") or "",
-            "lines": [],
-        },
-    )
-    return str(result.get("status") or "")
+    try:
+        result = ingest_paperless_doc(
+            db,
+            {
+                "id": doc.get("id"),
+                "title": title,
+                "correspondent": correspondent or None,
+                "created": doc.get("created") or doc.get("added"),
+                "invoice_number": str(invoice_number or ""),
+                "total": total or 0,
+                "invoice_type": infer_invoice_type(title, doc_type, correspondent, doc.get("content") or ""),
+                "content": doc.get("content") or "",
+                "lines": [],
+            },
+        )
+        return str(result.get("status") or "")
+    except Exception:  # noqa: BLE001
+        db.rollback()
+        return "skipped"
 
 
 def sync_paperless(db: Session, max_pages: int = 15) -> dict:
