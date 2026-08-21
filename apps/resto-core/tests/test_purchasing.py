@@ -115,6 +115,26 @@ def test_sams_multiline_receipt_normalizes_butter():
     assert pineapple["qty"] == Decimal("4")
     assert pineapple["unit"] == "each"
     blob = """
+    Home
+    Account Dashboard
+    Order History
+    Order Detail
+    Archived from authenticated vendor account Page 1
+    Pineapple
+    $3.37/ea
+    Qty 4
+    $13.48
+    lb 1.00 lb
+    204000007933 1.93LB@ $3.04LB
+    """
+    lines = extract_invoice_lines(blob)
+    names = " ".join(item["description"] for item in lines)
+    assert "Pineapple" in names
+    assert "Archived" not in names
+    assert "Dashboard" not in names
+    assert not any("1.00 lb" in item["description"] for item in lines)
+    assert not any(item["description"].startswith("204000007933") for item in lines)
+    blob = """
     Chef's Warehouse
     BUTTER UNSLT AA 36/1 LB 5.60 201.60
     PEANUT BUTTER 5 LB 12.99

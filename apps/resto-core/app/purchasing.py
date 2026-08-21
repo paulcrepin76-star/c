@@ -204,6 +204,11 @@ SKIP_NEW_PRODUCT = (
     "tip",
     "deposit",
     "fee",
+    "archived",
+    "authenticated",
+    "order history",
+    "order detail",
+    "account dashboard",
 )
 
 
@@ -214,6 +219,10 @@ def ensure_purchased_product(db: Session, description: str) -> Product | None:
     text = str(description or "").strip()
     lowered = text.lower()
     if len(re.findall(r"[a-zA-Z]", text)) < 4:
+        return None
+    if len(re.findall(r"[A-Za-z]{3,}", text)) < 1:
+        return None
+    if re.match(r"^\d{8,}\b", text):
         return None
     if any(_has_alias(lowered, word) for word in SKIP_NEW_PRODUCT):
         return None

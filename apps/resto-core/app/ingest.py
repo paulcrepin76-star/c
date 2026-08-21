@@ -11,7 +11,8 @@ from app.vendors import VENDORS, vendor_names
 
 _PRICE = re.compile(r"(\d{1,3}(?:,\d{3})*\.\d{2})")
 _SKIP_LINE = re.compile(
-    r"\b(subtotal|total due|invoice total|amount due|balance due|sales tax|payment|invoice\s*#)\b",
+    r"\b(subtotal|total due|invoice total|amount due|balance due|sales tax|payment|invoice\s*#)\b|"
+    r"archived from|account dashboard|order history|order detail|^page\s+\d+$|^home$",
     re.I,
 )
 _QTY_LINE = re.compile(r"^Qty\s+(\d+(?:\.\d+)?)$", re.I)
@@ -32,6 +33,8 @@ def _line_item(description: str, qty: Decimal, unit: str, price: Decimal) -> dic
 def _single_line_item(text: str) -> dict | None:
     if len(text) < 8 or _SKIP_LINE.search(text):
         return None
+    if len(re.findall(r"[A-Za-z]{3,}", text)) < 1:
+        return None
     pack_qty, pack_unit = parse_pack(text)
     if pack_qty <= 0 or not pack_unit or family(pack_unit) is None:
         return None
@@ -51,6 +54,8 @@ def _multiline_item(lines: list[str], index: int) -> tuple[dict, int] | None:
     if _SKIP_LINE.search(desc) or _QTY_LINE.match(desc) or _PRICE_LINE.match(desc):
         return None
     if re.match(r"^\d{8,}\b", desc):
+        return None
+    if len(re.findall(r"[A-Za-z]{3,}", desc)) < 1:
         return None
     pack_qty, pack_unit = parse_pack(desc)
     cursor = index + 1
