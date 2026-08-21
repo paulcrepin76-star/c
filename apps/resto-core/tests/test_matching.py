@@ -34,7 +34,9 @@ def test_zero_invoice_is_updated_when_title_has_amount():
         db.close()
 
 
-def test_square_item_matches_mealie_recipe_and_wine():
+def test_bilingual_mealie_names_match_square_english():
+    assert normalize_menu_name("Avocado Toast · Tostada de Aguacate") == "avocado toast"
+    assert name_score("Avocado Toast", "Avocado Toast · Tostada de Aguacate") == 1.0
     assert normalize_menu_name("Sauvignon Blanc glass") == "sauvignon blanc"
     assert name_score("House Burger", "House Burger") == 1.0
     with TestClient(app):

@@ -29,7 +29,7 @@ JUNK = {
 
 
 def normalize_menu_name(name: str) -> str:
-    text = str(name or "").lower().replace("&", " and ")
+    text = str(name or "").split("·")[0].lower().replace("&", " and ")
     text = re.sub(r"[^a-z0-9]+", " ", text)
     tokens = [part for part in text.split() if part and part not in JUNK]
     return " ".join(tokens)

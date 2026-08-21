@@ -134,7 +134,7 @@ def sync_square(db: Session, days: int | None = None) -> dict:
 
 
 def _mealie_recipe_payload(detail: dict) -> dict:
-    name = str(detail.get("name") or detail.get("slug") or "")
+    name = str(detail.get("name") or detail.get("slug") or "").split("·")[0].strip()
     lines = []
     for ingredient in detail.get("recipeIngredient") or []:
         food = ""

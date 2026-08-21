@@ -224,7 +224,7 @@ def ingest_recipes(db: Session, recipes: list[dict]) -> dict:
     created = 0
     updated = 0
     for incoming in recipes:
-        name = clip(str(incoming.get("name") or "").strip(), 200)
+        name = clip(str(incoming.get("name") or "").strip().split("·")[0].strip(), 200)
         if not name:
             continue
         mealie_id = clip(str(incoming.get("mealie_id") or ""), 80)
