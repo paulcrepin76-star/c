@@ -1,156 +1,128 @@
 {% extends "base.html" %}
-{% block title %}Purchasing{% endblock %}
+{% block title %}Price compare{% endblock %}
 {% block content %}
-<p class="eyebrow">{{ board.market }} · {{ board.gap_pct_threshold }}% and {{ board.stay_threshold | money }}/month</p>
-<h1>Supplier price comparison</h1>
-<p class="lede">Find the cheapest equivalent of what Survey Cafe actually buys. Invoices are the paid source of truth. Public catalogs refresh those items daily. Sam's and Costco are never crawled.</p>
+{% set period_label = {30: '1 month', 60: '2 months', 90: '3 months', 365: 'Year'} %}
+<div class="page-head">
+  <div>
+    <p class="eyebrow">{{ board.market }} · per comparable unit</p>
+    <h1>Supplier price comparison</h1>
+    <p class="lede">One row per item you buy, vendors across. Cheapest cell is teal. The underline is who you usually pay.</p>
+  </div>
+  <div class="toolbar">
+    <nav class="period" aria-label="Date range">
+      {% for n in compare_days %}
+      <a href="/purchasing?days={{ n }}{% if board.category %}&amp;category={{ board.category }}{% endif %}" class="{% if board.days == n %}on{% endif %}">{{ period_label.get(n, n) }}</a>
+      {% endfor %}
+    </nav>
+    <form method="post" action="/purchasing/scan" class="inline">
+      <input type="hidden" name="mode" value="refresh">
+      <input type="hidden" name="days" value="{{ board.days }}">
+      <input type="hidden" name="category" value="{{ board.category }}">
+      <button type="submit" class="btn">Daily refresh · {{ relevant_count }}</button>
+    </form>
+  </div>
+</div>
 {% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
 {% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
 
 <nav class="period" aria-label="Category">
-  <a href="/purchasing" class="{% if not board.category %}on{% endif %}">All</a>
+  <a href="/purchasing?days={{ board.days }}" class="{% if not board.category %}on{% endif %}">All</a>
   {% for name in categories %}
     {% if name %}
-    <a href="/purchasing?category={{ name }}" class="{% if board.category == name %}on{% endif %}">{{ name | capitalize }}</a>
+    <a href="/purchasing?days={{ board.days }}&amp;category={{ name }}" class="{% if board.category == name %}on{% endif %}">{{ name | capitalize }}</a>
     {% endif %}
   {% endfor %}
 </nav>
 
-<section class="kpis">
+<section class="kpis compact-kpis">
   <article>
-    <span>Potential savings this month</span>
+    <span>Switch savings / month</span>
     <strong>{{ board.monthly_total | money }}</strong>
-    <em>After trip cost, only 8% and $25+</em>
+    <em>Only 8% and {{ board.stay_threshold | money }}+ after the trip</em>
   </article>
   <article>
-    <span>Worth a look</span>
+    <span>Cheaper elsewhere</span>
     <strong>{{ board.cheaper_elsewhere }}</strong>
-    <em>Green = switch · Yellow = combine with a trip</em>
-  </article>
-  <article>
-    <span>Home market</span>
-    <strong>{{ board.market }}</strong>
-    <em>0–15 mi first, then 15–50. Farther is fallback only.</em>
+    <em>{{ board.cards | length }} items in this window</em>
   </article>
 </section>
 
-<form method="post" action="/purchasing/scan" class="inline" style="margin-bottom: 16px;">
-  <input type="hidden" name="mode" value="refresh">
-  <button type="submit" class="btn">Daily refresh · {{ relevant_count }} item(s) we buy</button>
-</form>
-<form method="post" action="/purchasing/scan" class="inline" style="margin-bottom: 16px;">
-  <input type="hidden" name="mode" value="discovery">
-  <button type="submit" class="btn secondary">Monthly discovery · public catalogs only</button>
-  <span class="muted">Nightly 02:10 already refreshes what you buy. Sam’s and Costco stay on receipts and the <a href="/collector">extension</a>{% if sams_connected %} — Sam’s is connected for invoices, not for crawling{% endif %}.</span>
-</form>
-
-{% if not board.cards %}
-<div class="card">
-  <h2>Waiting on comparable packs</h2>
-  <p>Photograph a Chef's / Sam's invoice, or install the collector extension and search butter on Sam's while you are logged in.</p>
-  <p><a class="btn" href="/invoices/scan">Photograph an invoice</a> <a class="btn secondary" href="/collector">Install collector</a></p>
+{% if board.tips %}
+<div class="card tips">
+  <h2>What to do this window</h2>
+  <ul class="plain">
+    {% for card in board.tips %}
+    <li>
+      <span><b>{{ card.product.name }}</b> · {{ card.hint }}</span>
+      <span>{{ card.net | money }}/mo</span>
+    </li>
+    {% endfor %}
+  </ul>
 </div>
 {% endif %}
 
-{% for card in board.cards %}
-<article class="card">
-  <div class="row-head">
-    <div>
-      <p class="eyebrow">{{ card.product.purchasing_category or card.product.category }} · {{ card.market_label }}</p>
-      <h2>{{ card.product.name }}</h2>
-    </div>
-    {% if card.trip_class == "go" %}
-      <strong class="badge-switch">Worth changing</strong>
-    {% elif card.trip_class == "maybe" %}
-      <strong class="badge-maybe">Maybe — combine with a trip</strong>
-    {% else %}
-      <strong class="badge-stay">Not worth driving for</strong>
-    {% endif %}
-  </div>
-  <p class="lede">
-    You pay: {{ card.current.supplier.name if card.current.supplier else "Unknown" }}
-    {{ card.current.unit_cost_compare | unitcost }}/{{ card.compare_unit }}
-    {% if card.current.source != "invoice" %}<em>({{ card.current.source | sourcelabel }})</em>{% endif %}
-    · Best known: {{ card.cheapest.supplier.name if card.cheapest.supplier else "Unknown" }}
-    {{ card.cheapest.unit_cost_compare | unitcost }}/{{ card.compare_unit }}
-    {% if card.gap > 0 %}
-    · {{ card.gap_pct | pct }} cheaper
-    {% endif %}
-    {% if card.miles and card.miles > 0 %}
-    · {{ card.miles }} mi
-    {% endif %}
-  </p>
-  {% if card.equivalents %}
-  <p class="muted">
-    Equivalents:
-    {% for eq in card.equivalents %}
-      {{ eq.supplier }}{% if eq.sku %} SKU {{ eq.sku }}{% endif %}
-      {% if eq.pack %} {{ eq.pack }}{% endif %}
-      {% if eq.unit_cost %} {{ eq.unit_cost | unitcost }}/{{ card.compare_unit }}{% endif %}{% if not loop.last %} · {% endif %}
-    {% endfor %}
-  </p>
-  {% endif %}
-  <table class="wide">
-    <thead>
-      <tr>
-        <th>Supplier</th>
-        <th>Pack</th>
-        <th>Price</th>
-        <th>Per {{ card.compare_unit }}</th>
-        <th>Source</th>
-        <th>Date</th>
-      </tr>
-    </thead>
-    <tbody>
-    {% for offer in card.offers %}
-      <tr class="{% if offer.id == card.cheapest.id %}warn{% endif %}">
-        <td>{{ offer.supplier.name if offer.supplier else "Unknown" }}{% if offer.location_label %} <span class="muted">{{ offer.location_label }}</span>{% endif %}</td>
-        <td>{{ offer.pack_qty }} {{ offer.pack_unit }}</td>
-        <td>{{ offer.pack_price | money }}</td>
-        <td>{{ offer.unit_cost_compare | unitcost }}</td>
-        <td>{{ offer.source | sourcelabel }}{% if offer.is_discounted %} promo{% endif %}</td>
-        <td>{{ offer.purchased_on or "—" }}</td>
-      </tr>
-    {% endfor %}
-    {% for offer in card.benchmark %}
-      <tr>
-        <td>{{ offer.supplier.name if offer.supplier else "Benchmark" }}</td>
-        <td>{{ offer.pack_qty }} {{ offer.pack_unit }}</td>
-        <td>{{ offer.pack_price | money }}</td>
-        <td>{{ offer.unit_cost_compare | unitcost }}</td>
-        <td>{{ offer.source | sourcelabel }}</td>
-        <td>{{ offer.purchased_on or "—" }}</td>
-      </tr>
-    {% endfor %}
-    </tbody>
-  </table>
-  <p>
-    Usage {{ card.usage }} {{ card.compare_unit }}/month
-    · Unit gap {{ card.gap | money }}/{{ card.compare_unit }}
-    · {{ card.monthly | money }}/month before trip
-    · Net {{ card.net | money }}/month
-  </p>
-  {% if card.recommend == "switch" %}
-    <p><b>Potential saving {{ card.net | money }}/month — change supplier recommended.</b></p>
-  {% elif card.recommend == "consider" %}
-    <p><b>{{ card.cheapest.supplier.name }} looks cheaper ({{ card.cheapest.source | sourcelabel }}).</b> Confirm the pack, the trip, and whether the cafe will actually buy it.</p>
-  {% elif card.gap > 0 %}
-    <p class="muted">Under 8% or under {{ board.stay_threshold | money }}/month after the trip — stay with {{ card.current.supplier.name if card.current.supplier else "the current supplier" }}.</p>
-  {% endif %}
-  {% if card.impacts %}
-    <p class="muted">If you bought at the best known price, Mealie recipes move:</p>
-    <ul class="plain">
-      {% for impact in card.impacts %}
-      <li>{{ impact.recipe }} <span>{{ impact.delta | money }} each</span></li>
-      {% endfor %}
-    </ul>
-  {% endif %}
-</article>
-{% endfor %}
-
+{% if not board.cards %}
 <div class="card">
-  <h2>How prices get in</h2>
-  <p class="muted">Four adapters, one Postgres table. No CAPTCHA solving, no stealth browsers.</p>
+  <h2>No comparable packs in this window</h2>
+  <p>Photograph a Chef’s / Sam’s invoice, or open vendor logins so prices can fill in.</p>
+  <p><a class="btn" href="/invoices/scan">Scan invoice</a> <a class="btn secondary" href="/collector">Vendor logins</a></p>
+</div>
+{% else %}
+<div class="card compare-card">
+  <div class="compare-wrap">
+    <table class="compare">
+      <thead>
+        <tr>
+          <th class="item">Item</th>
+          <th>Unit</th>
+          {% for vendor in board.vendors %}
+          <th class="vendor">{{ vendor.name | vendorshort }}</th>
+          {% endfor %}
+          <th>Note</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for card in board.cards %}
+        <tr>
+          <td class="item">
+            <details>
+              <summary>{{ card.product.name }}</summary>
+              <p class="muted">
+                You pay {{ card.current.supplier.name if card.current.supplier else "—" }}
+                {{ card.current.unit_cost_compare | unitcost }}/{{ card.compare_unit }}
+                · Best {{ card.cheapest.supplier.name if card.cheapest.supplier else "—" }}
+                {{ card.cheapest.unit_cost_compare | unitcost }}
+                {% if card.recommend == "switch" %} · Worth changing{% elif card.recommend == "consider" %} · Maybe — combine with a trip{% endif %}
+              </p>
+              {% if card.impacts %}
+              <p class="muted">Recipes: {% for impact in card.impacts %}{{ impact.recipe }} {{ impact.delta | money }}{% if not loop.last %} · {% endif %}{% endfor %}</p>
+              {% endif %}
+            </details>
+          </td>
+          <td class="muted">{{ card.compare_unit }}</td>
+          {% for vendor in board.vendors %}
+            {% set offer = card.cells.get(vendor.id) %}
+            {% if offer %}
+            <td class="cost {% if offer.id == card.cheapest.id %}best{% endif %} {% if offer.id == card.current.id %}you{% endif %}" title="{{ offer.pack_qty }} {{ offer.pack_unit }} · {{ offer.source | sourcelabel }} · {{ offer.purchased_on or '—' }}">
+              {{ offer.unit_cost_compare | unitcost }}
+            </td>
+            {% else %}
+            <td class="cost empty">—</td>
+            {% endif %}
+          {% endfor %}
+          <td class="note">{{ card.hint }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="muted legend">Teal = cheapest known. Underline = who you usually buy from. Click an item for pack and recipe impact.</p>
+</div>
+{% endif %}
+
+<details class="card collectors-details">
+  <summary>How prices get in</summary>
+  <p class="muted">Invoices first. Public catalogs refresh what you already buy. Sam’s and Costco are never crawled.</p>
   <table class="wide">
     <thead><tr><th>Source</th><th>Method</th><th>Why</th></tr></thead>
     <tbody>
@@ -163,6 +135,14 @@
     {% endfor %}
     </tbody>
   </table>
-  <p><a class="btn" href="/collector">Open the Price Collector</a></p>
-</div>
+  <p>
+    <a class="btn secondary" href="/collector">Open vendor logins</a>
+    <form method="post" action="/purchasing/scan" class="inline" style="display:inline">
+      <input type="hidden" name="mode" value="discovery">
+      <input type="hidden" name="days" value="{{ board.days }}">
+      <input type="hidden" name="category" value="{{ board.category }}">
+      <button type="submit" class="btn secondary">Monthly discovery</button>
+    </form>
+  </p>
+</details>
 {% endblock %}

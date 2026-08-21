@@ -43,6 +43,32 @@ BUTTER_EXCLUDES = (
 )
 CATEGORIES = ("", "dairy", "food", "meat", "produce", "cleaning", "beverage", "wine")
 USAGE_DAYS = 30
+COMPARE_DAYS = (30, 60, 90, 365)
+DEFAULT_COMPARE_DAYS = 90
+VENDOR_ORDER = (
+    "Chef's Warehouse",
+    "Gordon Food Service",
+    "Sam's Club",
+    "Costco",
+    "Publix",
+    "Restaurant Depot",
+    "ALDI",
+    "WebstaurantStore",
+    "PG Fine Wines",
+    "Stan's Coffee",
+    "St. Armands Baking Company",
+)
+VENDOR_SHORT = {
+    "Chef's Warehouse": "Chef's",
+    "Gordon Food Service": "Gordon",
+    "Sam's Club": "Sam's",
+    "Restaurant Depot": "Depot",
+    "WebstaurantStore": "Webstaurant",
+    "PG Fine Wines": "PG Wines",
+    "St. Armands Baking Company": "Armands",
+    "Stan's Coffee": "Stan's",
+    "US retail average (BLS)": "BLS",
+}
 
 CANONICAL_PRODUCTS = (
     {
@@ -471,15 +497,22 @@ def classify_trip(row: PurchasePrice, gap_pct: Decimal, net: Decimal) -> str:
     return "maybe"
 
 
-def product_comparison(db: Session, product: Product) -> dict | None:
-    paid = latest_by_supplier(db, product.id, source="invoice")
-    account = latest_by_supplier(db, product.id, source="account", days=21)
+def vendor_short(name: str) -> str:
+    label = str(name or "").strip()
+    if label in VENDOR_SHORT:
+        return VENDOR_SHORT[label]
+    return label.split("·")[0].strip()[:16]
+
+
+def product_comparison(db: Session, product: Product, days: int | None = None) -> dict | None:
+    paid = latest_by_supplier(db, product.id, source="invoice", days=days)
+    account = latest_by_supplier(db, product.id, source="account", days=days if days is not None else 21)
     public = latest_by_supplier(db, product.id, source="catalog", days=21)
     benchmark = latest_by_supplier(db, product.id, source="benchmark", days=400)
     if not paid and not account and not public:
         return None
     compare_unit = compare_unit_for(product)
-    volumes = _volume_by_supplier(db, product.id)
+    volumes = _volume_by_supplier(db, product.id, days=USAGE_DAYS)
     if paid:
         current = max(
             paid,
@@ -494,7 +527,7 @@ def product_comparison(db: Session, product: Product) -> dict | None:
     offers = paid + account + public
     cheapest = min(offers, key=lambda row: Decimal(str(row.unit_cost_compare)))
     gap = money(Decimal(str(current.unit_cost_compare)) - Decimal(str(cheapest.unit_cost_compare)))
-    usage = monthly_usage_compare(db, product)
+    usage = monthly_usage_compare(db, product, days=USAGE_DAYS)
     monthly_unit = money(gap * usage) if usage else money(0)
     cheapest_supplier = cheapest.supplier
     current_supplier = current.supplier
@@ -559,6 +592,7 @@ def product_comparison(db: Session, product: Product) -> dict | None:
             Decimal(str(cheapest.unit_cost_compare)),
         ),
         "equivalents": _equivalent_rows(db, product, offers),
+        "cells": _cells_by_supplier(offers),
     }
 
 
@@ -589,7 +623,61 @@ def _equivalent_rows(db: Session, product: Product, offers: list[PurchasePrice])
     return rows
 
 
-def purchasing_board(db: Session, category: str = "") -> dict:
+def _cells_by_supplier(offers: list[PurchasePrice]) -> dict[int, PurchasePrice]:
+    cells: dict[int, PurchasePrice] = {}
+    for row in offers:
+        if not row.supplier_id or row.source in BENCHMARK_SOURCES:
+            continue
+        current = cells.get(row.supplier_id)
+        if current is None or Decimal(str(row.unit_cost_compare)) < Decimal(str(current.unit_cost_compare)):
+            cells[row.supplier_id] = row
+    return cells
+
+
+def matrix_vendors(cards: list[dict]) -> list[Supplier]:
+    found: dict[int, Supplier] = {}
+    for card in cards:
+        for row in (card.get("cells") or {}).values():
+            if row.supplier:
+                found[row.supplier.id] = row.supplier
+    def rank(supplier: Supplier) -> tuple:
+        name = supplier.name
+        try:
+            return (0, VENDOR_ORDER.index(name), name.lower())
+        except ValueError:
+            return (1, 99, name.lower())
+    return sorted(found.values(), key=rank)[:10]
+
+
+def seasonal_hint(db: Session, product: Product, card: dict) -> str:
+    cutoff = _cutoff(365)
+    rows = (
+        db.query(PurchasePrice)
+        .filter(
+            PurchasePrice.product_id == product.id,
+            PurchasePrice.source.in_(PAID_SOURCES + ACCOUNT_SOURCES),
+            PurchasePrice.purchased_on >= cutoff,
+        )
+        .all()
+    )
+    unit = card["compare_unit"]
+    current_name = card["current"].supplier.name if card["current"].supplier else "your usual"
+    cheapest_name = card["cheapest"].supplier.name if card["cheapest"].supplier else "another vendor"
+    if rows:
+        best = min(rows, key=lambda row: Decimal(str(row.unit_cost_compare)))
+        period_cost = Decimal(str(card["cheapest"].unit_cost_compare))
+        best_cost = Decimal(str(best.unit_cost_compare))
+        if best.supplier and best_cost + Decimal("0.02") < period_cost and best.purchased_on:
+            when = best.purchased_on.strftime("%b %Y")
+            return f"In {when} it was cheaper at {best.supplier.name} ({money(best_cost)}/{unit})."
+    if card["recommend"] in ("switch", "consider"):
+        return f"This window: {cheapest_name} is {card['gap_pct']}% under {current_name}."
+    if card["current"].supplier:
+        return f"Stay with {current_name}."
+    return ""
+
+
+def purchasing_board(db: Session, category: str = "", days: int | None = DEFAULT_COMPARE_DAYS) -> dict:
     query = db.query(Product).filter(Product.is_active.is_(True))
     if category:
         query = query.filter(
@@ -598,20 +686,27 @@ def purchasing_board(db: Session, category: str = "") -> dict:
     cards = []
     monthly_total = Decimal("0")
     cheaper_elsewhere = 0
+    window = days if days in COMPARE_DAYS or days is None else DEFAULT_COMPARE_DAYS
     for product in query.order_by(Product.name).all():
-        card = product_comparison(db, product)
+        card = product_comparison(db, product, days=window)
         if not card:
             continue
+        card["hint"] = seasonal_hint(db, product, card)
         cards.append(card)
         monthly_total += Decimal(str(card["net"] if card["recommend"] in ("switch", "consider") else 0))
         if card["recommend"] in ("switch", "consider"):
             cheaper_elsewhere += 1
-    cards.sort(key=lambda item: Decimal(str(item["net"])), reverse=True)
+    cards.sort(key=lambda item: item["product"].name.lower())
+    vendors = matrix_vendors(cards)
+    tips = [card for card in cards if card["recommend"] in ("switch", "consider")][:5]
     return {
         "cards": cards,
+        "vendors": vendors,
+        "tips": tips,
         "monthly_total": money(monthly_total),
         "cheaper_elsewhere": cheaper_elsewhere,
         "category": category,
+        "days": window or DEFAULT_COMPARE_DAYS,
         "stay_threshold": STAY_THRESHOLD,
         "gap_pct_threshold": GAP_PCT_THRESHOLD,
         "market": HOME_MARKET,
@@ -637,6 +732,7 @@ def board_payload(board: dict) -> dict:
                 "monthly": float(card["monthly"]),
                 "net": float(card["net"]),
                 "recommend": card["recommend"],
+                "hint": card.get("hint") or "",
                 "trip_class": card.get("trip_class") or "skip",
                 "miles": float(card.get("miles") or 0),
                 "best_source": card["cheapest"].source,
@@ -673,6 +769,8 @@ def board_payload(board: dict) -> dict:
         "monthly_total": float(board["monthly_total"]),
         "cheaper_elsewhere": board["cheaper_elsewhere"],
         "category": board["category"],
+        "days": board.get("days") or DEFAULT_COMPARE_DAYS,
+        "vendors": [row.name for row in board.get("vendors") or []],
         "cards": cards,
     }
 

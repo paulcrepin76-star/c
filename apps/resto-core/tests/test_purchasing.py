@@ -173,6 +173,9 @@ def test_purchasing_page_and_api():
         assert "$4.99" in page.text
         assert "Warehouse" in page.text
         assert "$5.60" in page.text
+        assert "compare" in page.text
+        names = [card["product"].name for card in purchasing_board(SessionLocal())["cards"]]
+        assert names == sorted(names, key=str.lower)
         dairy = client.get("/purchasing?category=dairy")
         assert dairy.status_code == 200
         assert "Butter" in dairy.text

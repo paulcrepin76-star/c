@@ -22,7 +22,7 @@ from app.db import get_db
 from app.ingest import INVOICE_TOTAL_MAX, PURCHASE_INVOICE_TYPES
 from app.matching import match_sellables
 from app.models import Connector, Invoice, Product, Recipe, SellableItem, StockMove, WineProfile
-from app.purchasing import CATEGORIES, purchasing_board
+from app.purchasing import CATEGORIES, COMPARE_DAYS, DEFAULT_COMPARE_DAYS, purchasing_board
 from app.services import catalog_counts, daily_activity, dashboard_charts, period_costing, sales_span, wine_rows
 
 router = APIRouter()
@@ -503,16 +503,18 @@ def connector_status(connector_id: int, status: str = Form(...), db: Session = D
 
 
 @router.get("/purchasing")
-def purchasing_page(request: Request, category: str = "", db: Session = Depends(get_db)):
+def purchasing_page(request: Request, category: str = "", days: int = DEFAULT_COMPARE_DAYS, db: Session = Depends(get_db)):
     ok, err = _pop_flash(request)
     chosen = category if category in CATEGORIES else ""
-    board = purchasing_board(db, chosen)
+    window = days if days in COMPARE_DAYS else DEFAULT_COMPARE_DAYS
+    board = purchasing_board(db, chosen, days=window)
     relevant = relevant_products(db, mode="refresh")
     return render(
         request,
         "purchasing.html",
         board=board,
         categories=CATEGORIES,
+        compare_days=COMPARE_DAYS,
         catalogs=catalog_lexicon(db),
         collectors=collector_rows(),
         source_label=source_label,
@@ -527,7 +529,13 @@ def purchasing_page(request: Request, category: str = "", db: Session = Depends(
 
 
 @router.post("/purchasing/scan")
-def purchasing_scan(request: Request, mode: str = Form("refresh"), db: Session = Depends(get_db)):
+def purchasing_scan(
+    request: Request,
+    mode: str = Form("refresh"),
+    days: int = Form(DEFAULT_COMPARE_DAYS),
+    category: str = Form(""),
+    db: Session = Depends(get_db),
+):
     try:
         chosen = "discovery" if mode == "discovery" else "refresh"
         catalogs = scan_catalogs(db, mode=chosen)
@@ -544,7 +552,12 @@ def purchasing_scan(request: Request, mode: str = Form("refresh"), db: Session =
         )
     except Exception:  # noqa: BLE001
         _flash(request, err="Collector scan failed. Public catalogs and APIs are tried; club sites still need the Chrome extension.")
-    return RedirectResponse("/purchasing", status_code=303)
+    window = days if days in COMPARE_DAYS else DEFAULT_COMPARE_DAYS
+    chosen_cat = category if category in CATEGORIES else ""
+    suffix = f"?days={window}"
+    if chosen_cat:
+        suffix += f"&category={chosen_cat}"
+    return RedirectResponse(f"/purchasing{suffix}", status_code=303)
 
 
 def collector_failure_message(status_code: int, body: str) -> str:

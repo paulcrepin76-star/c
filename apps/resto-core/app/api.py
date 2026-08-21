@@ -9,7 +9,7 @@ from app.config import settings
 from app.db import get_db
 from app.ingest import ingest_paperless_doc, ingest_recipes, ingest_sales
 from app.paperless_hook import ensure_paperless_sync_workflow, sync_paperless_now
-from app.purchasing import board_payload, purchasing_board
+from app.purchasing import COMPARE_DAYS, DEFAULT_COMPARE_DAYS, board_payload, purchasing_board
 from app.catalog import scan_catalogs
 from app.collector import ingest_collected_items
 from app.equivalents import watch_payload, COLLECTOR_PRODUCT_CAP
@@ -93,8 +93,9 @@ def wines_json(db: Session = Depends(get_db)):
 
 
 @router.get("/purchasing", dependencies=[Depends(require_key)])
-def purchasing_json(category: str = "", db: Session = Depends(get_db)):
-    return board_payload(purchasing_board(db, category))
+def purchasing_json(category: str = "", days: int = DEFAULT_COMPARE_DAYS, db: Session = Depends(get_db)):
+    window = days if days in COMPARE_DAYS else DEFAULT_COMPARE_DAYS
+    return board_payload(purchasing_board(db, category, days=window))
 
 
 @router.post("/sales/import", dependencies=[Depends(require_key)])

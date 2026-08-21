@@ -292,6 +292,53 @@ code {
 .badge-maybe { color: #9a6b12; font-size: 0.95rem; }
 .badge-stay { color: var(--muted); font-size: 0.95rem; }
 .empty-chart { color: var(--muted); padding: 48px 12px; text-align: center; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: flex-end; }
+.compact-kpis { margin-top: 16px; }
+.tips { margin-top: 8px; }
+.compare-card { padding: 0; overflow: hidden; }
+.compare-wrap { overflow-x: auto; }
+.compare { width: 100%; border-collapse: collapse; font-size: 0.84rem; margin: 0; }
+.compare th, .compare td {
+  text-align: left;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+.compare thead th {
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: #f7fafa;
+  position: sticky;
+  top: 0;
+}
+.compare th.vendor, .compare td.cost { text-align: right; font-variant-numeric: tabular-nums; }
+.compare td.item, .compare th.item {
+  position: sticky;
+  left: 0;
+  background: #fff;
+  min-width: 168px;
+  z-index: 1;
+}
+.compare thead th.item { background: #f7fafa; z-index: 2; }
+.compare td.item { font-weight: 600; }
+.compare td.item summary { cursor: pointer; list-style: none; }
+.compare td.item summary::-webkit-details-marker { display: none; }
+.compare td.item details p { margin: 8px 0 0; font-weight: 400; }
+.compare td.best { background: var(--accent-soft); color: var(--accent); font-weight: 700; }
+.compare td.you:not(.empty) { box-shadow: inset 0 -2px 0 var(--accent); }
+.compare td.empty { color: #c5d0cf; }
+.compare td.note {
+  color: var(--muted);
+  font-size: 0.8rem;
+  white-space: normal;
+  min-width: 220px;
+  max-width: 280px;
+}
+.legend { padding: 10px 14px 14px; margin: 0; }
+.collectors-details { margin-top: 16px; }
+.collectors-details summary { cursor: pointer; font-weight: 650; }
+.collectors-details .wide { margin-top: 12px; }
 @media (max-width: 980px) {
   body.app { grid-template-columns: 1fr; }
   .sidebar {

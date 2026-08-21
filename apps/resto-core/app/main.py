@@ -14,7 +14,7 @@ from app.connect_routes import router as connect_router
 from app.db import Base, SessionLocal, engine
 from app.matching import match_sellables
 from app.paperless_hook import ensure_paperless_sync_workflow
-from app.purchasing import backfill_purchase_prices, ensure_purchasing
+from app.purchasing import backfill_purchase_prices, ensure_purchasing, vendor_short
 from app.catalog import ensure_catalog_suppliers
 from app.collector import source_label
 from app.schema import ensure_schema
@@ -40,6 +40,7 @@ def _unit_cost(value) -> str:
 
 templates.env.filters["unitcost"] = _unit_cost
 templates.env.filters["sourcelabel"] = source_label
+templates.env.filters["vendorshort"] = vendor_short
 
 
 @asynccontextmanager
