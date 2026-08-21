@@ -142,17 +142,6 @@ def bot_password() -> str:
     return password
 
 
-def login(password: str) -> str:
-    response = httpx.post(
-        f"{MB_URL}/api/session",
-        json={"username": BOT_EMAIL, "password": password},
-        timeout=30.0,
-    )
-    if response.status_code >= 400:
-        raise SystemExit(f"Metabase login failed: {response.status_code}")
-    return response.json()["id"]
-
-
 def api(session: str, method: str, path: str, payload=None):
     kwargs = {
         "headers": {"X-Metabase-Session": session, "Content-Type": "application/json"},
@@ -333,7 +322,6 @@ def main() -> int:
         log("No questions found")
         return 1
     password = bot_password()
-    ensure_bot_user(password)
     session = login(password)
     db_id = ensure_database(session)
     collection_id = ensure_collection(session)
