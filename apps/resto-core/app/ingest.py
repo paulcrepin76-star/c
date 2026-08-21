@@ -230,9 +230,22 @@ def parse_invoice_amount(*parts) -> Decimal:
     return Decimal("0")
 
 
-# Numeric(12, 2) max is just under 10^10. OCR/custom fields sometimes glue
-# digits into a fake billions total; never write those onto invoices.
-INVOICE_TOTAL_MAX = Decimal("9999999.99")
+# A cafe invoice is hundreds to a few thousand, not coverage limits OCR'd
+# off an insurance email ($2,000,000) or glued-digit billions.
+INVOICE_TOTAL_MAX = Decimal("25000.00")
+PURCHASE_INVOICE_TYPES = ("food", "wine")
+IGNORE_INVOICE_TYPE = "ignore"
+_JUNK_MAIL = re.compile(
+    r"liability|workers'? ?comp|simplyinsured|wage report|\bgreen card\b|"
+    r"e2 renewal|sesac|music licensing|berkshire hathaway|guard insurance|"
+    r"no action required|business is covered|auto-renewal|policy will renew|"
+    r"\bds156\b|\bw-?2\b|cancellation notice|suwc\d",
+    re.I,
+)
+
+
+def is_junk_mail(title: str, correspondent: str = "") -> bool:
+    return bool(_JUNK_MAIL.search(f"{title} {correspondent}"))
 
 
 def clamp_invoice_money(value: Decimal) -> Decimal:
@@ -245,6 +258,8 @@ def clamp_invoice_money(value: Decimal) -> Decimal:
 def should_replace_total(existing, incoming: Decimal) -> bool:
     old = Decimal(existing or 0)
     incoming = clamp_invoice_money(incoming)
+    if old > INVOICE_TOTAL_MAX:
+        return True
     if incoming <= 0:
         return False
     if old <= 0:
@@ -436,12 +451,23 @@ def ingest_paperless_doc(db: Session, doc: dict) -> dict:
 
     paperless_id = str(doc.get("id") or "")
     invoice_type = str(doc.get("invoice_type") or "food")
-    total = _invoice_total(doc)
+    if is_junk_mail(str(doc.get("title") or ""), str(doc.get("correspondent") or "")):
+        invoice_type = IGNORE_INVOICE_TYPE
+        total = Decimal("0")
+    else:
+        total = _invoice_total(doc)
     existing = db.query(Invoice).filter(Invoice.paperless_id == paperless_id).first()
     if existing:
         status = "duplicate"
-        if should_replace_total(existing.total, total):
-            existing.total = total
+        if existing.invoice_type != invoice_type:
+            existing.invoice_type = invoice_type
+            status = "updated"
+        if invoice_type == IGNORE_INVOICE_TYPE:
+            if existing.total != 0:
+                existing.total = Decimal("0")
+                status = "updated"
+        elif should_replace_total(existing.total, total):
+            existing.total = clamp_invoice_money(total)
             status = "updated"
         if not existing.supplier_id:
             supplier = match_supplier(db, doc.get("correspondent"), invoice_type)
@@ -482,6 +508,26 @@ def ingest_paperless_doc(db: Session, doc: dict) -> dict:
     db.commit()
     record_invoice_prices(db, invoice)
     return {"status": "created", "invoice_id": invoice.id}
+
+
+def scrub_junk_invoices(db: Session) -> dict:
+    """Zero insurance/payroll OCR totals already stored as food invoices."""
+    updated = 0
+    for invoice in db.query(Invoice).all():
+        dirty = False
+        if is_junk_mail(invoice.title or ""):
+            if invoice.invoice_type != IGNORE_INVOICE_TYPE or Decimal(invoice.total or 0) != 0:
+                invoice.invoice_type = IGNORE_INVOICE_TYPE
+                invoice.total = Decimal("0")
+                dirty = True
+        elif Decimal(invoice.total or 0) > INVOICE_TOTAL_MAX:
+            invoice.total = Decimal("0")
+            dirty = True
+        if dirty:
+            updated += 1
+    if updated:
+        db.commit()
+    return {"updated": updated}
 
 
 def ingest_recipes(db: Session, recipes: list[dict]) -> dict:

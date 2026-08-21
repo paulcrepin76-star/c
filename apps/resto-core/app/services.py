@@ -5,6 +5,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.costing import coefficient, cost_per_pour, cost_percent, money, recipe_cost
+from app.ingest import INVOICE_TOTAL_MAX, PURCHASE_INVOICE_TYPES
 from app.models import Invoice, Product, Recipe, Sale, SellableItem, StockMove, Supplier, WineProfile
 
 
@@ -175,17 +176,23 @@ def daily_activity(db: Session, start: datetime, end: datetime) -> dict:
             continue
         key = _iso_day(sold_at)
         sales_map[key] = round(sales_map.get(key, 0.0) + _num(revenue), 2)
+    invoice_filter = (
+        Invoice.issued_on.is_not(None),
+        Invoice.issued_on >= start.date(),
+        Invoice.issued_on <= end.date(),
+        Invoice.invoice_type.in_(PURCHASE_INVOICE_TYPES),
+        Invoice.total > 0,
+        Invoice.total <= INVOICE_TOTAL_MAX,
+    )
     invoice_rows = db.execute(
-        select(Invoice.issued_on, func.coalesce(func.sum(Invoice.total), 0))
-        .where(Invoice.issued_on.is_not(None), Invoice.issued_on >= start.date(), Invoice.issued_on <= end.date())
-        .group_by(Invoice.issued_on)
+        select(Invoice.issued_on, func.coalesce(func.sum(Invoice.total), 0)).where(*invoice_filter).group_by(Invoice.issued_on)
     ).all()
     vendor_name = func.coalesce(Supplier.name, "Unknown")
     vendor_rows = db.execute(
         select(vendor_name, func.coalesce(func.sum(Invoice.total), 0))
         .select_from(Invoice)
         .outerjoin(Supplier, Supplier.id == Invoice.supplier_id)
-        .where(Invoice.issued_on.is_not(None), Invoice.issued_on >= start.date(), Invoice.issued_on <= end.date())
+        .where(*invoice_filter)
         .group_by(vendor_name)
         .order_by(func.coalesce(func.sum(Invoice.total), 0).desc())
         .limit(8)

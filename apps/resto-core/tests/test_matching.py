@@ -34,9 +34,12 @@ def test_parse_invoice_amount_prefers_dollar_and_total_labels():
     assert coerce_money("$88.10") == Decimal("88.10")
     assert coerce_money(12.5) == Decimal("12.50")
     assert coerce_money("34008624849.68") == Decimal("0")
+    assert coerce_money("2000000") == Decimal("0")
+    assert coerce_money("4103.23") == Decimal("4103.23")
     from app.ingest import should_replace_total
 
     assert should_replace_total(Decimal("1.45"), coerce_money("34008624849.68")) is False
+    assert should_replace_total(Decimal("2000000.00"), Decimal("0")) is True
 
 
 def test_parse_invoice_amount_skips_sams_cash_and_reads_receipt_total():
@@ -82,6 +85,35 @@ def test_zero_invoice_is_updated_when_title_has_amount():
 
         invoice = db.get(Invoice, first["invoice_id"])
         assert invoice.total == Decimal("240.00")
+        db.close()
+
+
+def test_insurance_email_is_not_a_two_million_food_invoice():
+    from app.ingest import scrub_junk_invoices
+    from app.sync import infer_invoice_type
+
+    assert infer_invoice_type("[No action required] Congrats! Your business is covered with General Liability") == "ignore"
+    with TestClient(app):
+        db = SessionLocal()
+        junk = ingest_paperless_doc(
+            db,
+            {
+                "id": "ins-1",
+                "title": "[No action required] Your General Liability policy will renew",
+                "total": "2000000.00",
+                "invoice_type": "food",
+            },
+        )
+        invoice = db.get(Invoice, junk["invoice_id"])
+        assert invoice.invoice_type == "ignore"
+        assert invoice.total == Decimal("0")
+        invoice.invoice_type = "food"
+        invoice.total = Decimal("2000000.00")
+        db.commit()
+        assert scrub_junk_invoices(db)["updated"] == 1
+        db.refresh(invoice)
+        assert invoice.invoice_type == "ignore"
+        assert invoice.total == Decimal("0")
         db.close()
 
 

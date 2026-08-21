@@ -19,6 +19,7 @@ from app.market import scan_external_prices
 from app.connections import access_token_for
 from app.costing import money
 from app.db import get_db
+from app.ingest import INVOICE_TOTAL_MAX, PURCHASE_INVOICE_TYPES
 from app.matching import match_sellables
 from app.models import Connector, Invoice, Product, Recipe, SellableItem, StockMove, WineProfile
 from app.purchasing import CATEGORIES, purchasing_board
@@ -386,7 +387,13 @@ def invoices_page(request: Request, p: int = 1, db: Session = Depends(get_db)):
         .limit(INVOICE_PAGE_SIZE)
         .all()
     )
-    filed_total = db.scalar(select(func.coalesce(func.sum(Invoice.total), 0))) or 0
+    filed_total = db.scalar(
+        select(func.coalesce(func.sum(Invoice.total), 0)).where(
+            Invoice.invoice_type.in_(PURCHASE_INVOICE_TYPES),
+            Invoice.total > 0,
+            Invoice.total <= INVOICE_TOTAL_MAX,
+        )
+    ) or 0
     return render(
         request,
         "invoices.html",
