@@ -14,6 +14,8 @@ from pathlib import Path
 import bcrypt
 import httpx
 import psycopg2
+import secrets
+import base64
 
 MB_URL = os.environ.get("MB_URL", "http://metabase:3000").rstrip("/")
 BOT_EMAIL = os.environ.get("MB_BOT_EMAIL", "cellar-bot@surveycafe.local")
@@ -70,10 +72,24 @@ def parse_questions(path: Path) -> list[dict]:
     return rows
 
 
-def set_user_password(password: str, with_salt: bool) -> None:
-    salt = str(uuid.uuid4()) if with_salt else "default"
-    material = (salt + password) if with_salt else password
-    hashed = bcrypt.hashpw(material.encode(), bcrypt.gensalt(10, prefix=b"2a")).decode()
+def bcrypt2a(text: str) -> str:
+    return bcrypt.hashpw(text.encode(), bcrypt.gensalt(10, prefix=b"2a")).decode()
+
+
+def ensure_api_key() -> str:
+    BOT_ENV.parent.mkdir(parents=True, exist_ok=True)
+    raw = ""
+    if BOT_ENV.exists():
+        for line in BOT_ENV.read_text().splitlines():
+            if line.startswith("MB_API_KEY=") and line.split("=", 1)[1].startswith("mb_"):
+                raw = line.split("=", 1)[1].strip()
+    if not raw:
+        raw = "mb_" + base64.urlsafe_b64encode(secrets.token_bytes(32)).decode().rstrip("=")
+        BOT_ENV.write_text(f"MB_API_KEY={raw}\n")
+        os.chmod(BOT_ENV, 0o600)
+
+    hashed = bcrypt2a(raw)
+    prefix = raw[:7]
     conn = psycopg2.connect(
         host=PG["host"],
         port=PG["port"],
@@ -85,12 +101,14 @@ def set_user_password(password: str, with_salt: bool) -> None:
     with conn.cursor() as cur:
         cur.execute("SELECT id FROM core_user WHERE email = %s", (BOT_EMAIL,))
         row = cur.fetchone()
+        dummy = str(uuid.uuid4())
+        dummy_hash = bcrypt2a(dummy)
         if row:
-            cur.execute(
-                "UPDATE core_user SET password = %s, password_salt = %s, is_superuser = TRUE, is_active = TRUE WHERE id = %s",
-                (hashed, salt, row[0]),
-            )
             user_id = row[0]
+            cur.execute(
+                "UPDATE core_user SET type = 'api-key', is_superuser = TRUE, is_active = TRUE, password = %s, password_salt = %s WHERE id = %s",
+                (dummy_hash, str(uuid.uuid4()), user_id),
+            )
         else:
             cur.execute(
                 """
@@ -98,10 +116,10 @@ def set_user_password(password: str, with_salt: bool) -> None:
                     email, first_name, last_name, password, password_salt,
                     date_joined, is_superuser, is_active, is_qbnewb, is_datasetnewb, type
                 ) VALUES (
-                    %s, 'Cellar', 'Bot', %s, %s, NOW(), TRUE, TRUE, FALSE, FALSE, 'personal'
+                    %s, 'Survey Cafe', 'API', %s, %s, NOW(), TRUE, TRUE, FALSE, FALSE, 'api-key'
                 ) RETURNING id
                 """,
-                (BOT_EMAIL, hashed, salt),
+                (BOT_EMAIL, dummy_hash, str(uuid.uuid4())),
             )
             user_id = cur.fetchone()[0]
         cur.execute(
@@ -112,38 +130,28 @@ def set_user_password(password: str, with_salt: bool) -> None:
             """,
             (user_id,),
         )
+        cur.execute("SELECT id FROM api_key WHERE name = %s", ("Survey Cafe cellar",))
+        key_row = cur.fetchone()
+        if key_row:
+            cur.execute(
+                "UPDATE api_key SET key = %s, key_prefix = %s, user_id = %s, updated_at = NOW() WHERE id = %s",
+                (hashed, prefix, user_id, key_row[0]),
+            )
+        else:
+            cur.execute(
+                """
+                INSERT INTO api_key (user_id, key, key_prefix, creator_id, name, updated_by_id, created_at, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, NOW(), NOW())
+                """,
+                (user_id, hashed, prefix, user_id, "Survey Cafe cellar", user_id),
+            )
     conn.close()
+    return raw
 
 
-def login(password: str) -> str:
-    set_user_password(password, with_salt=True)
-    response = httpx.post(
-        f"{MB_URL}/api/session",
-        json={"username": BOT_EMAIL, "password": password},
-        timeout=30.0,
-    )
-    if response.status_code >= 400:
-        raise SystemExit(f"Metabase login failed: {response.status_code} {response.text[:200]}")
-    return response.json()["id"]
-
-
-def bot_password() -> str:
-    BOT_ENV.parent.mkdir(parents=True, exist_ok=True)
-    if BOT_ENV.exists():
-        for line in BOT_ENV.read_text().splitlines():
-            if line.startswith("MB_BOT_PASSWORD="):
-                password = line.split("=", 1)[1].strip()
-                if 8 <= len(password) <= 24:
-                    return password
-    password = uuid.uuid4().hex[:16] + "Aa1!"
-    BOT_ENV.write_text(f"MB_BOT_EMAIL={BOT_EMAIL}\nMB_BOT_PASSWORD={password}\n")
-    os.chmod(BOT_ENV, 0o600)
-    return password
-
-
-def api(session: str, method: str, path: str, payload=None):
+def api(api_key: str, method: str, path: str, payload=None):
     kwargs = {
-        "headers": {"X-Metabase-Session": session, "Content-Type": "application/json"},
+        "headers": {"X-API-Key": api_key, "Content-Type": "application/json"},
         "timeout": 60.0,
     }
     if payload is not None:
@@ -320,16 +328,15 @@ def main() -> int:
     if not questions:
         log("No questions found")
         return 1
-    password = bot_password()
-    session = login(password)
-    db_id = ensure_database(session)
-    collection_id = ensure_collection(session)
+    api_key = ensure_api_key()
+    db_id = ensure_database(api_key)
+    collection_id = ensure_collection(api_key)
     card_ids = []
     for question in questions:
-        card_id = ensure_card(session, db_id, collection_id, question)
+        card_id = ensure_card(api_key, db_id, collection_id, question)
         card_ids.append((question["name"], card_id, question["display"]))
         log(f"card {question['name']}")
-    dash_id = ensure_dashboard(session, collection_id, card_ids)
+    dash_id = ensure_dashboard(api_key, collection_id, card_ids)
     log(f"dashboard {DASHBOARD} id={dash_id} cards={len(card_ids)}")
     log(f"open {os.environ.get('METABASE_PUBLIC_URL', 'http://100.116.48.120:3001')}")
     log(f"log in as the Metabase user you already created (paulcrepin76@gmail.com)")
