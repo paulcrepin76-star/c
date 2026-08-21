@@ -68,6 +68,7 @@ def test_connect_page_is_the_login_door():
         assert "Sam's Club" in text
         assert "Costco" in text
         assert "Gordon Food Service" in text
+        assert "Account number" not in text
         setup = client.get("/setup", follow_redirects=False)
         assert setup.status_code == 303
         assert setup.headers["location"] == "/connect"
@@ -144,14 +145,14 @@ def test_vendor_connect_uses_the_same_login_you_already_have():
     with TestClient(app) as client:
         page = client.post(
             "/connect/vendor/fpl",
-            data={"username": "surveycafedowntown@gmail.com", "account": "bonita-1"},
+            data={"username": "surveycafedowntown@gmail.com", "password": "secret"},
             follow_redirects=True,
         )
         assert page.status_code == 200
         assert "FPL Bonita Springs is connected" in unescape(page.text)
         warehouse = client.post(
             "/connect/vendor/chefs-warehouse",
-            data={"username": "survey-cafe"},
+            data={"username": "survey-cafe", "password": "secret"},
             follow_redirects=True,
         )
         assert "Chef's Warehouse is connected" in unescape(warehouse.text)

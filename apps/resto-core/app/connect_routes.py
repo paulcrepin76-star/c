@@ -317,22 +317,21 @@ def connect_vendor(
     slug: str,
     request: Request,
     username: str = Form(""),
-    account: str = Form(""),
+    password: str = Form(""),
     db: Session = Depends(get_db),
 ):
     vendor = vendor_by_slug(slug)
     if vendor is None:
         return _redirect_connect()
     login = username.strip()
-    if not login:
-        _flash(request, err=f"Enter the same email or username you use to log in to {vendor['label']}.")
+    if not login or not password:
+        _flash(request, err=f"Enter the same email and password you use to log in to {vendor['label']}.")
         return _redirect_connect()
     mark_connected(
         db,
         vendor["slug"],
-        "",
+        password,
         login=login,
-        account=account.strip(),
         connector_name=vendor["label"],
     )
     _ensure_paperless_correspondent(db, vendor)

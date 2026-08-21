@@ -95,7 +95,7 @@
 </section>
 
 <h2>Bills and invoices</h2>
-<p class="lede">Click Connect, log in on their site, then come back and type the same email or username here. Paperless already files the PDFs that land in the Survey Cafe Gmail.</p>
+<p class="lede">Same as Mealie: email and password. Type the login you already use. You do not open n8n.</p>
 <section class="connect-grid">
   {% for vendor in vendors %}
   <article class="card connect-card">
@@ -115,14 +115,15 @@
         <button type="submit" class="btn secondary">Disconnect</button>
       </form>
     {% else %}
-      {% if vendor.login_url %}
-        <a class="btn secondary big" href="{{ vendor.login_url }}" target="_blank" rel="noreferrer">Log in at {{ vendor.label }}</a>
-      {% endif %}
+      <p class="muted">Same email and password you already use on {{ vendor.label }}.</p>
       <form method="post" action="/connect/vendor/{{ vendor.slug }}" class="stack-form">
-        <label>Email or username <input name="username" autocomplete="username" placeholder="The login you already use"></label>
-        <label>Account number <input name="account" autocomplete="off" placeholder="Optional"></label>
+        <label>Email or username <input name="username" autocomplete="username"></label>
+        <label>Password <input type="password" name="password" autocomplete="current-password"></label>
         <button type="submit" class="btn big">Connect {{ vendor.label }}</button>
       </form>
+      {% if vendor.login_url %}
+        <p class="muted"><a href="{{ vendor.login_url }}" target="_blank" rel="noreferrer">Open {{ vendor.label }}</a> if you need to check the login first.</p>
+      {% endif %}
     {% endif %}
   </article>
   {% endfor %}
