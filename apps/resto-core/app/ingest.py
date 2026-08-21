@@ -14,38 +14,84 @@ _SKIP_LINE = re.compile(
     r"\b(subtotal|total due|invoice total|amount due|balance due|sales tax|payment|invoice\s*#)\b",
     re.I,
 )
+_QTY_LINE = re.compile(r"^Qty\s+(\d+(?:\.\d+)?)$", re.I)
+_PRICE_LINE = re.compile(r"^\$(\d{1,3}(?:,\d{3})*\.\d{2})$")
+_PER_UNIT = re.compile(r"^\$?\d+(?:\.\d+)?\s*/|^\d+(?:\.\d+)?¢/")
+
+
+def _line_item(description: str, qty: Decimal, unit: str, price: Decimal) -> dict:
+    return {
+        "description": description[:240],
+        "qty": qty,
+        "unit": unit,
+        "unit_cost": Decimal("0"),
+        "line_total": price,
+    }
+
+
+def _single_line_item(text: str) -> dict | None:
+    if len(text) < 8 or _SKIP_LINE.search(text):
+        return None
+    pack_qty, pack_unit = parse_pack(text)
+    if pack_qty <= 0 or not pack_unit or family(pack_unit) is None:
+        return None
+    prices = [money(item.replace(",", "")) for item in _PRICE.findall(text)]
+    if not prices:
+        return None
+    price = max(prices)
+    if price <= 0:
+        return None
+    return _line_item(text, pack_qty, pack_unit, price)
+
+
+def _multiline_item(lines: list[str], index: int) -> tuple[dict, int] | None:
+    if index + 2 >= len(lines):
+        return None
+    desc = lines[index]
+    if _SKIP_LINE.search(desc) or _QTY_LINE.match(desc) or _PRICE_LINE.match(desc):
+        return None
+    pack_qty, pack_unit = parse_pack(desc)
+    if pack_qty <= 0 or family(pack_unit) is None:
+        return None
+    cursor = index + 1
+    if cursor < len(lines) and _PER_UNIT.search(lines[cursor]):
+        cursor += 1
+    qty_match = _QTY_LINE.match(lines[cursor]) if cursor < len(lines) else None
+    if not qty_match:
+        return None
+    multiplier = Decimal(qty_match.group(1))
+    cursor += 1
+    price_match = _PRICE_LINE.match(lines[cursor]) if cursor < len(lines) else None
+    if not price_match:
+        return None
+    price = money(price_match.group(1).replace(",", ""))
+    if price <= 0 or multiplier <= 0:
+        return None
+    item = _line_item(f"{desc} Qty {multiplier}", pack_qty * multiplier, pack_unit, price)
+    return item, cursor - index + 1
 
 
 def extract_invoice_lines(content: str) -> list[dict]:
     """Pull pack + price rows out of Paperless OCR. Totals and tax lines are skipped."""
+    rows = [" ".join(part.split()) for part in str(content or "").splitlines()]
+    rows = [row for row in rows if row]
     found: list[dict] = []
     seen: set[tuple[str, str, str]] = set()
-    for raw in str(content or "").splitlines():
-        text = " ".join(raw.split())
-        if len(text) < 8 or _SKIP_LINE.search(text):
-            continue
-        pack_qty, pack_unit = parse_pack(text)
-        if pack_qty <= 0 or not pack_unit or family(pack_unit) is None:
-            continue
-        prices = [money(item.replace(",", "")) for item in _PRICE.findall(text)]
-        if not prices:
-            continue
-        price = max(prices)
-        if price <= 0:
-            continue
-        key = (str(pack_qty), pack_unit, str(price))
-        if key in seen:
-            continue
-        seen.add(key)
-        found.append(
-            {
-                "description": text[:240],
-                "qty": pack_qty,
-                "unit": pack_unit,
-                "unit_cost": Decimal("0"),
-                "line_total": price,
-            }
-        )
+    index = 0
+    while index < len(rows):
+        block = _multiline_item(rows, index)
+        item = None
+        consumed = 1
+        if block:
+            item, consumed = block
+        else:
+            item = _single_line_item(rows[index])
+        if item:
+            key = (str(item["qty"]), item["unit"], str(item["line_total"]))
+            if key not in seen:
+                seen.add(key)
+                found.append(item)
+        index += consumed
     return found
 
 
@@ -231,13 +277,18 @@ def _add_invoice_lines(db: Session, invoice: Invoice, lines: list[dict], require
 def _ocr_lines_for(db: Session, invoice: Invoice, doc: dict) -> list[dict]:
     if invoice.invoice_type not in ("food", "wine"):
         return []
-    existing = db.query(InvoiceLine).filter(InvoiceLine.invoice_id == invoice.id).count()
-    if existing:
-        return []
-    structured = list(doc.get("lines") or [])
-    if structured:
-        return structured
-    return extract_invoice_lines(str(doc.get("content") or ""))
+    existing = {
+        str(line.raw_description or "")
+        for line in db.query(InvoiceLine).filter(InvoiceLine.invoice_id == invoice.id).all()
+    }
+    found: list[dict] = []
+    for item in list(doc.get("lines") or []) + extract_invoice_lines(str(doc.get("content") or "")):
+        description = str(item.get("description") or item.get("raw_description") or "")
+        if not description or description in existing:
+            continue
+        found.append(item)
+        existing.add(description)
+    return found
 
 
 def ingest_paperless_doc(db: Session, doc: dict) -> dict:

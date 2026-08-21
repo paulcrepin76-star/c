@@ -52,6 +52,10 @@ TO_EACH = {
     "dozen": Decimal("12"),
 }
 
+_EACH_CT = re.compile(
+    r"(?P<each>\d+(?:\.\d+)?)\s*(?P<unit>lbs?|pounds?|oz|ounces?|kg|g|grams?|gal|gallons?|qt|quarts?|ml|l)\b\.?,?\s*(?P<count>\d+)\s*(?:ct|count|pk|pack)\b",
+    re.I,
+)
 _PACK = re.compile(
     r"(?P<qty>\d+(?:\.\d+)?)\s*(?P<unit>lbs?|pounds?|oz|ounces?|kg|g|grams?|gal|gallons?|qt|quarts?|ml|l|each|ea|ct|pc|dz|doz|dozen)\b",
     re.I,
@@ -120,6 +124,10 @@ def parse_pack(description: str, fallback_qty: Decimal | int | float = 0, fallba
     counted = _COUNT_PACK.search(text)
     if counted:
         qty = Decimal(counted.group("count")) * Decimal(counted.group("each"))
+        return qty, norm_unit(counted.group("unit"))
+    counted = _EACH_CT.search(text)
+    if counted:
+        qty = Decimal(counted.group("each")) * Decimal(counted.group("count"))
         return qty, norm_unit(counted.group("unit"))
     matches = list(_PACK.finditer(text))
     if matches:

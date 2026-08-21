@@ -14,9 +14,11 @@ def test_pack_normalization_never_compares_sticker_price():
     assert parse_pack("Butter unsalted 36 lb case") == (Decimal("36"), "lb")
     assert parse_pack("Butter 4 lb pack") == (Decimal("4"), "lb")
     assert parse_pack("BUTTER UNSLT 36/1 LB 5.600 201.60") == (Decimal("36"), "lb")
+    assert parse_pack("Member's Mark Unsalted Sweet Cream Butter Block, 1 lb., 4 ct.") == (Decimal("4"), "lb")
     assert comparable_cost(Decimal("201.60"), Decimal("36"), "lb", "lb") == Decimal("5.60")
     assert comparable_cost(Decimal("19.96"), Decimal("4"), "lb", "lb") == Decimal("4.99")
     assert comparable_cost(Decimal("47.88"), Decimal("15"), "dozen", "each") == Decimal("0.266")
+    assert comparable_cost(Decimal("32.96"), Decimal("16"), "lb", "lb") == Decimal("2.06")
 
 
 def test_butter_board_picks_costco_and_keeps_chefs_as_current():
@@ -63,7 +65,24 @@ def test_peanut_butter_is_not_butter():
     db.close()
 
 
-def test_ocr_extracts_chefs_pack_and_skips_totals():
+def test_sams_multiline_receipt_normalizes_butter():
+    blob = """
+    Member's Mark Unsalted Sweet Cream Butter Block, 1 lb., 4 ct.
+    $2.06/lb
+    Qty 4
+    $32.96
+    Strawberries, 2 lbs.
+    $2.49/lb
+    Qty 10
+    $49.70
+    Invoice Total 214.59
+    """
+    lines = extract_invoice_lines(blob)
+    butter = next(item for item in lines if "Butter" in item["description"])
+    assert butter["qty"] == Decimal("16")
+    assert butter["unit"] == "lb"
+    assert butter["line_total"] == Decimal("32.96")
+    assert comparable_cost(butter["line_total"], butter["qty"], butter["unit"], "lb") == Decimal("2.06")
     blob = """
     Chef's Warehouse
     BUTTER UNSLT AA 36/1 LB 5.60 201.60
@@ -104,6 +123,36 @@ def test_ocr_invoice_records_immutable_price_history():
         prices = db.query(PurchasePrice).filter(PurchasePrice.invoice_id == first["invoice_id"]).all()
         assert len(prices) == 1
         assert prices[0].unit_cost_compare == Decimal("5.60")
+        db.close()
+
+
+def test_existing_invoice_gains_canonical_ocr_lines():
+    with TestClient(app):
+        db = SessionLocal()
+        first = ingest_paperless_doc(
+            db,
+            {
+                "id": "cw-ocr-2",
+                "title": "Chef's mixed",
+                "correspondent": "Chef's Warehouse",
+                "invoice_type": "food",
+                "lines": [{"description": "Compressor 1 EA 2298.96", "qty": 1, "unit": "each", "line_total": "2298.96"}],
+            },
+        )
+        assert first["status"] == "created"
+        again = ingest_paperless_doc(
+            db,
+            {
+                "id": "cw-ocr-2",
+                "title": "Chef's mixed",
+                "correspondent": "Chef's Warehouse",
+                "invoice_type": "food",
+                "content": "BUTTER UNSLT 36/1 LB 201.60\nInvoice Total 201.60",
+            },
+        )
+        assert again["status"] == "updated"
+        prices = db.query(PurchasePrice).filter(PurchasePrice.invoice_id == first["invoice_id"]).all()
+        assert any(row.unit_cost_compare == Decimal("5.60") for row in prices)
         db.close()
 
 
