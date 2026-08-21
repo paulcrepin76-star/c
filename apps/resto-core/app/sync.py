@@ -292,6 +292,30 @@ def _paperless_maps(client: httpx.Client, base: str, headers: dict) -> tuple[dic
     return correspondents, types, fields
 
 
+def _document_with_content(client: httpx.Client, base: str, headers: dict, doc: dict) -> dict:
+    content = str(doc.get("content") or "")
+    doc_id = doc.get("id")
+    if not doc_id or len(content) >= 500:
+        return doc
+    response = client.get(f"{base}/api/documents/{doc_id}/", headers=headers)
+    if response.status_code != 200:
+        return doc
+    detail = response.json()
+    merged = dict(doc)
+    merged["content"] = detail.get("content") or content
+    return merged
+
+
+def _purchasing_correspondent_ids(correspondents: dict) -> list[str]:
+    needles = ("chef", "sam", "gordon", "depot", "publix", "aldi", "costco", "armand", "stan")
+    found = []
+    for cid, name in correspondents.items():
+        lowered = str(name or "").lower()
+        if any(needle in lowered for needle in needles):
+            found.append(str(cid))
+    return found
+
+
 def _ingest_paperless_result(db: Session, doc: dict, correspondents: dict, types: dict, fields: dict) -> str:
     title = str(doc.get("title") or "")
     correspondent_id = doc.get("correspondent")
@@ -349,7 +373,8 @@ def sync_paperless(db: Session, max_pages: int = 15) -> dict:
                 docs = response.json().get("results") or []
                 if not docs:
                     break
-                for doc in docs:
+                for raw in docs:
+                    doc = _document_with_content(client, base, headers, raw)
                     status = _ingest_paperless_result(db, doc, correspondents, types, fields)
                     if status == "created":
                         created += 1
@@ -360,6 +385,32 @@ def sync_paperless(db: Session, max_pages: int = 15) -> dict:
                 if not response.json().get("next"):
                     break
                 page += 1
+            if pages >= 10:
+                for cid in _purchasing_correspondent_ids(correspondents):
+                    page = 1
+                    while page <= 8:
+                        response = client.get(
+                            f"{base}/api/documents/",
+                            headers=headers,
+                            params={"page_size": 50, "ordering": "-added", "page": page, "correspondent__id": cid},
+                        )
+                        if response.status_code != 200:
+                            break
+                        docs = response.json().get("results") or []
+                        if not docs:
+                            break
+                        for raw in docs:
+                            doc = _document_with_content(client, base, headers, raw)
+                            status = _ingest_paperless_result(db, doc, correspondents, types, fields)
+                            if status == "created":
+                                created += 1
+                            elif status == "updated":
+                                updated += 1
+                            else:
+                                skipped += 1
+                        if not response.json().get("next"):
+                            break
+                        page += 1
         row = get_connection(db, "paperless")
         row.status = "connected"
         row.last_error = ""

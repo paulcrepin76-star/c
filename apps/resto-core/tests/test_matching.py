@@ -88,6 +88,46 @@ def test_zero_invoice_is_updated_when_title_has_amount():
         db.close()
 
 
+def test_sams_receipt_records_every_pack_not_just_eggs():
+    with TestClient(app):
+        db = SessionLocal()
+        result = ingest_paperless_doc(
+            db,
+            {
+                "id": "sams-full-1",
+                "title": "Sam's Club receipt",
+                "correspondent": "Sam's Club",
+                "invoice_type": "food",
+                "content": """
+                Member's Mark Heavy Whipping Cream 64 fl. oz.
+                Qty 8
+                $46.16
+                Pineapple
+                $3.37/ea
+                Qty 4
+                $13.48
+                Large Eggs 15 dozen
+                Qty 3
+                $82.26
+                """,
+            },
+        )
+        from app.models import InvoiceLine, PurchasePrice
+
+        lines = db.query(InvoiceLine).filter(InvoiceLine.invoice_id == result["invoice_id"]).all()
+        names = " ".join(line.raw_description for line in lines)
+        assert "Cream" in names
+        assert "Pineapple" in names
+        prices = db.query(PurchasePrice).filter(PurchasePrice.invoice_id == result["invoice_id"]).all()
+        assert len(prices) >= 3
+        pineapple = next(line for line in lines if "Pineapple" in line.raw_description)
+        pineapple_price = next(row for row in prices if row.invoice_line_id == pineapple.id)
+        assert pineapple_price.unit_cost_compare == Decimal("3.37")
+        assert pineapple.product is not None
+        assert pineapple.product.name == "Pineapple"
+        db.close()
+
+
 def test_insurance_email_is_not_a_two_million_food_invoice():
     from app.ingest import scrub_junk_invoices
     from app.sync import infer_invoice_type

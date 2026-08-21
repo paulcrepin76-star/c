@@ -50,9 +50,9 @@ def _multiline_item(lines: list[str], index: int) -> tuple[dict, int] | None:
     desc = lines[index]
     if _SKIP_LINE.search(desc) or _QTY_LINE.match(desc) or _PRICE_LINE.match(desc):
         return None
-    pack_qty, pack_unit = parse_pack(desc)
-    if pack_qty <= 0 or family(pack_unit) is None:
+    if re.match(r"^\d{8,}\b", desc):
         return None
+    pack_qty, pack_unit = parse_pack(desc)
     cursor = index + 1
     if cursor < len(lines) and _PER_UNIT.search(lines[cursor]):
         cursor += 1
@@ -67,7 +67,11 @@ def _multiline_item(lines: list[str], index: int) -> tuple[dict, int] | None:
     price = money(price_match.group(1).replace(",", ""))
     if price <= 0 or multiplier <= 0:
         return None
-    item = _line_item(f"{desc} Qty {multiplier}", pack_qty * multiplier, pack_unit, price)
+    if pack_qty <= 0 or family(pack_unit) is None:
+        pack_qty, pack_unit = multiplier, "each"
+    else:
+        pack_qty = pack_qty * multiplier
+    item = _line_item(f"{desc} Qty {multiplier}", pack_qty, pack_unit, price)
     return item, cursor - index + 1
 
 
@@ -76,16 +80,19 @@ def ocr_is_usable(content: str) -> bool:
     text = str(content or "")
     words = re.findall(r"[A-Za-z]{3,}", text)
     letters = sum(ch.isalpha() for ch in text)
+    spaced = [part for part in text.split() if part]
+    if spaced and sum(1 for part in spaced if re.fullmatch(r"[A-Za-z]", part)) / len(spaced) > 0.35:
+        return False
     if letters < 24:
-        return False
-    if len(text) >= 300 and len(words) < 15 and letters / len(text) < 0.25:
-        return False
-    if len(text) >= 400 and letters / len(text) < 0.12:
         return False
     prices = bool(re.search(r"\d+\.\d{2}", text))
     packs = bool(re.search(r"\b\d+\s*[x/]\s*\d+\b|\b\d+/1\s*lb\b|\b12/750\b", text, re.I))
     if prices and (packs or len(words) >= 8):
         return True
+    if len(text) >= 300 and len(words) < 15 and letters / len(text) < 0.25:
+        return False
+    if len(text) >= 400 and letters / len(text) < 0.12:
+        return False
     return len(words) >= 18 and letters >= 80
 
 
@@ -478,7 +485,7 @@ def ingest_paperless_doc(db: Session, doc: dict) -> dict:
             existing.title = str(doc.get("title") or "")[:240]
             status = "updated"
         parsed = _ocr_lines_for(db, existing, doc)
-        if _add_invoice_lines(db, existing, parsed, require_match=not doc.get("lines")):
+        if _add_invoice_lines(db, existing, parsed, require_match=False):
             status = "updated"
         if status == "updated":
             db.commit()
@@ -504,7 +511,7 @@ def ingest_paperless_doc(db: Session, doc: dict) -> dict:
     )
     db.add(invoice)
     db.flush()
-    _add_invoice_lines(db, invoice, _ocr_lines_for(db, invoice, doc), require_match=not doc.get("lines"))
+    _add_invoice_lines(db, invoice, _ocr_lines_for(db, invoice, doc), require_match=False)
     db.commit()
     record_invoice_prices(db, invoice)
     return {"status": "created", "invoice_id": invoice.id}

@@ -61,7 +61,7 @@ _CASE_PACK = re.compile(
     re.I,
 )
 _PACK = re.compile(
-    r"(?P<qty>\d+(?:\.\d+)?)\s*(?P<unit>lbs?|pounds?|oz|ounces?|kg|g|grams?|gal|gallons?|qt|quarts?|ml|l|each|ea|ct|pc|dz|doz|dozen)\b",
+    r"(?P<qty>\d+(?:\.\d+)?)\s*(?P<unit>lbs?|pounds?|oz|ounces?|kg|g|grams?|gal|gallons?|qt|quarts?|ml|l|floz|each|ea|ct|pc|dz|doz|dozen)\b",
     re.I,
 )
 _TRAIL_CASE = re.compile(r"[-–]\s*(?P<count>\d+)\s*/\s*(?:case|cs)\b", re.I)
@@ -94,6 +94,8 @@ def norm_unit(unit: str) -> str:
         "dozen": "dozen",
         "doz": "dozen",
         "dz": "dozen",
+        "floz": "floz",
+        "flozs": "floz",
     }
     return aliases.get(text, text)
 
@@ -126,32 +128,37 @@ def to_base(qty: Decimal | int | float | str, unit: str, base_unit: str) -> Deci
 
 
 def parse_pack(description: str, fallback_qty: Decimal | int | float = 0, fallback_unit: str = "") -> tuple[Decimal, str]:
-    text = str(description or "")
+    text = re.sub(r"\bfl\.?\s*ozs?\b", "floz", str(description or ""), flags=re.I)
     qty = ZERO
     unit = ""
     used_case = False
+    from_text = False
     counted = _COUNT_PACK.search(text)
     if counted:
         qty = Decimal(counted.group("count")) * Decimal(counted.group("each"))
         unit = counted.group("unit")
         used_case = True
+        from_text = True
     else:
         counted = _CASE_PACK.search(text)
         if counted:
             qty = Decimal(counted.group("each")) * Decimal(counted.group("count"))
             unit = counted.group("unit")
             used_case = True
+            from_text = True
         else:
             counted = _EACH_CT.search(text)
             if counted:
                 qty = Decimal(counted.group("each")) * Decimal(counted.group("count"))
                 unit = counted.group("unit")
+                from_text = True
             else:
                 matches = list(_PACK.finditer(text))
                 if matches:
                     chosen = matches[-1]
                     qty = Decimal(chosen.group("qty"))
                     unit = chosen.group("unit")
+                    from_text = True
                 elif fallback_qty and fallback_unit:
                     qty = Decimal(str(fallback_qty))
                     unit = fallback_unit
@@ -160,7 +167,7 @@ def parse_pack(description: str, fallback_qty: Decimal | int | float = 0, fallba
         if trail:
             qty *= Decimal(trail.group("count"))
     suffix = _QTY_SUFFIX.search(text)
-    if suffix and qty > 0:
+    if suffix and qty > 0 and from_text:
         qty *= Decimal(suffix.group(1))
     return qty, norm_unit(unit or fallback_unit)
 

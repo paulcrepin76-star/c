@@ -16,6 +16,7 @@ def test_pack_normalization_never_compares_sticker_price():
     assert parse_pack("BUTTER UNSLT 36/1 LB 5.600 201.60") == (Decimal("36"), "lb")
     assert parse_pack("Member's Mark Unsalted Sweet Cream Butter Block, 1 lb., 4 ct.") == (Decimal("4"), "lb")
     assert parse_pack("Member's Mark Unsalted Sweet Cream Butter Block, 1 lb., 4 ct. Qty 4") == (Decimal("16"), "lb")
+    assert parse_pack("Pineapple Qty 4", Decimal("4"), "each") == (Decimal("4"), "each")
     assert parse_pack("Large Eggs 15 dozen Qty 3") == (Decimal("45"), "dozen")
     assert parse_pack("Member's Mark Vitamin D Whole Milk, 1 gal. Qty 3") == (Decimal("3"), "gal")
     assert parse_pack("Grassland Unsalted Grade AA Butter Solid - 1 lb. - 36/Case") == (Decimal("36"), "lb")
@@ -91,6 +92,28 @@ def test_sams_multiline_receipt_normalizes_butter():
     assert butter["unit"] == "lb"
     assert butter["line_total"] == Decimal("32.96")
     assert comparable_cost(butter["line_total"], butter["qty"], butter["unit"], "lb") == Decimal("2.06")
+    blob = """
+    Member's Mark Heavy Whipping Cream 64 fl. oz.
+    9.0¢/fl oz
+    Qty 8
+    $46.16
+    Pineapple
+    $3.37/ea
+    Qty 4
+    $13.48
+    Large Eggs 15 dozen
+    Qty 3
+    $82.26
+    """
+    lines = extract_invoice_lines(blob)
+    names = " ".join(item["description"] for item in lines)
+    assert "Cream" in names
+    assert "Pineapple" in names
+    cream = next(item for item in lines if "Cream" in item["description"])
+    assert cream["line_total"] == Decimal("46.16")
+    pineapple = next(item for item in lines if "Pineapple" in item["description"])
+    assert pineapple["qty"] == Decimal("4")
+    assert pineapple["unit"] == "each"
     blob = """
     Chef's Warehouse
     BUTTER UNSLT AA 36/1 LB 5.60 201.60
@@ -208,6 +231,18 @@ def test_faded_scan_does_not_invent_line_items():
 
     faded = "AGO0000 VISA CREDIT Thank you Clu Put Join today Term publ ix il"
     assert ocr_is_usable(faded) is False
+    gordon = "G o r d o n   F o o d   1 4 4 7   p   1 4 . 5 8  T O T A L"
+    assert ocr_is_usable(gordon) is False
+    sams = """
+    Member's Mark Heavy Whipping Cream 64 fl. oz.
+    Qty 8
+    $46.16
+    Pineapple
+    $3.37/ea
+    Qty 4
+    $13.48
+    """
+    assert ocr_is_usable(sams) is True
     wine = """
     PG Fine Wines
     Veuve Parisot Sparkling Brut 12/750 99.60

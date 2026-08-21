@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.costing import cost_percent, money
 from app.geo import FAR_MILES, HOME_MARKET, LOCAL_SUPPLIERS, MID_MILES, NEAR_MILES, radius_band
 from app.models import Invoice, InvoiceLine, Product, ProductAlias, PurchasePrice, Recipe, RecipeLine, Supplier
-from app.units import comparable_cost, parse_pack, to_base
+from app.units import comparable_cost, family, parse_pack, to_base
 
 STAY_THRESHOLD = Decimal("25")  # monthly saving below this: stay with the current supplier
 GAP_PCT_THRESHOLD = Decimal("8")  # also require 8% cheaper so $0.03 gaps do not alert
@@ -217,6 +217,7 @@ def ensure_purchased_product(db: Session, description: str) -> Product | None:
         return None
     if any(_has_alias(lowered, word) for word in SKIP_NEW_PRODUCT):
         return None
+    text = re.sub(r"\s+Qty\s+\d+(?:\.\d+)?\s*$", "", text, flags=re.I).strip()
     food = clean_food_name(re.sub(r"\b(?:sku|upc)\s*[:#]?\s*[A-Z0-9-]+\b", "", text, flags=re.I)) or text
     food = food[:80].strip(" -")
     if len(food) < 4:
@@ -233,8 +234,8 @@ def ensure_purchased_product(db: Session, description: str) -> Product | None:
         sku=sku,
         name=food[:200],
         category="food",
-        base_unit=pack_unit if pack_unit in {"g", "ml", "each", "lb"} else "g",
-        compare_unit=pack_unit or "lb",
+        base_unit=pack_unit if pack_unit in {"g", "ml", "each", "lb", "floz"} else (pack_unit or "each"),
+        compare_unit=pack_unit or "each",
         purchasing_category="food",
         is_active=True,
     )
@@ -294,6 +295,12 @@ def record_line(db: Session, invoice: Invoice, line: InvoiceLine) -> PurchasePri
         return None
     compare_unit = compare_unit_for(product)
     unit_compare = comparable_cost(pack_price, pack_qty, pack_unit, compare_unit)
+    if unit_compare is None and family(pack_unit) and family(compare_unit) != family(pack_unit):
+        product.compare_unit = pack_unit
+        if family(product.base_unit or "") != family(pack_unit):
+            product.base_unit = pack_unit
+        compare_unit = pack_unit
+        unit_compare = comparable_cost(pack_price, pack_qty, pack_unit, compare_unit)
     qty_base = to_base(pack_qty, pack_unit, product.base_unit or compare_unit) or Decimal("0")
     unit_base = (pack_price / qty_base) if qty_base > 0 else Decimal("0")
     if unit_compare is None:
