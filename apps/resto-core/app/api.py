@@ -7,8 +7,9 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.db import get_db
-from app.models import Invoice, InvoiceLine, Product, Recipe, RecipeLine, Sale, SellableItem, StockMove, Supplier
+from app.ingest import ingest_paperless_doc, ingest_recipes, ingest_sales
 from app.services import period_costing, wine_rows
+from app.sync import sync_all
 
 router = APIRouter(prefix="/api")
 
@@ -83,117 +84,14 @@ def wines_json(db: Session = Depends(get_db)):
     return {"wines": rows}
 
 
-def _match_sellable(db: Session, incoming: SaleIn) -> SellableItem | None:
-    if incoming.square_item_id:
-        item = db.query(SellableItem).filter(SellableItem.square_item_id == incoming.square_item_id).first()
-        if item:
-            return item
-    return db.query(SellableItem).filter(SellableItem.name.ilike(incoming.name)).first()
-
-
 @router.post("/sales/import", dependencies=[Depends(require_key)])
 def import_sales(batch: SalesBatch, db: Session = Depends(get_db)):
-    created = 0
-    skipped = 0
-    for incoming in batch.sales:
-        if incoming.square_order_id and incoming.square_line_id:
-            exists = (
-                db.query(Sale)
-                .filter(Sale.square_order_id == incoming.square_order_id, Sale.square_line_id == incoming.square_line_id)
-                .first()
-            )
-            if exists:
-                skipped += 1
-                continue
-        item = _match_sellable(db, incoming)
-        if item is None:
-            item = SellableItem(
-                name=incoming.name,
-                costing_group=incoming.costing_group,
-                selling_price=incoming.unit_price,
-                square_item_id=incoming.square_item_id,
-            )
-            db.add(item)
-            db.flush()
-        revenue = incoming.revenue if incoming.revenue is not None else incoming.unit_price * incoming.qty
-        sale = Sale(
-            sold_at=incoming.sold_at,
-            sellable_item_id=item.id,
-            qty=incoming.qty,
-            unit_price=incoming.unit_price,
-            revenue=revenue,
-            square_order_id=incoming.square_order_id,
-            square_line_id=incoming.square_line_id or incoming.name,
-        )
-        db.add(sale)
-        db.flush()
-        if item.product_id and item.serving_unit == "ml":
-            db.add(
-                StockMove(
-                    product_id=item.product_id,
-                    occurred_at=incoming.sold_at,
-                    qty_base=-(Decimal(item.serving_qty) * Decimal(incoming.qty)),
-                    reason="sale",
-                    location="bar",
-                    sale_id=sale.id,
-                )
-            )
-        created += 1
-    db.commit()
-    return {"created": created, "skipped": skipped}
+    return ingest_sales(db, [item.model_dump() for item in batch.sales])
 
 
 @router.post("/webhooks/paperless", dependencies=[Depends(require_key)])
 def paperless_webhook(doc: PaperlessDocument, db: Session = Depends(get_db)):
-    existing = db.query(Invoice).filter(Invoice.paperless_id == str(doc.id)).first()
-    if existing:
-        return {"status": "duplicate", "invoice_id": existing.id}
-
-    supplier = None
-    if doc.correspondent:
-        supplier = db.query(Supplier).filter(Supplier.name.ilike(doc.correspondent)).first()
-        if supplier is None:
-            supplier = Supplier(name=doc.correspondent, category=doc.invoice_type, default_invoice_type=doc.invoice_type)
-            db.add(supplier)
-            db.flush()
-
-    issued_on = None
-    if doc.created:
-        try:
-            issued_on = datetime.fromisoformat(doc.created.replace("Z", "")).date()
-        except ValueError:
-            issued_on = None
-
-    invoice = Invoice(
-        supplier_id=supplier.id if supplier else None,
-        paperless_id=str(doc.id),
-        number=doc.invoice_number,
-        issued_on=issued_on,
-        total=doc.total,
-        invoice_type=doc.invoice_type,
-        status="filed",
-        title=doc.title,
-    )
-    db.add(invoice)
-    db.flush()
-    for line in doc.lines:
-        description = str(line.get("description") or line.get("raw_description") or "")
-        product = None
-        if description:
-            product = db.query(Product).filter(Product.name.ilike(f"%{description}%")).first()
-        db.add(
-            InvoiceLine(
-                invoice_id=invoice.id,
-                raw_description=description,
-                qty=Decimal(str(line.get("qty") or 0)),
-                unit=str(line.get("unit") or "each"),
-                unit_cost=Decimal(str(line.get("unit_cost") or 0)),
-                line_total=Decimal(str(line.get("line_total") or 0)),
-                product_id=product.id if product else None,
-            )
-        )
-    db.commit()
-    return {"status": "created", "invoice_id": invoice.id}
+    return ingest_paperless_doc(db, doc.model_dump())
 
 
 class RecipesBatch(BaseModel):
@@ -202,67 +100,24 @@ class RecipesBatch(BaseModel):
 
 @router.post("/recipes/import", dependencies=[Depends(require_key)])
 def import_recipes(batch: RecipesBatch, db: Session = Depends(get_db)):
-    created = 0
-    updated = 0
-    for incoming in batch.recipes:
-        name = str(incoming.get("name") or "").strip()
-        if not name:
-            continue
-        mealie_id = str(incoming.get("mealie_id") or "")
-        recipe = None
-        if mealie_id:
-            recipe = db.query(Recipe).filter(Recipe.mealie_id == mealie_id).first()
-        if recipe is None:
-            recipe = db.query(Recipe).filter(Recipe.name.ilike(name)).first()
-        if recipe is None:
-            recipe = Recipe(name=name, mealie_id=mealie_id, yield_qty=incoming.get("yield_qty") or 1, yield_unit=incoming.get("yield_unit") or "portion")
-            db.add(recipe)
-            db.flush()
-            created += 1
-        else:
-            recipe.name = name
-            recipe.mealie_id = mealie_id or recipe.mealie_id
-            recipe.yield_qty = incoming.get("yield_qty") or recipe.yield_qty
-            updated += 1
-            db.query(RecipeLine).filter(RecipeLine.recipe_id == recipe.id).delete()
-        for line in incoming.get("lines") or []:
-            food = str(line.get("name") or line.get("food") or "").strip()
-            if not food:
-                continue
-            product = db.query(Product).filter(Product.name.ilike(food)).first()
-            if product is None:
-                product = Product(sku=food.upper().replace(" ", "-")[:70], name=food, category="food", base_unit=str(line.get("unit") or "g"))
-                db.add(product)
-                db.flush()
-            db.add(
-                RecipeLine(
-                    recipe_id=recipe.id,
-                    product_id=product.id,
-                    qty=line.get("qty") or 0,
-                    unit=str(line.get("unit") or "g"),
-                )
-            )
-        price = incoming.get("selling_price")
-        if price is not None:
-            item = db.query(SellableItem).filter(SellableItem.recipe_id == recipe.id).first()
-            if item is None:
-                item = SellableItem(recipe_id=recipe.id, name=name, costing_group=incoming.get("costing_group") or "food")
-                db.add(item)
-            item.selling_price = price
-            item.name = name
-    db.commit()
-    return {"created": created, "updated": updated}
+    return ingest_recipes(db, batch.recipes)
+
+
+@router.post("/jobs/sync-all", dependencies=[Depends(require_key)])
+def sync_all_job(db: Session = Depends(get_db)):
+    return sync_all(db)
 
 
 @router.post("/jobs/nightly", dependencies=[Depends(require_key)])
 def nightly(db: Session = Depends(get_db)):
+    synced = sync_all(db)
     end = datetime.now(UTC).replace(tzinfo=None)
     start = end - timedelta(days=1)
     costing = period_costing(db, start, end)
     low_stock = [row["product"].name for row in wine_rows(db) if row["below_par"]]
     return {
         "ran_at": end.isoformat(),
+        "sync": synced,
         "yesterday": costing["groups"],
         "wine_below_par": low_stock,
-        "hint": "n8n should pull Square/Mealie into /api/sales/import before this job, and drop new PDFs in the Paperless consume folder.",
     }

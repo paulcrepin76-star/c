@@ -4,6 +4,7 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 
 from app.models import (
+    Connection,
     Connector,
     Invoice,
     InvoiceLine,
@@ -16,6 +17,16 @@ from app.models import (
     Supplier,
     WineProfile,
 )
+
+CONNECTION_NAMES = ("square", "mealie", "paperless")
+
+
+def ensure_connections(db: Session) -> None:
+    existing = {row.name for row in db.query(Connection).all()}
+    for name in CONNECTION_NAMES:
+        if name not in existing:
+            db.add(Connection(name=name, status="not_connected"))
+    db.commit()
 
 
 def seed_if_empty(db: Session) -> None:
@@ -287,8 +298,8 @@ def seed_if_empty(db: Session) -> None:
     db.add_all(
         [
             Connector(name="Paperless email", kind="email", status="ready", notes="Best default: any supplier PDF that arrives by email."),
-            Connector(name="Square", kind="api", status="not_connected", notes="Official API for sales. Store the token in n8n or .env."),
-            Connector(name="Mealie", kind="api", status="ready", notes="Recipes stay in Mealie. Cocktails and food dishes sync here."),
+            Connector(name="Square", kind="api", status="not_connected", notes="Official API for sales. Click Connect on this site and log in yourself."),
+            Connector(name="Mealie", kind="api", status="not_connected", notes="Recipes stay in Mealie. Click Connect and use your Mealie login."),
             Connector(name="FPL", kind="portal", status="not_connected", notes="Portal download only if the bill is not emailed as a PDF."),
             Connector(name="Sam's Club", kind="email", status="not_connected", notes="Prefer emailed receipts. Portal history is last resort."),
             Connector(name="Chef's Warehouse", kind="email", status="not_connected", notes="Use invoices / statements from the customer portal or email PDFs."),

@@ -12,6 +12,7 @@ curl -fsSL https://raw.githubusercontent.com/paulcrepin76-star/c/main/scripts/on
 
 Then open:
 
+- http://100.116.48.120:8088/connect — log in to Square, Mealie, Paperless
 - http://100.116.48.120:8088 — wine cellar
 - your existing Paperless URL
 - your existing Mealie URL

@@ -9,8 +9,9 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from app.api import router as api_router
 from app.config import settings
+from app.connect_routes import router as connect_router
 from app.db import Base, SessionLocal, engine
-from app.seed import seed_if_empty
+from app.seed import ensure_connections, seed_if_empty
 from app.web import router as web_router
 
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
@@ -25,6 +26,7 @@ async def lifespan(_app: FastAPI):
     db = SessionLocal()
     try:
         seed_if_empty(db)
+        ensure_connections(db)
     finally:
         db.close()
     yield
@@ -35,6 +37,7 @@ def create_app() -> FastAPI:
     app.add_middleware(SessionMiddleware, secret_key=settings.secret_key)
     app.state.templates = templates
     app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")
+    app.include_router(connect_router)
     app.include_router(web_router)
     app.include_router(api_router)
 

@@ -3,3 +3,22 @@ import os
 os.environ.setdefault("DATABASE_URL", "sqlite:////tmp/resto-pytest.db")
 os.environ.setdefault("SECRET_KEY", "test")
 os.environ.setdefault("RESTO_API_KEY", "test")
+os.environ.setdefault("RESTO_PUBLIC_URL", "http://100.116.48.120:8088")
+
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def reset_db():
+    from app.db import Base, SessionLocal, engine
+    from app.seed import ensure_connections, seed_if_empty
+
+    Base.metadata.drop_all(bind=engine)
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+    try:
+        seed_if_empty(db)
+        ensure_connections(db)
+    finally:
+        db.close()
+    yield

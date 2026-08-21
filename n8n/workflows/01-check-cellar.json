@@ -20,7 +20,7 @@
       "parameters": {
         "width": 420,
         "height": 180,
-        "content": "## You do not edit this workflow\nClick **Test workflow**. If resto-core answers, n8n can talk to the wine cellar.\nThen add Square / Mealie / Paperless credentials and turn the other workflows on."
+        "content": "## You do not edit this workflow\nClick **Test workflow**. If resto-core answers, n8n can talk to the wine cellar.\nLogins live at http://100.116.48.120:8088/connect — not in n8n credentials."
       }
     },
     {

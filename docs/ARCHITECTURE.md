@@ -9,7 +9,7 @@ Each tool does one job. Nothing scrapes a website unless email and APIs have fai
 | Square | What sold, at what price | Recipes, cellar, invoices |
 | Mealie | Food recipes and cocktails | Wine list, costing % |
 | Paperless-ngx | Original PDF, OCR, search, archive | Margin math |
-| n8n | Talk to Square / mail / rare portals | Store the cellar |
+| n8n | Nightly “go sync” timer | Store logins or the cellar |
 | resto-core | Products, wine, inventory, costing | Document vault |
 | Postgres | Source of truth for numbers | PDFs |
 | Metabase | Charts on a screen | Data entry |
@@ -26,7 +26,7 @@ A dedicated FPL / Sam's Club / Chef's Warehouse / Comcast robot looks tidy on a 
 Keep three layers instead:
 
 1. **Email + consume folder** — Paperless already knows how to fetch mail and watch a directory. This covers utilities and most vendors.
-2. **Official API** — Square for sales, Mealie for recipes. n8n stores the tokens.
+2. **Official API** — Square for sales, Mealie for recipes. You log in on resto-core `/connect`. resto-core stores the tokens. n8n only runs the nightly sync.
 3. **Portal job in n8n** — only for a vendor that never emails a PDF. The file still lands in Paperless. resto-core never sees the password.
 
 ## Data flow
@@ -36,8 +36,8 @@ INTERNET
    │
    ├─ email PDFs ──────────────────────────────► Paperless
    ├─ drop folder /mnt/user/documents/invoices-inbox ─► Paperless
-   ├─ Square API ─ n8n ─ /api/sales/import ────► resto-core
-   └─ Mealie API ─ n8n / optional token ───────► resto-core recipes
+   ├─ Square API ─ resto-core /connect ─ nightly sync ─► resto-core
+   └─ Mealie API ─ resto-core /connect ─ nightly sync ─► resto-core recipes
                                                     │
                          wine products + pours      │
                          invoice line items         │

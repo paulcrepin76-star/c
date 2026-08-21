@@ -10,9 +10,9 @@
       "typeVersion": 1,
       "position": [0, 200],
       "parameters": {
-        "width": 480,
-        "height": 220,
-        "content": "## Your part\nPaperless already fetches Gmail PDFs. This workflow only copies new documents into costing.\n\nCredentials → Header Auth named **Paperless Token**\nHeader: `Authorization`  Value: `Token YOUR_PAPERLESS_TOKEN`\n\nCreate the token in Paperless (port 8011) → your user → API tokens."
+        "width": 460,
+        "height": 180,
+        "content": "## Credentials live on the cellar site\nhttp://100.116.48.120:8088/connect\n\nThis extra timer is optional. The nightly Square workflow already syncs Paperless."
       }
     },
     {
@@ -37,65 +37,29 @@
     },
     {
       "id": "p3",
-      "name": "List Paperless documents",
+      "name": "Sync all",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [280, 40],
       "parameters": {
-        "method": "GET",
-        "url": "http://host.docker.internal:8011/api/documents/?page_size=50&ordering=-added",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "options": {}
-      },
-      "credentials": {
-        "httpHeaderAuth": { "name": "Paperless Token" }
-      }
-    },
-    {
-      "id": "p4",
-      "name": "Map documents",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [560, 40],
-      "parameters": {
-        "jsCode": "const results = $input.first().json.results || [];\nconst docs = results.map((doc) => {\n  const title = String(doc.title || '');\n  let invoice_type = 'food';\n  const t = title.toLowerCase();\n  if (/fpl|comcast|waste|water|utility|electric/.test(t)) invoice_type = 'utility';\n  if (/wine|vin|champagne/.test(t)) invoice_type = 'wine';\n  return {\n    id: doc.id,\n    title,\n    correspondent: doc.correspondent || null,\n    created: doc.created || doc.added,\n    invoice_number: String(doc.archive_serial_number || doc.id),\n    total: 0,\n    invoice_type,\n    lines: []\n  };\n});\nreturn docs.map((d) => ({ json: d }));"
-      }
-    },
-    {
-      "id": "p5",
-      "name": "Send invoice to cellar",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [840, 40],
-      "parameters": {
         "method": "POST",
-        "url": "http://resto-core:8080/api/webhooks/paperless",
+        "url": "http://resto-core:8080/api/jobs/sync-all",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             { "name": "X-API-Key", "value": "={{ $env.RESTO_API_KEY }}" }
           ]
         },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ $json }}",
         "options": {}
       }
     }
   ],
   "connections": {
     "Every 15 minutes": {
-      "main": [[{ "node": "List Paperless documents", "type": "main", "index": 0 }]]
+      "main": [[{ "node": "Sync all", "type": "main", "index": 0 }]]
     },
     "Test now": {
-      "main": [[{ "node": "List Paperless documents", "type": "main", "index": 0 }]]
-    },
-    "List Paperless documents": {
-      "main": [[{ "node": "Map documents", "type": "main", "index": 0 }]]
-    },
-    "Map documents": {
-      "main": [[{ "node": "Send invoice to cellar", "type": "main", "index": 0 }]]
+      "main": [[{ "node": "Sync all", "type": "main", "index": 0 }]]
     }
   }
 }

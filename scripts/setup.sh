@@ -101,6 +101,7 @@ if [ -f "$ROOT/.env" ]; then
   upsert_env PAPERLESS_URL "http://${HOST_HINT}:${PAPERLESS_PORT}"
   upsert_env MEALIE_BASE_URL "$MEALIE_BASE"
   upsert_env MEALIE_URL "http://${HOST_HINT}:${MEALIE_PORT}"
+  upsert_env RESTO_URL "http://${HOST_HINT}:8088"
 else
   POSTGRES_PASSWORD="$(hex 16)"
   SECRET_KEY="$(hex 32)"
@@ -123,6 +124,7 @@ else
     "$ROOT/.env.example" > "$ROOT/.env"
   upsert_env PAPERLESS_URL "http://${HOST_HINT}:${PAPERLESS_PORT}"
   upsert_env MEALIE_URL "http://${HOST_HINT}:${MEALIE_PORT}"
+  upsert_env RESTO_URL "http://${HOST_HINT}:8088"
   echo "Wrote .env with random passwords. This file stays on the server, not in git."
 fi
 
@@ -137,6 +139,7 @@ Next:
   ./scripts/remote-up.sh
 
 Then open:
+  http://${HOST_HINT}:8088/connect   log in to Square, Mealie, Paperless
   http://${HOST_HINT}:8088   wine cellar + costing
   http://${HOST_HINT}:${PAPERLESS_PORT}   Paperless
   http://${HOST_HINT}:${MEALIE_PORT}   Mealie

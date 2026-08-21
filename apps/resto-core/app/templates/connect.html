@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}Connect{% endblock %}
+{% block content %}
+<p class="eyebrow">You log in. The cellar remembers the connection.</p>
+<h1>Connect Square, Mealie and Paperless</h1>
+<p class="lede">Open this page, click Connect, and sign in with the same account you already use. You do not open n8n. You do not paste tokens into a credentials screen. After this, n8n only rings the nightly bell.</p>
+
+{% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
+{% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
+
+<section class="connect-grid">
+  <article class="card connect-card">
+    <p class="eyebrow">1 · Sales</p>
+    <h2>Square</h2>
+    <p class="status-line">
+      <span class="dot {{ square.status }}"></span>
+      {% if square.status == 'connected' %}Connected{% elif square.status == 'error' %}Needs attention{% else %}Not connected{% endif %}
+    </p>
+    {% if square.status == 'connected' %}
+      <p class="muted">Sales will copy into the cellar. Location {{ square_location or "picked automatically" }}.</p>
+      <form method="post" action="/connect/square/disconnect">
+        <button type="submit" class="btn secondary">Disconnect</button>
+      </form>
+    {% else %}
+      {% if square_app_ready %}
+        <a class="btn big" href="/connect/square">Sign in with Square</a>
+        <p class="muted">Square opens. You log in. It comes back here connected.</p>
+      {% else %}
+        <details class="connect-details">
+          <summary>One-time Square app (for Sign in with Square)</summary>
+          <p class="muted">On <a href="https://developer.squareup.com/apps" target="_blank" rel="noreferrer">developer.squareup.com/apps</a> create an app, then paste Application ID and Secret. Redirect URL: <code>{{ square_callback }}</code></p>
+          <form method="post" action="/connect/square/app" class="stack-form">
+            <label>Application ID <input name="application_id" autocomplete="off"></label>
+            <label>Application secret <input type="password" name="application_secret" autocomplete="off"></label>
+            <button type="submit">Save app</button>
+          </form>
+        </details>
+      {% endif %}
+      <form method="post" action="/connect/square/token" class="stack-form">
+        <label>Or paste Production access token
+          <input type="password" name="access_token" autocomplete="off" placeholder="From Square Developer Dashboard">
+        </label>
+        <button type="submit" class="btn big">Connect Square</button>
+      </form>
+      <p class="muted">Dashboard → Applications → Production → Access token. We pick the location for you.</p>
+    {% endif %}
+    {% if square.last_error %}<p class="flash err">{{ square.last_error }}</p>{% endif %}
+  </article>
+
+  <article class="card connect-card">
+    <p class="eyebrow">2 · Recipes</p>
+    <h2>Mealie</h2>
+    <p class="status-line">
+      <span class="dot {{ mealie.status }}"></span>
+      {% if mealie.status == 'connected' %}Connected{% elif mealie.status == 'error' %}Needs attention{% else %}Not connected{% endif %}
+    </p>
+    {% if mealie.status == 'connected' %}
+      <p class="muted">Your Mealie recipes will copy into costing.</p>
+      <form method="post" action="/connect/mealie/disconnect">
+        <button type="submit" class="btn secondary">Disconnect</button>
+      </form>
+    {% else %}
+      <p class="muted">Same email and password you already use on Mealie.</p>
+      <form method="post" action="/connect/mealie" class="stack-form">
+        <label>Email or username <input name="username" autocomplete="username"></label>
+        <label>Password <input type="password" name="password" autocomplete="current-password"></label>
+        <button type="submit" class="btn big">Connect Mealie</button>
+      </form>
+    {% endif %}
+    {% if mealie.last_error %}<p class="flash err">{{ mealie.last_error }}</p>{% endif %}
+  </article>
+
+  <article class="card connect-card">
+    <p class="eyebrow">3 · Invoices</p>
+    <h2>Paperless</h2>
+    <p class="status-line">
+      <span class="dot {{ paperless.status }}"></span>
+      {% if paperless.status == 'connected' %}Connected{% elif paperless.status == 'error' %}Needs attention{% else %}Not connected{% endif %}
+    </p>
+    {% if paperless.status == 'connected' %}
+      <p class="muted">Filed invoices will copy into costing.</p>
+      <form method="post" action="/connect/paperless/disconnect">
+        <button type="submit" class="btn secondary">Disconnect</button>
+      </form>
+    {% else %}
+      <p class="muted">Same username and password you already use on Paperless.</p>
+      <form method="post" action="/connect/paperless" class="stack-form">
+        <label>Username <input name="username" autocomplete="username"></label>
+        <label>Password <input type="password" name="password" autocomplete="current-password"></label>
+        <button type="submit" class="btn big">Connect Paperless</button>
+      </form>
+    {% endif %}
+    {% if paperless.last_error %}<p class="flash err">{{ paperless.last_error }}</p>{% endif %}
+  </article>
+</section>
+
+<div class="card">
+  <h2>Pull everything now</h2>
+  <p class="muted">n8n will do this every night by itself. Use this button if you want to see data today.</p>
+  <form method="post" action="/connect/sync">
+    <button type="submit" class="btn big">Sync now</button>
+  </form>
+</div>
+{% endblock %}

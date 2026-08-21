@@ -90,8 +90,8 @@ tr.warn { background: var(--warn); }
   background: var(--bad);
   margin-right: 6px;
 }
-.dot.ready { background: var(--ok); }
-.dot.manual { background: #c8892a; }
+.dot.ready, .dot.connected { background: var(--ok); }
+.dot.manual, .dot.error { background: #c8892a; }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 16px 0; }
 label { display: flex; flex-direction: column; gap: 6px; font-size: 0.9rem; }
 input, select {
@@ -104,6 +104,31 @@ input, select {
 .inline { display: flex; gap: 8px; align-items: center; }
 .compact .form-grid, .form.compact { display: grid; gap: 10px; }
 code { background: #efe4d4; padding: 2px 6px; border-radius: 6px; }
+.flash {
+  padding: 12px 16px;
+  border-radius: 12px;
+  margin: 0 0 16px;
+}
+.flash.ok { background: #e5f3ea; color: var(--green); }
+.flash.err { background: #f8e6e2; color: var(--bad); }
+.connect-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  margin: 20px 0;
+}
+.connect-card .btn.big, .btn.big {
+  display: block;
+  width: 100%;
+  text-align: center;
+  padding: 14px 18px;
+  font-size: 1.05rem;
+  margin: 12px 0;
+}
+.stack-form { display: grid; gap: 10px; margin-top: 12px; }
+.status-line { font-weight: 600; margin: 0 0 8px; }
+.connect-details { margin: 8px 0 12px; }
+.connect-details summary { cursor: pointer; color: var(--wine); }
 @media (max-width: 800px) {
   .grid-2, .form-grid { grid-template-columns: 1fr; }
   .top { flex-direction: column; align-items: flex-start; }

@@ -312,7 +312,3 @@ def connector_status(connector_id: int, status: str = Form(...), db: Session = D
         db.commit()
     return RedirectResponse("/connectors", status_code=303)
 
-
-@router.get("/setup")
-def setup_page(request: Request):
-    return render(request, "setup.html", page="setup")

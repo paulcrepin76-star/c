@@ -43,7 +43,7 @@ Paperless is the filing cabinet. n8n talks to the outside world and holds secret
                                             Metabase
 ```
 
-You do **not** give supplier passwords to this git repo. Put tokens in `.env` or in n8n credentials.
+You do **not** give supplier passwords to this git repo. Log in yourself on the cellar Connect page.
 
 ## Wine belongs here, not in Mealie
 
@@ -84,10 +84,9 @@ Open `http://100.116.48.120:8088` for the cellar. This will not start a second P
 ## What you do on day one
 
 1. Keep using your existing Paperless and Mealie.
-2. In Paperless, add the mailbox that receives e-bills.
+2. Open `http://100.116.48.120:8088/connect`. Click Connect on Square, Mealie, and Paperless, and log in with the accounts you already use.
 3. In resto-core, add your real wines (or edit the demo list).
-4. In n8n, add a Square credential and import sales into `/api/sales/import`.
-5. In Metabase, add a second data source pointing at database `resto`, then paste queries from `metabase/questions.sql`.
-6. Drop any PDF you still download by hand into `/mnt/user/documents/invoices-inbox`.
+4. In Metabase, add a second data source pointing at database `resto`, then paste queries from `metabase/questions.sql`.
+5. Drop any PDF you still download by hand into `/mnt/user/documents/invoices-inbox`.
 
-Portal logins for FPL or Sam's Club wait until email is not enough. That is a feature, not a missing piece.
+You do **not** put tokens into n8n. n8n only runs the nightly sync after you have connected on that page.

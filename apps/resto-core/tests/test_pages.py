@@ -8,6 +8,10 @@ def test_core_pages_render_demo_wines():
         home = client.get("/")
         assert home.status_code == 200
         assert "Wine cost" in home.text
+        assert 'href="/connect"' in home.text
+        connect = client.get("/connect")
+        assert connect.status_code == 200
+        assert "Connect Square" in connect.text
         wines = client.get("/wines")
         assert wines.status_code == 200
         assert "Sauvignon Blanc" in wines.text
