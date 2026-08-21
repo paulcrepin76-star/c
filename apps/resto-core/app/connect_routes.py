@@ -38,6 +38,8 @@ VENDOR_SLUGS = {vendor["slug"] for vendor in VENDORS}
 def _vendor_cards(db: Session) -> list[dict]:
     cards = []
     for vendor in VENDORS:
+        if not vendor.get("connectable", True):
+            continue
         connection = get_connection(db, vendor["slug"])
         supplier = db.query(Supplier).filter(Supplier.name == vendor["label"]).first()
         filed = 0

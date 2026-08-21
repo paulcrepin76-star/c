@@ -71,6 +71,24 @@ def _multiline_item(lines: list[str], index: int) -> tuple[dict, int] | None:
     return item, cursor - index + 1
 
 
+def ocr_is_usable(content: str) -> bool:
+    """Skip faded / erased scans instead of inventing line items from garbage OCR."""
+    text = str(content or "")
+    words = re.findall(r"[A-Za-z]{3,}", text)
+    letters = sum(ch.isalpha() for ch in text)
+    if letters < 24:
+        return False
+    if len(text) >= 300 and len(words) < 15 and letters / len(text) < 0.25:
+        return False
+    if len(text) >= 400 and letters / len(text) < 0.12:
+        return False
+    prices = bool(re.search(r"\d+\.\d{2}", text))
+    packs = bool(re.search(r"\b\d+\s*[x/]\s*\d+\b|\b\d+/1\s*lb\b|\b12/750\b", text, re.I))
+    if prices and (packs or len(words) >= 8):
+        return True
+    return len(words) >= 18 and letters >= 80
+
+
 def extract_invoice_lines(content: str) -> list[dict]:
     """Pull pack + price rows out of Paperless OCR. Totals and tax lines are skipped."""
     rows = [" ".join(part.split()) for part in str(content or "").splitlines()]
@@ -276,6 +294,8 @@ def _add_invoice_lines(db: Session, invoice: Invoice, lines: list[dict], require
 
 def _ocr_lines_for(db: Session, invoice: Invoice, doc: dict) -> list[dict]:
     if invoice.invoice_type not in ("food", "wine"):
+        return []
+    if not doc.get("lines") and not ocr_is_usable(str(doc.get("content") or "")):
         return []
     existing = {
         str(line.raw_description or "")

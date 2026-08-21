@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime, timedelta
 
 import httpx
@@ -32,13 +33,65 @@ def infer_costing_group(name: str) -> str:
     return "food"
 
 
-def infer_invoice_type(title: str, doc_type: str = "") -> str:
-    blob = f"{title} {doc_type}".lower()
-    if any(word in blob for word in ("fpl", "comcast", "waste", "water", "utility", "electric", "bsu")):
+_UTILITY_HINTS = (
+    "fpl",
+    "florida power",
+    "comcast",
+    "waste management",
+    "utility bill",
+    "utility",
+    "electric",
+    "bsu",
+    "bonita springs water",
+)
+_WINE_HOUSES = (
+    "pg fine",
+    "fine wines",
+    "southern glazer",
+    "breakthru",
+    "winebow",
+    "republic national",
+)
+_WINE_GRAPES = (
+    "chardonnay",
+    "cabernet",
+    "pinot",
+    "sauvignon",
+    "veuve",
+    "bordeaux",
+    "cotes du",
+    "prosecco",
+    "malbec",
+    "merlot",
+    "brouilly",
+    "sancerre",
+)
+_FOOD_HINTS = (
+    "costco",
+    "gordon",
+    "gfs",
+    "sam's",
+    "sams",
+    "chef",
+    "depot",
+    "aldi",
+    "armands",
+    "stan's coffee",
+    "stans coffee",
+)
+
+
+def infer_invoice_type(title: str, doc_type: str = "", correspondent: str = "", content: str = "") -> str:
+    """Food vs wine vs utility from Paperless metadata. A liquor license line is not a wine invoice."""
+    head = f"{title} {doc_type} {correspondent}".lower()
+    if any(word in head for word in _UTILITY_HINTS):
         return "utility"
-    if any(word in blob for word in ("wine", "vin", "champagne")):
+    if "wine invoice" in head or any(word in head for word in _WINE_HOUSES):
         return "wine"
-    if any(word in blob for word in ("costco", "gordon", "gfs", "sam's", "sams", "chef", "depot")):
+    blob = f"{head} {str(content or '')[:2500]}".lower()
+    if re.search(r"\b(?:12[x/]750|6[x/]750|12/750|6/750)\b", blob) and any(grape in blob for grape in _WINE_GRAPES):
+        return "wine"
+    if any(word in head for word in _FOOD_HINTS):
         return "food"
     return "food"
 
@@ -239,7 +292,7 @@ def _ingest_paperless_result(db: Session, doc: dict, correspondents: dict, types
             "created": doc.get("created") or doc.get("added"),
             "invoice_number": str(invoice_number or ""),
             "total": total or 0,
-            "invoice_type": infer_invoice_type(title, doc_type),
+            "invoice_type": infer_invoice_type(title, doc_type, correspondent, doc.get("content") or ""),
             "content": doc.get("content") or "",
             "lines": [],
         },

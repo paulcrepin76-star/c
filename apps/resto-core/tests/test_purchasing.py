@@ -196,3 +196,58 @@ def test_restaurant_depot_is_a_vendor():
     with TestClient(app) as client:
         connect = client.get("/connect")
         assert "Restaurant Depot" in connect.text
+        assert "PG Fine Wines" not in connect.text
+        assert "ALDI" not in connect.text
+
+
+def test_faded_scan_does_not_invent_line_items():
+    from app.ingest import ocr_is_usable
+
+    faded = "AGO0000 VISA CREDIT Thank you Clu Put Join today Term publ ix il"
+    assert ocr_is_usable(faded) is False
+    wine = """
+    PG Fine Wines
+    Veuve Parisot Sparkling Brut 12/750 99.60
+    Pinot Grigio Delle Venezie 12x750 90.00
+    Subtotal USD 189.60
+    Total USD 189.60
+    """
+    assert ocr_is_usable(wine) is True
+    with TestClient(app):
+        db = SessionLocal()
+        result = ingest_paperless_doc(
+            db,
+            {
+                "id": "faded-ticket-1",
+                "title": "Scan faded ticket",
+                "correspondent": None,
+                "invoice_type": "food",
+                "content": faded,
+            },
+        )
+        assert result["status"] == "created"
+        from app.models import InvoiceLine
+
+        lines = db.query(InvoiceLine).filter(InvoiceLine.invoice_id == result["invoice_id"]).all()
+        assert lines == []
+        db.close()
+
+
+def test_wine_house_and_depot_license_do_not_confuse_types():
+    from app.sync import infer_invoice_type
+
+    assert infer_invoice_type("Scan", "Wine Invoice", "PG Fine Wines") == "wine"
+    assert infer_invoice_type(
+        "Scan",
+        "Vendor Invoice",
+        "PG Fine Wines",
+        "Veuve Parisot Sparkling Brut 12/750 99.60",
+    ) == "wine"
+    assert infer_invoice_type(
+        "Scan",
+        "Vendor Invoice",
+        "Restaurant Depot",
+        "Wine 2COP-0-BEV4606429 Beer license TOM SUNDRIED W/OIL 4LB $16.81",
+    ) == "food"
+    assert infer_invoice_type("fpl-0983944356-2026-08-06", "Utility Bill", "FPL Bonita Springs") == "utility"
+    assert infer_invoice_type("sams-club-2026-05-24", "Vendor Invoice", "Sam's Club", "WATERMELON 6.98") == "food"
