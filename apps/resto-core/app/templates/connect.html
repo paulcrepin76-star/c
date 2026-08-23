@@ -107,27 +107,21 @@
         <button type="submit" class="btn secondary">Disconnect</button>
       </form>
     {% else %}
-      <p class="muted">Intuit sign-in for a read-only P&amp;L. You log in at Intuit. The cellar keeps the token. We do not pay vendors from here.</p>
+      <p class="muted">Paste the two keys from your Intuit app, save, then sign in at Intuit. Use Client ID and Client Secret — not your QuickBooks password.</p>
+      <p class="muted">Redirect URL in the Intuit app must be <code>{{ qb_callback }}</code></p>
+      <form method="post" action="/connect/quickbooks/app" class="stack-form">
+        <label>Client ID <input name="application_id" autocomplete="off" placeholder="From Intuit Keys"></label>
+        <label>Client secret <input type="password" name="application_secret" autocomplete="off"></label>
+        <label>Keys
+          <select name="environment">
+            <option value="production" {% if qb_environment != 'sandbox' %}selected{% endif %}>Production</option>
+            <option value="sandbox" {% if qb_environment == 'sandbox' %}selected{% endif %}>Sandbox</option>
+          </select>
+        </label>
+        <button type="submit" class="btn big">Save QuickBooks keys</button>
+      </form>
       {% if qb_app_ready %}
         <a class="btn big" href="/connect/quickbooks">Sign in with Intuit</a>
-        <p class="muted">Redirect URL: <code>{{ qb_callback }}</code></p>
-      {% else %}
-        <details class="connect-details">
-          <summary>One-time Intuit app</summary>
-          <p class="muted">On <a href="https://developer.intuit.com/app/developer/dashboard" target="_blank" rel="noreferrer">developer.intuit.com</a> create an app, add the redirect URL, then paste Client ID and Secret.</p>
-          <p class="muted">Redirect URL: <code>{{ qb_callback }}</code></p>
-          <form method="post" action="/connect/quickbooks/app" class="stack-form">
-            <label>Client ID <input name="application_id" autocomplete="off"></label>
-            <label>Client secret <input type="password" name="application_secret" autocomplete="off"></label>
-            <label>Keys
-              <select name="environment">
-                <option value="production" {% if qb_environment != 'sandbox' %}selected{% endif %}>Production</option>
-                <option value="sandbox" {% if qb_environment == 'sandbox' %}selected{% endif %}>Sandbox</option>
-              </select>
-            </label>
-            <button type="submit">Save app</button>
-          </form>
-        </details>
       {% endif %}
     {% endif %}
     {% if quickbooks.last_error %}<p class="flash err">{{ quickbooks.last_error }}</p>{% endif %}

@@ -117,6 +117,15 @@ def test_square_sales_are_not_added_to_quickbooks_income():
         db.close()
 
 
+def test_connect_page_shows_quickbooks_key_fields():
+    with TestClient(app) as client:
+        page = client.get("/connect")
+        assert page.status_code == 200
+        assert 'name="application_id"' in page.text
+        assert 'action="/connect/quickbooks/app"' in page.text
+        assert "Save QuickBooks keys" in page.text
+
+
 def test_finance_page_has_no_ap_workflow():
     with TestClient(app) as client:
         page = client.get("/finance")
