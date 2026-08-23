@@ -533,6 +533,34 @@ code {
 .stat-card em { color: var(--muted); font-style: normal; font-size: 0.8rem; }
 .stat-card canvas.spark { width: 100%; height: 36px; margin-top: 8px; }
 .wine-names { max-height: 420px; overflow: auto; }
+.studio-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 4px 0 16px;
+}
+.studio-tabs a {
+  color: var(--muted);
+  text-decoration: none;
+  border: 1px solid var(--line);
+  background: var(--card);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 0.88rem;
+}
+.studio-tabs a.on { color: var(--ink); border-color: var(--accent); background: var(--accent-soft); }
+.studio-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin: 8px 0 16px;
+}
+.studio-grid {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr;
+  gap: 16px;
+  margin-bottom: 16px;
+}
 .pnl-card { max-width: 720px; }
 .pnl-table { width: 100%; }
 .pnl-table th { color: var(--ink); font-weight: 550; font-size: 0.95rem; }
@@ -556,7 +584,7 @@ code {
     gap: 4px;
   }
   .nav-label { display: none; }
-  .charts, .grid-2, .form-grid, .rocker-top, .rocker-bottom, .stat-grid { grid-template-columns: 1fr; }
+  .charts, .grid-2, .form-grid, .rocker-top, .rocker-bottom, .stat-grid, .studio-kpis, .studio-grid { grid-template-columns: 1fr; }
   .topbar { padding: 16px 16px 0; }
   main { padding: 20px 16px 48px; }
 }

@@ -9,7 +9,7 @@ from app.connections import mark_connected
 from app.db import SessionLocal
 from app.main import app
 from app.models import Invoice, Supplier
-from app.quickbooks import expense_group, finance_board, finance_period, flatten_pnl, map_account
+from app.quickbooks import expense_group, finance_board, finance_period, flatten_pnl, map_account, vendor_rows
 from app.services import period_costing
 
 
@@ -147,7 +147,17 @@ def test_finance_page_has_no_ap_workflow():
         assert "due date" not in text.lower()
         assert "Connect QuickBooks" in text or "Open Connections" in text
         assert f"{date.today().year}-01-01" in text
-        assert 'href="/finance?period=ytd" class="on"' in page.text
+        assert 'href="/finance?period=ytd&view=overview" class="on"' in page.text
+        assert "Sales" in text
+        assert "Vendors" in text
+        sales = client.get("/finance?view=sales")
+        assert sales.status_code == 200
+        assert "Top Square items" in unescape(sales.text)
+        assert "unpaid bills" not in sales.text.lower()
+        vendors = client.get("/finance?view=vendors")
+        assert vendors.status_code == 200
+        assert "Vendors" in unescape(vendors.text)
+        assert "unpaid bills" not in vendors.text.lower()
 
 
 def test_expense_group_sorts_miscategorized_food_bills():
@@ -206,9 +216,23 @@ def test_year_board_uses_recategorized_invoices_not_sandbox_pnl():
         assert any(row["key"] == "insurance" and row["amount"] == Decimal("50.00") for row in board["detail"])
         assert board["uncategorized_total"] == Decimal("20.00")
         assert board["uncategorized"][0]["name"] == "VistaServ"
+        assert board["charts"]["spend"]
+        assert any(row["name"] == "Parts Town, LLC" for row in board["vendors"])
         assert "unpaid" not in str(board).lower()
     finally:
         db.close()
+
+
+def test_vendor_rows_keep_recategorized_groups():
+    rows = vendor_rows(
+        [
+            {"name": "Sam's Club", "group": "cogs_food", "amount": Decimal("100")},
+            {"name": "Parts Town, LLC", "group": "repairs", "amount": Decimal("400")},
+        ]
+    )
+    assert rows[0]["name"] == "Parts Town, LLC"
+    assert rows[0]["label"] == "Repairs"
+    assert rows[1]["pct"] == Decimal("20.00")
 
 
 def test_finance_period_defaults_to_year():

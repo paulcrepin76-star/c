@@ -8,13 +8,14 @@ from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 
 import httpx
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.config import settings
 from app.connections import access_token_for, extra_dict, get_connection, mark_connected, mark_error, set_extra
 from app.costing import money
 from app.ingest import INVOICE_TOTAL_MAX, PURCHASE_INVOICE_TYPES
-from app.models import Invoice
+from app.models import Invoice, Sale, SellableItem
 from app.services import period_costing
 
 TIMEOUT = httpx.Timeout(25.0, connect=8.0)
@@ -75,6 +76,9 @@ EXPENSE_VENDOR_RULES = (
     ("other", ("notaire", "maitre", "maître", "uline", "webstaurant", "legal")),
 )
 OPERATING_KEYS = ("occupancy", "utilities", "fees", "insurance", "repairs", "software", "marketing", "linen", "other")
+FINANCE_VIEWS = ("overview", "sales", "vendors")
+GROUP_LABELS = {key: label for key, label in DISPLAY_GROUPS}
+GROUP_LABELS["uncategorized"] = "Needs a category"
 
 
 def oauth_public_url() -> str:
@@ -205,6 +209,97 @@ def rollup(lines: list[dict]) -> dict[str, Decimal]:
         buckets[group] += amount
     buckets["cogs"] = buckets["cogs_food"] + buckets["cogs_wine"]
     return buckets
+
+
+def finance_view(kind: str | None = None) -> str:
+    return kind if kind in FINANCE_VIEWS else "overview"
+
+
+def _iter_months(start: date, end: date):
+    cursor = date(start.year, start.month, 1)
+    last = date(end.year, end.month, 1)
+    while cursor <= last:
+        yield cursor
+        if cursor.month == 12:
+            cursor = date(cursor.year + 1, 1, 1)
+        else:
+            cursor = date(cursor.year, cursor.month + 1, 1)
+
+
+def _month_shell(start: date, end: date) -> dict[str, dict]:
+    months = {}
+    for cursor in _iter_months(start, end):
+        months[cursor.strftime("%Y-%m")] = {
+            "key": cursor.strftime("%Y-%m"),
+            "label": cursor.strftime("%b"),
+            "sales": 0.0,
+            "spend": 0.0,
+            "tickets": set(),
+        }
+    return months
+
+
+def square_item_rows(db: Session, start: date, end: date, limit: int = 15) -> list[dict]:
+    start_dt = datetime.combine(start, datetime.min.time())
+    end_dt = datetime.combine(end, datetime.max.time()).replace(microsecond=0)
+    rows = db.execute(
+        select(
+            func.coalesce(SellableItem.name, "Unmatched item"),
+            func.coalesce(func.sum(Sale.revenue), 0),
+            func.coalesce(func.sum(Sale.qty), 0),
+        )
+        .select_from(Sale)
+        .outerjoin(SellableItem, SellableItem.id == Sale.sellable_item_id)
+        .where(Sale.sold_at >= start_dt, Sale.sold_at <= end_dt)
+        .group_by(func.coalesce(SellableItem.name, "Unmatched item"))
+        .order_by(func.coalesce(func.sum(Sale.revenue), 0).desc())
+        .limit(limit)
+    ).all()
+    return [
+        {"name": str(name), "amount": money(total), "qty": money(qty)}
+        for name, total, qty in rows
+        if money(total) > 0
+    ]
+
+
+def square_month_sales(db: Session, start: date, end: date) -> dict[str, dict]:
+    months = _month_shell(start, end)
+    start_dt = datetime.combine(start, datetime.min.time())
+    end_dt = datetime.combine(end, datetime.max.time()).replace(microsecond=0)
+    for sold_at, revenue, order_id in db.execute(
+        select(Sale.sold_at, Sale.revenue, Sale.square_order_id).where(Sale.sold_at >= start_dt, Sale.sold_at <= end_dt)
+    ):
+        if not sold_at:
+            continue
+        key = sold_at.strftime("%Y-%m")
+        if key not in months:
+            continue
+        months[key]["sales"] = round(months[key]["sales"] + float(revenue or 0), 2)
+        if order_id:
+            months[key]["tickets"].add(order_id)
+    return months
+
+
+def vendor_rows(lines: list[dict]) -> list[dict]:
+    buckets: dict[str, dict] = {}
+    for line in lines:
+        name = str(line.get("name") or "Unknown")
+        group = str(line.get("group") or "uncategorized")
+        amount = money(line.get("amount") or 0)
+        row = buckets.setdefault(
+            name,
+            {"name": name, "group": group, "label": GROUP_LABELS.get(group, group), "bills": 0, "amount": money(0)},
+        )
+        row["bills"] += 1
+        row["amount"] = money(row["amount"] + amount)
+        if group != row["group"] and group != "uncategorized":
+            row["group"] = group
+            row["label"] = GROUP_LABELS.get(group, group)
+    ranked = sorted(buckets.values(), key=lambda row: row["amount"], reverse=True)
+    total = sum((row["amount"] for row in ranked), money(0))
+    for row in ranked:
+        row["pct"] = money((row["amount"] / total) * 100) if total else money(0)
+    return ranked
 
 
 def finance_period(kind: str | None = None) -> tuple[str, date, date]:
@@ -408,7 +503,8 @@ def finance_board(db: Session, start: date, end: date, qb_lines: list[dict] | No
     """Square is sales. Recategorized invoices are expenses until live QuickBooks is connected."""
     start_dt = datetime.combine(start, datetime.min.time())
     end_dt = datetime.combine(end, datetime.max.time()).replace(microsecond=0)
-    sales = period_costing(db, start_dt, end_dt)["period_sales"]
+    costing = period_costing(db, start_dt, end_dt)
+    sales = costing["period_sales"]
     purchases = paperless_purchases(db, start, end)
     paper_lines = paperless_expense_lines(db, start, end)
     paper = rollup(paper_lines)
@@ -474,6 +570,32 @@ def finance_board(db: Session, start: date, end: date, qb_lines: list[dict] | No
             return money(0)
         return money((part / sales_num) * 100)
 
+    months = square_month_sales(db, start, end)
+    for line in paper_lines:
+        if line["group"] in {"skip", "uncategorized"} or not line.get("issued_on"):
+            continue
+        key = line["issued_on"].strftime("%Y-%m")
+        if key in months:
+            months[key]["spend"] = round(months[key]["spend"] + float(line["amount"]), 2)
+    month_rows = [months[key] for key in sorted(months)]
+    tickets = set()
+    for month in month_rows:
+        tickets.update(month["tickets"])
+    ticket_count = len(tickets)
+    avg_ticket = money(sales / ticket_count) if ticket_count else money(0)
+    mix = [
+        {"name": key, "amount": float(bucket["sales"])}
+        for key, bucket in costing["groups"].items()
+        if bucket["sales"] > 0
+    ]
+    expense_mix = [
+        {"name": item["label"], "key": item["key"], "amount": float(item["amount"])}
+        for item in detail
+        if item["amount"] > 0
+    ]
+    vendors = vendor_rows(paper_lines)
+    categorized_spend = money(cogs + labor + operating)
+
     return {
         "start": start,
         "end": end,
@@ -509,6 +631,21 @@ def finance_board(db: Session, start: date, end: date, qb_lines: list[dict] | No
         "lines": [line for line in lines if line.get("group") != "income"],
         "status": row.status,
         "last_error": row.last_error,
+        "categorized_spend": categorized_spend,
+        "tickets": ticket_count,
+        "avg_ticket": avg_ticket,
+        "vendor_count": len(vendors),
+        "top_items": square_item_rows(db, start, end),
+        "vendors": vendors,
+        "mix": mix,
+        "expense_mix": expense_mix,
+        "charts": {
+            "labels": [row["label"] for row in month_rows],
+            "sales": [row["sales"] for row in month_rows],
+            "spend": [row["spend"] for row in month_rows],
+            "mix": mix,
+            "expense_mix": expense_mix,
+        },
     }
 
 

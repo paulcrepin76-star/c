@@ -93,6 +93,8 @@ def finance_json(period: str = "ytd", db: Session = Depends(get_db)):
         "cogs_source": board["cogs_source"],
         "expense_source": board["expense_source"],
         "uncategorized_total": float(board["uncategorized_total"]),
+        "tickets": board["tickets"],
+        "vendor_count": board["vendor_count"],
         "connected": board["connected"],
         "sandbox": board["sandbox"],
     }

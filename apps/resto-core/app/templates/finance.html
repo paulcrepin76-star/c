@@ -1,33 +1,85 @@
 {% extends "base.html" %}
-{% block title %}P&amp;L · Survey Cafe{% endblock %}
+{% block title %}Finance · Survey Cafe{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
-    <p class="eyebrow">Financial overview</p>
-    <h1>P&amp;L</h1>
-    <p class="lede">Square is sales. Expenses are the bills we already have, sorted by vendor — not every Paperless “food” tag. We do not pay bills here and we do not count Square deposits twice.</p>
+    <p class="eyebrow">Financial dashboard</p>
+    <h1>Finance</h1>
+    <p class="lede">Square is sales. Vendors are the bills we already filed. QuickBooks income is never added on top of Square, and we do not pay bills here.</p>
   </div>
   <nav class="period" aria-label="Date range">
-    <a href="/finance?period=ytd" class="{% if period == 'ytd' %}on{% endif %}">Year</a>
-    <a href="/finance?period=month" class="{% if period == 'month' %}on{% endif %}">This month</a>
-    <a href="/finance?period=last" class="{% if period == 'last' %}on{% endif %}">Last month</a>
-    <a href="/finance?period=90" class="{% if period == '90' %}on{% endif %}">90 days</a>
+    <a href="/finance?period=ytd&view={{ view }}" class="{% if period == 'ytd' %}on{% endif %}">Year</a>
+    <a href="/finance?period=month&view={{ view }}" class="{% if period == 'month' %}on{% endif %}">This month</a>
+    <a href="/finance?period=last&view={{ view }}" class="{% if period == 'last' %}on{% endif %}">Last month</a>
+    <a href="/finance?period=90&view={{ view }}" class="{% if period == '90' %}on{% endif %}">90 days</a>
   </nav>
 </div>
+
+<nav class="studio-tabs" aria-label="Finance views">
+  <a href="/finance?period={{ period }}&view=overview" class="{% if view == 'overview' %}on{% endif %}">Overview</a>
+  <a href="/finance?period={{ period }}&view=sales" class="{% if view == 'sales' %}on{% endif %}">Sales</a>
+  <a href="/finance?period={{ period }}&view=vendors" class="{% if view == 'vendors' %}on{% endif %}">Vendors</a>
+</nav>
 
 <p class="muted">{{ board.start }} → {{ board.end }}{% if board.company %} · {{ board.company }}{% endif %}</p>
 
 {% if board.sandbox %}
-<p class="flash">QuickBooks is still a sample company. This year uses Square sales and recategorized invoices. Labor and rent stay empty until live books are connected. <a href="/connect">Open Connections</a>.</p>
+<p class="flash">QuickBooks is still a sample company. Labor and rent stay empty until live books are connected. Vendor dollars come from recategorized invoices. <a href="/connect">Open Connections</a>.</p>
 {% elif not board.connected %}
 <p class="flash">Connect live QuickBooks read-only to fill labor, rent, and payroll. <a href="/connect">Open Connections</a>.</p>
 {% elif board.last_error and board.fetched == 'error' %}
 <p class="flash err">QuickBooks needs a refresh. <a href="/connect">Connect again</a>.</p>
 {% endif %}
 
+{% if view == 'overview' %}
+<section class="studio-kpis">
+  <article class="stat-card">
+    <span>Net sales</span>
+    <strong>{{ board.net_sales | money }}</strong>
+    <em>Square</em>
+  </article>
+  <article class="stat-card">
+    <span>Expenses</span>
+    <strong>{{ board.categorized_spend | money }}</strong>
+    <em>COGS + operating</em>
+  </article>
+  <article class="stat-card">
+    <span>Operating profit</span>
+    <strong>{{ board.operating_profit | money }}</strong>
+    <em>{{ board.profit_pct | pct }} of sales</em>
+  </article>
+  <article class="stat-card">
+    <span>Food + wine COGS</span>
+    <strong>{{ board.cogs | money }}</strong>
+    <em>{{ board.cogs_pct | pct }} of sales</em>
+  </article>
+</section>
+
+<section class="studio-grid">
+  <div class="card chart-card tall">
+    <div class="chart-head">
+      <h2>Sales vs expenses</h2>
+      <p class="chart-legend"><span class="swatch gold"></span>Square sales <span class="swatch blue"></span>Filed bills</p>
+    </div>
+    <div class="chart-wrap">
+      <canvas id="trend-chart" aria-label="Monthly sales versus expenses"></canvas>
+    </div>
+  </div>
+  <div class="card chart-card tall">
+    <h2>Spend by group</h2>
+    <div class="chart-wrap">
+      {% if board.expense_mix %}
+      <canvas id="expense-chart" aria-label="Expense mix"></canvas>
+      {% else %}
+      <p class="empty-chart">No categorized bills in this window.</p>
+      {% endif %}
+    </div>
+  </div>
+</section>
+
 <section class="pnl">
   <div class="card pnl-card">
-    <h2>Survey Cafe</h2>
+    <h2>P&amp;L</h2>
     <table class="pnl-table">
       <tr class="pnl-hero">
         <th>Net sales</th>
@@ -87,11 +139,149 @@
     {% endif %}
   </div>
 </section>
+{% endif %}
+
+{% if view == 'sales' %}
+<section class="studio-kpis">
+  <article class="stat-card">
+    <span>Net sales</span>
+    <strong>{{ board.net_sales | money }}</strong>
+    <em>From Square</em>
+  </article>
+  <article class="stat-card">
+    <span>Tickets</span>
+    <strong>{{ board.tickets }}</strong>
+    <em>Square orders</em>
+  </article>
+  <article class="stat-card">
+    <span>Average ticket</span>
+    <strong>{{ board.avg_ticket | money }}</strong>
+    <em>Sales ÷ tickets</em>
+  </article>
+  <article class="stat-card">
+    <span>Gross profit</span>
+    <strong>{{ board.gross_profit | money }}</strong>
+    <em>{{ board.gross_pct | pct }} after COGS</em>
+  </article>
+</section>
+
+<section class="studio-grid">
+  <div class="card chart-card tall">
+    <div class="chart-head">
+      <h2>Square sales</h2>
+      <p class="chart-legend"><span class="swatch gold"></span>Monthly net sales</p>
+    </div>
+    <div class="chart-wrap">
+      <canvas id="sales-chart" aria-label="Monthly Square sales"></canvas>
+    </div>
+  </div>
+  <div class="card chart-card tall">
+    <h2>Sales mix</h2>
+    <div class="chart-wrap">
+      {% if board.mix %}
+      <canvas id="mix-chart" aria-label="Sales mix"></canvas>
+      {% else %}
+      <p class="empty-chart">No Square sales in this window.</p>
+      {% endif %}
+    </div>
+  </div>
+</section>
+
+<section class="card">
+  <h2>Top Square items</h2>
+  <p class="muted">Names as they landed from Square. Unmatched items still count in sales.</p>
+  {% if board.top_items %}
+  <table class="wide review-table">
+    <thead><tr><th>Item</th><th>Qty</th><th>Sales</th></tr></thead>
+    <tbody>
+      {% for row in board.top_items %}
+      <tr>
+        <td>{{ row.name }}</td>
+        <td>{{ row.qty }}</td>
+        <td>{{ row.amount | money }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">No Square lines in this window.</p>
+  {% endif %}
+</section>
+{% endif %}
+
+{% if view == 'vendors' %}
+<section class="studio-kpis">
+  <article class="stat-card">
+    <span>Vendor spend</span>
+    <strong>{{ board.categorized_spend | money }}</strong>
+    <em>Sorted bills, not raw food tags</em>
+  </article>
+  <article class="stat-card">
+    <span>Vendors</span>
+    <strong>{{ board.vendor_count }}</strong>
+    <em>With a total in this window</em>
+  </article>
+  <article class="stat-card">
+    <span>Needs a category</span>
+    <strong>{{ board.uncategorized_total | money }}</strong>
+    <em>Not in the P&amp;L</em>
+  </article>
+  <article class="stat-card">
+    <span>Food + wine COGS</span>
+    <strong>{{ board.paperless_cogs | money }}</strong>
+    <em>Mapped vendors only</em>
+  </article>
+</section>
+
+<section class="studio-grid">
+  <div class="card chart-card tall">
+    <div class="chart-head">
+      <h2>Vendor spend</h2>
+      <p class="chart-legend"><span class="swatch blue"></span>Recategorized bills</p>
+    </div>
+    <div class="chart-wrap">
+      <canvas id="vendor-trend-chart" aria-label="Monthly vendor spend"></canvas>
+    </div>
+  </div>
+  <div class="card chart-card tall">
+    <h2>By category</h2>
+    <div class="chart-wrap">
+      {% if board.expense_mix %}
+      <canvas id="expense-chart" aria-label="Vendor spend by group"></canvas>
+      {% else %}
+      <p class="empty-chart">No categorized bills in this window.</p>
+      {% endif %}
+    </div>
+  </div>
+</section>
+
+<section class="card">
+  <h2>Vendors</h2>
+  <p class="muted">QuickBooks sandbox is not used here. These are the filed invoices, grouped the same way as the P&amp;L. Live QuickBooks will add labor and rent later — not a second sales number.</p>
+  {% if board.vendors %}
+  <table class="wide review-table">
+    <thead><tr><th>Vendor</th><th>Group</th><th>Bills</th><th>Spend</th><th>%</th></tr></thead>
+    <tbody>
+      {% for row in board.vendors %}
+      <tr>
+        <td>{{ row.name }}</td>
+        <td><span class="pill">{{ row.label }}</span></td>
+        <td>{{ row.bills }}</td>
+        <td>{{ row.amount | money }}</td>
+        <td>{{ row.pct | pct }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">No vendor bills in this window.</p>
+  {% endif %}
+</section>
 
 {% if board.uncategorized %}
 <section class="review-card card">
   <h2>Needs a category</h2>
-  <p class="muted">{{ board.uncategorized | length }} bill{{ 's' if board.uncategorized | length != 1 else '' }} · {{ board.uncategorized_total | money }}. These are not in COGS or operating profit. Internal menu proofs are already in marketing; leftover scans and card approvals stay here.</p>
+  <p class="muted">{{ board.uncategorized | length }} bill{{ 's' if board.uncategorized | length != 1 else '' }} · {{ board.uncategorized_total | money }}. These are not in COGS or operating profit.</p>
   <table class="wide review-table">
     <thead>
       <tr>
@@ -117,4 +307,11 @@
   </table>
 </section>
 {% endif %}
+{% endif %}
+
+<script id="finance-data" type="application/json">{{ board.charts | tojson }}</script>
+{% endblock %}
+{% block scripts %}
+<script src="/static/vendor/chart.umd.min.js"></script>
+<script src="/static/finance.js?v=1"></script>
 {% endblock %}
