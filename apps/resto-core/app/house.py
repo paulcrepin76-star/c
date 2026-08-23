@@ -205,6 +205,35 @@ def house_board(db: Session) -> dict:
     }
 
 
+def house_series(db: Session, start: datetime, end: datetime, live_cameras: int = 0) -> dict:
+    """Daily average fridge temp and cameras live — two dashboard lines."""
+    cursor = start.date()
+    last = end.date()
+    labels: list[str] = []
+    days: list = []
+    while cursor <= last:
+        labels.append(cursor.isoformat())
+        days.append(cursor)
+        cursor += timedelta(days=1)
+    buckets: dict[str, list[float]] = {key: [] for key in labels}
+    readings = (
+        db.query(FridgeReading)
+        .filter(FridgeReading.recorded_at >= start, FridgeReading.recorded_at <= end)
+        .all()
+    )
+    for row in readings:
+        if not row.recorded_at:
+            continue
+        key = row.recorded_at.date().isoformat()
+        if key in buckets:
+            buckets[key].append(float(row.temp_f))
+    temperature = [round(sum(vals) / len(vals), 1) if vals else None for key, vals in ((label, buckets[label]) for label in labels)]
+    cameras = [None for _ in labels]
+    if labels:
+        cameras[-1] = int(live_cameras or 0)
+    return {"labels": labels, "temperature": temperature, "cameras": cameras}
+
+
 def house_payload(board: dict) -> dict:
     fridges = []
     for card in board["fridges"]:

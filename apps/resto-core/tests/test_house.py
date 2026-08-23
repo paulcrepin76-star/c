@@ -1,7 +1,9 @@
 from fastapi.testclient import TestClient
 
 from app.db import SessionLocal
-from app.house import find_fridge, house_board, record_reading
+from datetime import UTC, datetime, timedelta
+
+from app.house import find_fridge, house_board, house_series, record_reading
 from app.main import app
 
 
@@ -32,6 +34,19 @@ def test_fridge_reading_api_and_alert():
         payload = client.get("/api/house", headers={"X-API-Key": "test"})
         assert payload.status_code == 200
         assert payload.json()["alerts"] >= 1
+
+
+def test_house_series_has_temperature_and_camera_lines():
+    db = SessionLocal()
+    fridge = find_fridge(db, slug="walk-in-cooler")
+    end = datetime.now(UTC).replace(tzinfo=None)
+    start = end - timedelta(days=7)
+    record_reading(db, fridge, temp_f=37.2, source="test", recorded_at=end - timedelta(hours=2))
+    series = house_series(db, start, end, live_cameras=2)
+    assert series["labels"]
+    assert any(value == 37.2 for value in series["temperature"] if value is not None)
+    assert series["cameras"][-1] == 2
+    db.close()
 
 
 def test_celsius_converts_and_matches_slug():

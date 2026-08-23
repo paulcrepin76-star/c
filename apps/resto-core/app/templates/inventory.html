@@ -1,42 +1,33 @@
 {% extends "base.html" %}
 {% block title %}Inventory{% endblock %}
 {% block content %}
-<p class="eyebrow">Physical count</p>
+<p class="eyebrow">Labels from orders</p>
 <h1>Inventory</h1>
-<p class="lede">Count full bottles. Open bottles can be entered as a decimal (0.4 = about 300 ml left in a 750 ml bottle). Saving a count adjusts theoretical stock so variance is visible.</p>
-<form method="post" action="/inventory/count">
-  <div class="form-grid">
-    <label>Location
-      <select name="location">
-        <option>cellar</option>
-        <option>bar</option>
-        <option>cooler</option>
-      </select>
-    </label>
-    <label>Note <input name="notes" placeholder="Sunday close"></label>
-  </div>
-  <table class="wide">
-    <thead>
-      <tr>
-        <th>Wine</th>
-        <th>Bin</th>
-        <th>System</th>
-        <th>Par</th>
-        <th>Counted bottles</th>
-      </tr>
-    </thead>
-    <tbody>
-    {% for row in wines %}
-      <tr>
-        <td>{{ row.profile.producer }} {{ row.product.name }} {{ row.profile.vintage }}</td>
-        <td>{{ row.profile.bin_location }}</td>
-        <td>{{ row.on_hand_bottles | bottles }}</td>
-        <td>{{ row.profile.par_bottles | bottles }}</td>
-        <td><input name="count_{{ row.product.id }}" value="{{ row.on_hand_bottles | bottles }}"></td>
-      </tr>
-    {% endfor %}
-    </tbody>
-  </table>
-  <p><button type="submit">Save count</button></p>
-</form>
+<p class="lede">Every wine you ordered is on this list. Quantities stay empty on purpose — add a count later from the wine cellar page if you want one.</p>
+{% if q %}
+<p class="muted">Showing names that match “{{ q }}”.</p>
+{% endif %}
+<table class="wide">
+  <thead>
+    <tr>
+      <th>Wine</th>
+      <th>Color</th>
+      <th>Vintage</th>
+      <th>Source</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for row in wines %}
+    <tr>
+      <td><a href="/wines/{{ row.product.id }}">{{ row.product.name }}</a></td>
+      <td>{{ row.profile.color }}</td>
+      <td>{{ row.profile.vintage or "—" }}</td>
+      <td>{{ row.product.notes or "Cellar" }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% if not wines %}
+<p class="muted">No wine labels match.</p>
+{% endif %}
 {% endblock %}

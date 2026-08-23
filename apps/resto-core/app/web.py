@@ -22,10 +22,10 @@ from app.db import get_db
 from app.ingest import INVOICE_TOTAL_MAX, PURCHASE_INVOICE_TYPES
 from app.matching import match_sellables
 from app.models import Connector, Invoice, Product, Recipe, SellableItem, StockMove, WineProfile
-from app.house import ensure_house, house_board, record_reading, safe_http_url, to_fahrenheit
+from app.house import ensure_house, house_board, house_series, record_reading, safe_http_url, to_fahrenheit
 from app.models import Camera, Fridge
 from app.purchasing import CATEGORIES, COMPARE_DAYS, DEFAULT_COMPARE_DAYS, purchasing_board
-from app.services import catalog_counts, daily_activity, dashboard_charts, period_costing, sales_span, wine_rows
+from app.services import catalog_counts, daily_activity, dashboard_charts, monthly_orders, period_costing, sales_span, wine_rows
 
 router = APIRouter()
 ALLOWED_DAYS = (7, 30, 90, 365)
@@ -67,8 +67,11 @@ def dashboard(request: Request, days: int = DEFAULT_DAYS, db: Session = Depends(
     purchasing = purchasing_board(db)
     report = overnight_report(db)
     activity = daily_activity(db, start, end)
-    charts = dashboard_charts(costing, activity)
     house = house_board(db)
+    series = house_series(db, start, end, live_cameras=house["live_cameras"])
+    months = monthly_orders(db, start, end)
+    charts = dashboard_charts(costing, activity, series, months)
+    order_count = sum(1 for total in activity["purchases"] if total)
     return render(
         request,
         "dashboard.html",
@@ -85,6 +88,7 @@ def dashboard(request: Request, days: int = DEFAULT_DAYS, db: Session = Depends(
         span=sales_span(db),
         counts=catalog_counts(db),
         charts=charts,
+        order_count=order_count,
         page="dashboard",
     )
 
@@ -324,8 +328,18 @@ def house_camera(
 
 
 @router.get("/inventory")
-def inventory(request: Request, db: Session = Depends(get_db)):
-    return render(request, "inventory.html", wines=wine_rows(db), page="inventory")
+def inventory(request: Request, q: str = "", db: Session = Depends(get_db)):
+    wines = wine_rows(db)
+    needle = q.strip().lower()
+    if needle:
+        wines = [
+            row
+            for row in wines
+            if needle in row["product"].name.lower()
+            or needle in (row["product"].notes or "").lower()
+            or needle in (row["profile"].color or "").lower()
+        ]
+    return render(request, "inventory.html", wines=wines, q=q.strip(), page="inventory")
 
 
 @router.post("/inventory/count")

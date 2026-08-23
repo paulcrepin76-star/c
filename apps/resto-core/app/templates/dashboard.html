@@ -5,7 +5,7 @@
   <div>
     <p class="eyebrow">Survey Cafe · live back office</p>
     <h1>Dashboard</h1>
-    <p class="lede">Sales from Square, theoretical recipe cost, and invoice spend in one place — the same shape as a restaurant P&amp;L board.</p>
+    <p class="lede">House temperatures and cameras on one chart. Fresh stats below. Wine labels from orders sit in inventory without a count.</p>
   </div>
   <nav class="period" aria-label="Date range">
     <a href="/?days=7" class="{% if days == 7 %}on{% endif %}">7 days</a>
@@ -15,47 +15,31 @@
   </nav>
 </div>
 
-<section class="kpis">
-  <article>
-    <span>Net sales</span>
-    <strong>{{ costing.period_sales | money }}</strong>
-    <em>Last {{ days }} days{% if span.last %} · last ticket {{ span.last.date() }}{% endif %}</em>
-  </article>
-  <article>
-    <span>Food cost</span>
-    <strong>{{ costing.groups.food.cost_pct | pct }}</strong>
-    <em>{{ costing.groups.food.sales | money }} sales · {{ costing.groups.food.cost | money }} cost</em>
-  </article>
-  <article>
-    <span>Wine cost</span>
-    <strong>{{ costing.groups.wine.cost_pct | pct }}</strong>
-    <em>{{ costing.groups.wine.sales | money }} sales</em>
-  </article>
-  <article>
-    <span>Beverage cost</span>
-    <strong>{{ costing.groups.beverage.cost_pct | pct }}</strong>
-    <em>Cocktails, juice, coffee</em>
-  </article>
-  <article>
-    <span>Theoretical COGS</span>
-    <strong>{{ charts.theoretical_pct | pct }}</strong>
-    <em>{{ charts.theoretical_cost | money }} cost · {{ charts.margin | money }} margin</em>
-  </article>
-  <article>
-    <span>Invoice spend</span>
-    <strong>{{ charts.invoice_spend | money }}</strong>
-    <em>{{ charts.purchase_pct | pct }} of sales · food and wine bills only</em>
-  </article>
-</section>
-
-<section class="charts">
+<section class="rocker-top">
   <div class="card chart-card tall">
-    <h2>Sales vs invoice spend</h2>
-    <div class="chart-wrap">
-      <canvas id="sales-chart" aria-label="Sales versus invoice spend"></canvas>
+    <div class="chart-head">
+      <h2>House overview</h2>
+      <p class="chart-legend"><span class="swatch gold"></span>Temperature <span class="swatch blue"></span>Cameras</p>
     </div>
+    <div class="chart-wrap">
+      <canvas id="house-chart" aria-label="Temperature and cameras"></canvas>
+    </div>
+    <p class="muted chart-note">The gold line is average fridge °F. The blue line is cameras with a live feed. Empty until a sensor posts or a camera URL is saved.</p>
   </div>
   <div class="card chart-card tall">
+    <h2>Orders</h2>
+    <div class="chart-wrap">
+      {% if charts.months %}
+      <canvas id="orders-chart" aria-label="Orders by month"></canvas>
+      {% else %}
+      <p class="empty-chart">No invoices in this window.</p>
+      {% endif %}
+    </div>
+  </div>
+</section>
+
+<section class="rocker-bottom">
+  <div class="card chart-card">
     <h2>Sales mix</h2>
     <div class="chart-wrap">
       {% if charts.mix %}
@@ -65,62 +49,40 @@
       {% endif %}
     </div>
   </div>
-</section>
-
-<section class="charts">
-  <div class="card chart-card">
-    <h2>Cost % by group</h2>
-    <div class="chart-wrap">
-      {% if charts.cost_bars %}
-      <canvas id="cost-chart" aria-label="Cost percent by group"></canvas>
-      {% else %}
-      <p class="empty-chart">Match Square items to recipes to see food cost.</p>
-      {% endif %}
-    </div>
+  <div class="stat-grid">
+    <article class="stat-card">
+      <span>Net sales</span>
+      <strong>{{ costing.period_sales | money }}</strong>
+      <em>Last {{ days }} days</em>
+      <canvas class="spark" data-spark="sales" aria-hidden="true"></canvas>
+    </article>
+    <article class="stat-card">
+      <span>Invoice spend</span>
+      <strong>{{ charts.invoice_spend | money }}</strong>
+      <em>Food and wine bills</em>
+      <canvas class="spark" data-spark="spend" aria-hidden="true"></canvas>
+    </article>
+    <article class="stat-card">
+      <span>Fridges</span>
+      <strong>{{ house.online }} / {{ house.total }}</strong>
+      <em>{% if house.alerts %}{{ house.alerts }} out of range{% else %}Waiting for sensors{% endif %} · <a href="/house">Open</a></em>
+    </article>
+    <article class="stat-card">
+      <span>Cameras</span>
+      <strong>{{ house.live_cameras }} / {{ house.cameras | length }}</strong>
+      <em>Live feeds · <a href="/house">Open</a></em>
+    </article>
+    <article class="stat-card">
+      <span>Wines on list</span>
+      <strong>{{ wines | length }}</strong>
+      <em>Names only · no quantity</em>
+    </article>
+    <article class="stat-card">
+      <span>Orders</span>
+      <strong>{{ order_count }}</strong>
+      <em>{{ counts.invoices }} filed all-time</em>
+    </article>
   </div>
-  <div class="card chart-card">
-    <h2>Spend by vendor</h2>
-    <div class="chart-wrap">
-      {% if charts.vendors %}
-      <canvas id="vendor-chart" aria-label="Invoice spend by vendor"></canvas>
-      {% else %}
-      <p class="empty-chart">No invoices in this window.</p>
-      {% endif %}
-    </div>
-  </div>
-</section>
-
-<section class="kpis">
-  <article>
-    <span>All-time Square</span>
-    <strong>{{ span.all_time_sales | money }}</strong>
-    <em>{{ span.tickets }} line items{% if span.first %} · {{ span.first.date() }} → {{ span.last.date() if span.last else "" }}{% endif %}</em>
-  </article>
-  <article>
-    <span>Recipes</span>
-    <strong>{{ counts.recipes }}</strong>
-    <em>{{ counts.linked }} Square items linked · {{ counts.unmatched }} still unmatched</em>
-  </article>
-  <article>
-    <span>Invoices filed</span>
-    <strong>{{ counts.invoices }}</strong>
-    <em>{{ counts.invoices_with_total }} with a dollar amount</em>
-  </article>
-  <article>
-    <span>Cellar value</span>
-    <strong>{{ cellar_value | money }}</strong>
-    <em>{{ wines | length }} labels in stock</em>
-  </article>
-  <article>
-    <span>Purchasing</span>
-    <strong>{{ purchasing.monthly_total | money }}</strong>
-    <em>{% if purchasing.cheaper_elsewhere %}{{ purchasing.cheaper_elsewhere }} products cheaper elsewhere{% else %}No comparable pack prices yet{% endif %} · <a href="/purchasing">Open</a></em>
-  </article>
-  <article>
-    <span>Fridges</span>
-    <strong>{{ house.online }} / {{ house.total }}</strong>
-    <em>{% if house.alerts %}{{ house.alerts }} out of range{% else %}All in range or waiting{% endif %} · <a href="/house">Open</a></em>
-  </article>
 </section>
 
 {% if counts.unmatched %}
@@ -172,33 +134,26 @@
     </table>
   </div>
   <div class="card">
-    <h2>Wine below par</h2>
-    {% if below_par %}
-    <ul class="plain">
-      {% for row in below_par %}
+    <h2>Wine inventory</h2>
+    <p class="muted">Every wine from a purchase ticket. Quantities stay off until you count.</p>
+    {% if wines %}
+    <ul class="plain wine-names">
+      {% for row in wines %}
       <li>
         <a href="/wines/{{ row.product.id }}">{{ row.product.name }}</a>
-        <span>{{ row.on_hand_bottles | bottles }} / {{ row.profile.par_bottles | bottles }} btls · bin {{ row.profile.bin_location }}</span>
+        <span>{{ row.profile.color }}{% if row.profile.vintage %} · {{ row.profile.vintage }}{% endif %}</span>
       </li>
       {% endfor %}
     </ul>
     {% else %}
-    <p class="muted">Every wine is at or above par.</p>
+    <p class="muted">No wine labels yet.</p>
     {% endif %}
-    <h2 style="margin-top:18px">Connections</h2>
-    <ul class="plain">
-      {% for connector in connectors %}
-      <li>
-        <span><span class="dot {{ connector.status }}"></span>{{ connector.name }}</span>
-        <span>{{ connector.status.replace('_', ' ') }}</span>
-      </li>
-      {% endfor %}
-    </ul>
+    <p><a href="/inventory">Open inventory</a></p>
   </div>
 </section>
 <script id="dash-data" type="application/json">{{ charts | tojson }}</script>
 {% endblock %}
 {% block scripts %}
 <script src="/static/vendor/chart.umd.min.js"></script>
-<script src="/static/dashboard.js?v=4"></script>
+<script src="/static/dashboard.js?v=5"></script>
 {% endblock %}

@@ -219,7 +219,43 @@ def daily_activity(db: Session, start: datetime, end: datetime) -> dict:
     }
 
 
-def dashboard_charts(costing: dict, activity: dict) -> dict:
+def monthly_orders(db: Session, start: datetime, end: datetime) -> dict:
+    invoice_filter = (
+        Invoice.issued_on.is_not(None),
+        Invoice.issued_on >= start.date(),
+        Invoice.issued_on <= end.date(),
+        Invoice.invoice_type.in_(PURCHASE_INVOICE_TYPES),
+        Invoice.total > 0,
+        Invoice.total <= INVOICE_TOTAL_MAX,
+    )
+    rows = db.execute(
+        select(Invoice.issued_on, Invoice.total).where(*invoice_filter)
+    ).all()
+    months: dict[str, dict] = {}
+    cursor = start.date().replace(day=1)
+    last = end.date().replace(day=1)
+    while cursor <= last:
+        key = cursor.strftime("%Y-%m")
+        months[key] = {"label": cursor.strftime("%b"), "count": 0, "spend": 0.0}
+        if cursor.month == 12:
+            cursor = cursor.replace(year=cursor.year + 1, month=1)
+        else:
+            cursor = cursor.replace(month=cursor.month + 1)
+    for day, total in rows:
+        key = day.strftime("%Y-%m")
+        if key not in months:
+            continue
+        months[key]["count"] += 1
+        months[key]["spend"] = round(months[key]["spend"] + _num(total), 2)
+    ordered = [months[key] for key in sorted(months)]
+    return {
+        "labels": [row["label"] for row in ordered],
+        "counts": [row["count"] for row in ordered],
+        "spend": [row["spend"] for row in ordered],
+    }
+
+
+def dashboard_charts(costing: dict, activity: dict, house: dict | None = None, months: dict | None = None) -> dict:
     groups = costing["groups"]
     mix = []
     cost_bars = []
@@ -242,6 +278,14 @@ def dashboard_charts(costing: dict, activity: dict) -> dict:
         "invoice_spend": _num(activity["invoice_spend"]),
         "purchase_pct": _num(cost_percent(activity["invoice_spend"], period_sales)),
         "margin": _num(money(period_sales - theoretical_cost)),
+        "temperature": (house or {}).get("temperature") or [],
+        "cameras": (house or {}).get("cameras") or [],
+        "house_labels": (house or {}).get("labels") or activity["labels"],
+        "months": (months or {}).get("labels") or [],
+        "month_orders": (months or {}).get("counts") or [],
+        "month_spend": (months or {}).get("spend") or [],
+        "sales_spark": (activity.get("sales") or [])[-7:],
+        "spend_spark": (activity.get("purchases") or [])[-7:],
     }
 
 

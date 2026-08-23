@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Survey Cafe">
-  <meta name="theme-color" content="#0f3b3e">
+  <meta name="theme-color" content="#0f1116">
   <title>{% block title %}Survey Cafe{% endblock %}</title>
-  <link rel="stylesheet" href="/static/style.css?v=7">
+  <link rel="stylesheet" href="/static/style.css?v=8">
 </head>
 <body class="app">
   <aside class="sidebar">
@@ -36,10 +36,34 @@
     </nav>
   </aside>
   <div class="shell">
+    <header class="topbar">
+      <form class="top-search" action="/inventory" method="get">
+        <input type="search" name="q" placeholder="Search wines and inventory" value="{{ request.query_params.get('q', '') }}">
+      </form>
+      <div class="top-tools">
+        <a class="top-link" href="/house">House</a>
+        <a class="top-link" href="/purchasing">Purchasing</a>
+        <button type="button" class="theme-btn" id="theme-toggle" aria-label="Switch theme">Theme</button>
+      </div>
+    </header>
     <main>
       {% block content %}{% endblock %}
     </main>
   </div>
+  <script>
+    (function () {
+      const root = document.documentElement;
+      const stored = localStorage.getItem("resto-theme");
+      if (stored) root.setAttribute("data-theme", stored);
+      const btn = document.getElementById("theme-toggle");
+      if (!btn) return;
+      btn.addEventListener("click", function () {
+        const next = root.getAttribute("data-theme") === "light" ? "dark" : "light";
+        root.setAttribute("data-theme", next);
+        localStorage.setItem("resto-theme", next);
+      });
+    })();
+  </script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

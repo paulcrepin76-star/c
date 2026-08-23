@@ -1,0 +1,260 @@
+"""Wine labels from purchase tickets — names only, no quantities."""
+
+from __future__ import annotations
+
+import re
+from decimal import Decimal
+
+import httpx
+from sqlalchemy.orm import Session
+
+from app.config import settings
+from app.connections import access_token_for
+from app.models import Invoice, Product, WineProfile
+
+PACK = re.compile(
+    r"\b\d{1,2}\s*[xX/]\s*\d{2,4}\b|\b\d{1,2}/750\b|\b\d+\s*(?:btl|btl\.|bottles?)\b",
+    re.I,
+)
+SKU = re.compile(r"\b[A-Z]{2,8}(?:-[A-Z0-9.+]{1,})+\b|\b[A-Z]{2,8}[A-Z0-9._-]*\d[A-Z0-9._-]*\+?\b", re.I)
+PRICE = re.compile(r"\$?\d{1,4}(?:[.,]\d{2})")
+YEAR = re.compile(r"\b(20\d{2})\b")
+SKIP = re.compile(
+    r"\b("
+    r"invoice|subtotal|total|received|fintech|zelle|license|survey cafe|"
+    r"belle gourmandise|davie|bonita|wilson|pierre delivery|sales tax|"
+    r"payment|page|home|description|print name|breakage"
+    r")\b",
+    re.I,
+)
+NOT_WINE = re.compile(r"\b(chti|blonde|beer|lemonade|vegan|medal|world beer)\b", re.I)
+HINT = re.compile(
+    r"\b("
+    r"veuve|pinot|sancerre|chardonnay|cabernet|malbec|brouilly|chateau|château|"
+    r"cotes|côtes|gigondas|margaux|emilion|provence|brut|ros[eé]|grigio|blaye|"
+    r"chassagne|montrachet|sparkling|sauvignon|merlot|bordeaux|rhone|rhône|"
+    r"annamia|parisot|cahors|blanc|wine spots|long valley|sergent"
+    r")\b",
+    re.I,
+)
+WHITE = re.compile(
+    r"\b(blanc|white|chardonnay|grigio|sancerre|sparkling|brut|prosecco|sauvignon)\b",
+    re.I,
+)
+ROSE = re.compile(r"\bros(?:e|é)\b", re.I)
+
+
+def _fold(value: str) -> str:
+    text = str(value or "").lower()
+    for src, dst in (("é", "e"), ("è", "e"), ("ê", "e"), ("à", "a"), ("ô", "o"), ("ç", "c"), ("ü", "u"), ("î", "i")):
+        text = text.replace(src, dst)
+    return re.sub(r"[^a-z0-9]+", "", text)
+
+
+def _title(text: str) -> str:
+    words = []
+    for raw in re.sub(r"\s+", " ", text).strip(" -|/").split():
+        token = raw.strip("«»\"'")
+        if not token:
+            continue
+        if token.isupper() and len(token) <= 3:
+            words.append(token)
+        else:
+            words.append(token[:1].upper() + token[1:])
+    return " ".join(words)
+
+
+def _join_broken_letters(text: str) -> str:
+    tokens = str(text or "").split()
+    if not tokens:
+        return ""
+    short = sum(1 for token in tokens if len(token) <= 2)
+    if short / len(tokens) < 0.45:
+        return " ".join(tokens)
+    joined: list[str] = []
+    buf = ""
+    for token in tokens:
+        if token.isdigit() or PACK.search(token) or SKU.search(token):
+            if buf:
+                joined.append(buf)
+                buf = ""
+            joined.append(token)
+            continue
+        if len(token) <= 2 and token.isalpha():
+            buf += token
+            continue
+        if buf:
+            joined.append(buf)
+            buf = ""
+        joined.append(token)
+    if buf:
+        joined.append(buf)
+    return " ".join(joined)
+
+
+def clean_wine_name(raw: str) -> str:
+    text = _join_broken_letters(raw)
+    text = re.sub(r"\bBrat\b", "Brut", text)
+    text = SKU.sub(" ", text)
+    text = PACK.sub(" ", text)
+    text = PRICE.sub(" ", text)
+    text = re.sub(r"\bQty\s+\d+(?:\.\d+)?\b", " ", text, flags=re.I)
+    text = re.sub(r"\bx\s*\d+\b", " ", text, flags=re.I)
+    text = re.sub(r"[|•·]+", " ", text)
+    text = re.sub(r"\s+", " ", text).strip(" -|/.,")
+    if YEAR.search(text):
+        year = YEAR.search(text).group(1)
+        text = YEAR.sub(" ", text)
+        text = re.sub(r"\s+", " ", text).strip(" -|/.,")
+        if year not in text:
+            text = f"{text} {year}".strip()
+    return _title(text)
+
+
+def infer_color(name: str) -> str:
+    if ROSE.search(name):
+        return "rose"
+    if WHITE.search(name):
+        return "white"
+    return "red"
+
+
+def infer_vintage(name: str) -> str:
+    match = YEAR.search(name or "")
+    return match.group(1) if match else ""
+
+
+def extract_wine_names(text: str) -> list[str]:
+    blob = _join_broken_letters(" ".join(str(text or "").split()))
+    blob = SKU.sub(" | ", blob)
+    blob = PACK.sub(" | ", blob)
+    blob = re.sub(r"\b\d+\s*BTL\b", " | ", blob, flags=re.I)
+    names: list[str] = []
+    seen: set[str] = set()
+    for chunk in re.split(r"[|]", blob):
+        if NOT_WINE.search(chunk):
+            continue
+        if SKIP.search(chunk) and not HINT.search(chunk):
+            continue
+        if not HINT.search(chunk):
+            continue
+        name = clean_wine_name(chunk).lstrip("+ ").strip()
+        words = name.split()
+        if len(words) > 10:
+            name = " ".join(words[:10])
+        key = _fold(re.sub(r"20\d{2}", "", name))
+        if len(name) < 8 or len(key) < 8:
+            continue
+        if key in seen:
+            continue
+        seen.add(key)
+        names.append(name)
+    return names
+
+
+def _existing_wine(db: Session, name: str) -> Product | None:
+    want = _fold(re.sub(r"20\d{2}", "", name))
+    if not want:
+        return None
+    for product in db.query(Product).filter(Product.category == "wine").all():
+        have = _fold(re.sub(r"20\d{2}", "", product.name))
+        if have == want:
+            return product
+        producer = _fold((product.wine.producer if product.wine else "") + product.name)
+        if producer == want:
+            return product
+    return None
+
+
+def _sku_for(name: str) -> str:
+    slug = re.sub(r"[^A-Z0-9]+", "-", name.upper()).strip("-")[:48]
+    return f"WINE-{slug or 'LABEL'}"
+
+
+def add_wine_label(db: Session, name: str, source: str = "") -> Product | None:
+    label = clean_wine_name(name)
+    if len(label) < 8:
+        return None
+    existing = _existing_wine(db, label)
+    if existing:
+        return existing
+    sku = _sku_for(label)
+    if db.query(Product).filter(Product.sku == sku).first():
+        sku = f"{sku}-{db.query(Product).count() + 1}"
+    product = Product(
+        sku=sku,
+        name=label,
+        category="wine",
+        base_unit="ml",
+        current_cost=Decimal("0"),
+        notes=(f"Ordered from {source}" if source else "Ordered wine"),
+    )
+    db.add(product)
+    db.flush()
+    db.add(
+        WineProfile(
+            product_id=product.id,
+            producer="",
+            vintage=infer_vintage(label),
+            color=infer_color(label),
+            bottle_size_ml=750,
+            glass_pour_ml=150,
+            bin_location="",
+            par_bottles=Decimal("0"),
+            list_type="cellar",
+        )
+    )
+    db.flush()
+    return product
+
+
+def _paperless_text(invoice: Invoice, token: str) -> str:
+    if not token or not invoice.paperless_id:
+        return ""
+    base = settings.paperless_base_url.rstrip("/")
+    try:
+        response = httpx.get(
+            f"{base}/api/documents/{invoice.paperless_id}/",
+            headers={"Authorization": f"Token {token}"},
+            timeout=8.0,
+        )
+        if response.status_code != 200:
+            return ""
+        return str(response.json().get("content") or "")
+    except Exception:
+        return ""
+
+
+def wine_documents(db: Session, fetch_paperless: bool = True) -> list[dict]:
+    token = access_token_for(db, "paperless") if fetch_paperless else ""
+    rows = []
+    invoices = (
+        db.query(Invoice)
+        .filter(Invoice.invoice_type == "wine")
+        .order_by(Invoice.issued_on.desc(), Invoice.id.desc())
+        .all()
+    )
+    for invoice in invoices:
+        lines = "\n".join(line.raw_description for line in invoice.lines if line.raw_description)
+        remote = _paperless_text(invoice, token) if token else ""
+        text = "\n".join(part for part in (invoice.title, lines, remote) if part)
+        supplier = invoice.supplier.name if invoice.supplier else "Wine house"
+        rows.append({"invoice": invoice, "text": text, "supplier": supplier})
+    return rows
+
+
+def import_ordered_wines(db: Session, documents: list[dict] | None = None, fetch_paperless: bool = True) -> dict:
+    """Create cellar labels for every wine on a purchase ticket. Never writes a quantity."""
+    created = 0
+    seen = 0
+    docs = documents if documents is not None else wine_documents(db, fetch_paperless=fetch_paperless)
+    for doc in docs:
+        supplier = str(doc.get("supplier") or "")
+        for name in extract_wine_names(str(doc.get("text") or "")):
+            seen += 1
+            before = _existing_wine(db, name)
+            product = add_wine_label(db, name, source=supplier)
+            if product is not None and before is None:
+                created += 1
+    db.commit()
+    return {"created": created, "seen": seen, "labels": db.query(WineProfile).count()}

@@ -7,13 +7,18 @@ def test_core_pages_render_demo_wines():
     with TestClient(app) as client:
         home = client.get("/")
         assert home.status_code == 200
-        assert "Wine cost" in home.text
+        assert "Wines on list" in home.text
         assert 'href="/connect"' in home.text
         assert 'href="/invoices/scan"' in home.text
         assert 'href="/house"' in home.text
-        assert 'id="sales-chart"' in home.text
+        assert 'id="house-chart"' in home.text
         assert "Net sales" in home.text
-        assert "Sales vs invoice spend" in home.text
+        assert "Temperature" in home.text
+        assert "Cameras" in home.text
+        inventory = client.get("/inventory")
+        assert inventory.status_code == 200
+        assert "Sauvignon Blanc" in inventory.text
+        assert "Counted bottles" not in inventory.text
         purchasing = client.get("/purchasing")
         assert purchasing.status_code == 200
         assert "Purchasing" in purchasing.text
