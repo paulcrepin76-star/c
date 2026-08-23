@@ -302,18 +302,65 @@ def vendor_rows(lines: list[dict]) -> list[dict]:
     return ranked
 
 
-def finance_period(kind: str | None = None) -> tuple[str, date, date]:
+FINANCE_PERIODS = ("week", "month", "last", "ytd", "lastyear", "all", "custom")
+
+
+def parse_iso_date(value: str | None) -> date | None:
+    text = str(value or "").strip()[:10]
+    if not text:
+        return None
+    try:
+        return date.fromisoformat(text)
+    except ValueError:
+        return None
+
+
+def earliest_finance_date(db: Session) -> date:
+    first_sale = db.scalar(select(func.min(Sale.sold_at)))
+    first_bill = db.scalar(select(func.min(Invoice.issued_on)))
+    candidates = []
+    if first_sale:
+        candidates.append(first_sale.date() if hasattr(first_sale, "date") else first_sale)
+    if first_bill:
+        candidates.append(first_bill)
+    return min(candidates) if candidates else date(datetime.now(UTC).year - 1, 1, 1)
+
+
+def finance_period(
+    kind: str | None = None,
+    start: date | str | None = None,
+    end: date | str | None = None,
+    earliest: date | None = None,
+) -> tuple[str, date, date]:
     today = datetime.now(UTC).replace(tzinfo=None).date()
-    key = kind if kind in {"month", "last", "90", "ytd"} else "ytd"
+    custom_start = start if isinstance(start, date) else parse_iso_date(start)
+    custom_end = end if isinstance(end, date) else parse_iso_date(end)
+    if custom_start and custom_end:
+        if custom_start > custom_end:
+            custom_start, custom_end = custom_end, custom_start
+        return "custom", custom_start, min(custom_end, today)
+    key = kind if kind in FINANCE_PERIODS and kind != "custom" else "month"
+    if key == "week":
+        return key, today - timedelta(days=today.weekday()), today
     if key == "last":
         first_this = today.replace(day=1)
         last = first_this - timedelta(days=1)
         return key, last.replace(day=1), last
-    if key == "90":
-        return key, today - timedelta(days=90), today
     if key == "ytd":
         return key, date(today.year, 1, 1), today
-    return key, today.replace(day=1), today
+    if key == "lastyear":
+        year = today.year - 1
+        return key, date(year, 1, 1), date(year, 12, 31)
+    if key == "all":
+        return key, earliest or date(today.year - 1, 1, 1), today
+    return "month", today.replace(day=1), today
+
+
+def finance_query(period: str, view: str, start: date, end: date) -> str:
+    parts = [f"period={period}", f"view={view}"]
+    if period == "custom":
+        parts.extend([f"start={start.isoformat()}", f"end={end.isoformat()}"])
+    return "&".join(parts)
 
 
 def paperless_expense_lines(db: Session, start: date, end: date) -> list[dict]:

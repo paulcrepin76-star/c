@@ -7,18 +7,30 @@
     <h1>Finance</h1>
     <p class="lede">Square is sales. Vendors are the bills we already filed. QuickBooks income is never added on top of Square, and we do not pay bills here.</p>
   </div>
+</div>
+
+<div class="range-bar">
   <nav class="period" aria-label="Date range">
-    <a href="/finance?period=ytd&view={{ view }}" class="{% if period == 'ytd' %}on{% endif %}">Year</a>
+    <a href="/finance?period=week&view={{ view }}" class="{% if period == 'week' %}on{% endif %}">This week</a>
     <a href="/finance?period=month&view={{ view }}" class="{% if period == 'month' %}on{% endif %}">This month</a>
     <a href="/finance?period=last&view={{ view }}" class="{% if period == 'last' %}on{% endif %}">Last month</a>
-    <a href="/finance?period=90&view={{ view }}" class="{% if period == '90' %}on{% endif %}">90 days</a>
+    <a href="/finance?period=ytd&view={{ view }}" class="{% if period == 'ytd' %}on{% endif %}">This year</a>
+    <a href="/finance?period=lastyear&view={{ view }}" class="{% if period == 'lastyear' %}on{% endif %}">Last year</a>
+    <a href="/finance?period=all&view={{ view }}" class="{% if period == 'all' %}on{% endif %}">All time</a>
   </nav>
+  <form class="range-form" method="get" action="/finance">
+    <input type="hidden" name="view" value="{{ view }}">
+    <input type="hidden" name="period" value="custom">
+    <label>From <input type="date" name="start" value="{{ board.start }}"></label>
+    <label>To <input type="date" name="end" value="{{ board.end }}"></label>
+    <button type="submit" class="btn">Show</button>
+  </form>
 </div>
 
 <nav class="studio-tabs" aria-label="Finance views">
-  <a href="/finance?period={{ period }}&view=overview" class="{% if view == 'overview' %}on{% endif %}">Overview</a>
-  <a href="/finance?period={{ period }}&view=sales" class="{% if view == 'sales' %}on{% endif %}">Sales</a>
-  <a href="/finance?period={{ period }}&view=vendors" class="{% if view == 'vendors' %}on{% endif %}">Vendors</a>
+  <a href="/finance?{{ queries.overview }}" class="{% if view == 'overview' %}on{% endif %}">Overview</a>
+  <a href="/finance?{{ queries.sales }}" class="{% if view == 'sales' %}on{% endif %}">Sales</a>
+  <a href="/finance?{{ queries.vendors }}" class="{% if view == 'vendors' %}on{% endif %}">Vendors</a>
 </nav>
 
 <p class="muted">{{ board.start }} → {{ board.end }}{% if board.company %} · {{ board.company }}{% endif %}</p>

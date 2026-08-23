@@ -146,8 +146,12 @@ def test_finance_page_has_no_ap_workflow():
         assert "unpaid bills" not in text.lower()
         assert "due date" not in text.lower()
         assert "Connect QuickBooks" in text or "Open Connections" in text
-        assert f"{date.today().year}-01-01" in text
-        assert 'href="/finance?period=ytd&view=overview" class="on"' in page.text
+        assert 'href="/finance?period=month&view=overview" class="on"' in page.text
+        assert 'name="start"' in page.text
+        assert 'name="end"' in page.text
+        assert "This week" in text
+        assert "Last year" in text
+        assert "All time" in text
         assert "Sales" in text
         assert "Vendors" in text
         sales = client.get("/finance?view=sales")
@@ -161,6 +165,10 @@ def test_finance_page_has_no_ap_workflow():
         assert vendors.status_code == 200
         assert "Vendors" in unescape(vendors.text)
         assert "unpaid bills" not in vendors.text.lower()
+        custom = client.get("/finance?start=2026-02-01&end=2026-02-28&view=sales")
+        assert custom.status_code == 200
+        assert "2026-02-01" in custom.text
+        assert "2026-02-28" in custom.text
 
 
 def test_expense_group_sorts_miscategorized_food_bills():
@@ -238,12 +246,28 @@ def test_vendor_rows_keep_recategorized_groups():
     assert rows[1]["pct"] == Decimal("20.00")
 
 
-def test_finance_period_defaults_to_year():
+def test_finance_period_defaults_to_this_month():
     kind, start, end = finance_period()
     today = date.today()
-    assert kind == "ytd"
-    assert start == date(today.year, 1, 1)
+    assert kind == "month"
+    assert start == today.replace(day=1)
     assert end == today
+
+
+def test_finance_period_accepts_week_year_and_custom_dates():
+    today = date.today()
+    kind, start, end = finance_period("week")
+    assert kind == "week"
+    assert start <= today
+    assert (today - start).days <= 6
+    kind, start, end = finance_period("lastyear")
+    assert kind == "lastyear"
+    assert start == date(today.year - 1, 1, 1)
+    assert end == date(today.year - 1, 12, 31)
+    kind, start, end = finance_period("custom", start="2026-02-01", end="2026-02-10")
+    assert kind == "custom"
+    assert start == date(2026, 2, 1)
+    assert end == date(2026, 2, 10)
 
 
 def test_quickbooks_oauth_round_trip():

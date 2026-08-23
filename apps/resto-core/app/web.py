@@ -25,7 +25,7 @@ from app.models import Connector, Invoice, Product, Recipe, SellableItem, StockM
 from app.house import ensure_house, house_board, house_series, record_reading, safe_http_url, to_fahrenheit
 from app.models import Camera, Fridge
 from app.purchasing import CATEGORIES, COMPARE_DAYS, DEFAULT_COMPARE_DAYS, purchasing_board
-from app.quickbooks import finance_board, finance_period, finance_view
+from app.quickbooks import earliest_finance_date, finance_board, finance_period, finance_query, finance_view
 from app.sales_report import sales_report, vendor_report
 from app.services import catalog_counts, daily_activity, dashboard_charts, monthly_orders, period_costing, sales_span, wine_rows
 
@@ -96,11 +96,19 @@ def dashboard(request: Request, days: int = DEFAULT_DAYS, db: Session = Depends(
 
 
 @router.get("/finance")
-def finance_page(request: Request, period: str = "ytd", view: str = "overview", db: Session = Depends(get_db)):
-    kind, start, end = finance_period(period)
-    board = finance_board(db, start, end)
-    sales = sales_report(db, start, end)
-    vendors = vendor_report(db, start, end)
+def finance_page(
+    request: Request,
+    period: str = "month",
+    view: str = "overview",
+    start: str = "",
+    end: str = "",
+    db: Session = Depends(get_db),
+):
+    chosen = finance_view(view)
+    kind, first, last = finance_period(period, start, end, earliest=earliest_finance_date(db))
+    board = finance_board(db, first, last)
+    sales = sales_report(db, first, last)
+    vendors = vendor_report(db, first, last)
     charts = {**board["charts"], **sales["charts"], **vendors["charts"]}
     return render(
         request,
@@ -110,7 +118,12 @@ def finance_page(request: Request, period: str = "ytd", view: str = "overview", 
         vendors=vendors,
         charts=charts,
         period=kind,
-        view=finance_view(view),
+        view=chosen,
+        queries={
+            "overview": finance_query(kind, "overview", first, last),
+            "sales": finance_query(kind, "sales", first, last),
+            "vendors": finance_query(kind, "vendors", first, last),
+        },
         page="finance",
     )
 

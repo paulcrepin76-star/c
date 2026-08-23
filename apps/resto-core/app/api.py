@@ -16,7 +16,7 @@ from app.equivalents import watch_payload, COLLECTOR_PRODUCT_CAP
 from app.intel import overnight_report, save_collector_run, set_browser_status
 from app.market import scan_external_prices
 from app.house import find_fridge, house_board, house_payload, record_reading, to_fahrenheit
-from app.quickbooks import finance_board, finance_period
+from app.quickbooks import earliest_finance_date, finance_board, finance_period
 from app.services import period_costing, wine_rows
 from app.sync import sync_all, sync_paperless
 
@@ -76,8 +76,8 @@ def house_json(db: Session = Depends(get_db)):
 
 
 @router.get("/finance", dependencies=[Depends(require_key)])
-def finance_json(period: str = "ytd", db: Session = Depends(get_db)):
-    kind, start, end = finance_period(period)
+def finance_json(period: str = "month", start: str = "", end: str = "", db: Session = Depends(get_db)):
+    kind, start, end = finance_period(period, start, end, earliest=earliest_finance_date(db))
     board = finance_board(db, start, end)
     return {
         "period": kind,

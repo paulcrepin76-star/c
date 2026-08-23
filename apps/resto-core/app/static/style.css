@@ -316,6 +316,36 @@ code {
   color: #fff;
   border-color: var(--accent);
 }
+.range-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 18px;
+  align-items: center;
+  justify-content: space-between;
+  margin: 4px 0 16px;
+}
+.range-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.range-form label {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+.range-form input[type="date"] {
+  background: var(--input);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 5px 8px;
+  font: inherit;
+}
+.range-form .btn { padding: 6px 12px; font-size: 0.86rem; }
 .hero .btn { margin-right: 8px; margin-bottom: 8px; display: inline-block; }
 .scan-card { display: grid; gap: 14px; }
 .scan-shot input { margin-top: 6px; }
