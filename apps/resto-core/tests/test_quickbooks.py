@@ -152,7 +152,10 @@ def test_finance_page_has_no_ap_workflow():
         assert "Vendors" in text
         sales = client.get("/finance?view=sales")
         assert sales.status_code == 200
-        assert "Top Square items" in unescape(sales.text)
+        assert "Top 20 items" in unescape(sales.text)
+        assert "Gift cards" in unescape(sales.text)
+        assert "Top 10 categories" in unescape(sales.text)
+        assert "Last year same dates" in unescape(sales.text)
         assert "unpaid bills" not in sales.text.lower()
         vendors = client.get("/finance?view=vendors")
         assert vendors.status_code == 200

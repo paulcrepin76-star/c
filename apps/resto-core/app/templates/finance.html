@@ -142,44 +142,49 @@
 {% endif %}
 
 {% if view == 'sales' %}
+<p class="report-kicker">Sales report · Square · {{ board.start }} → {{ board.end }}{% if sales.has_last_year %} vs {{ sales.prior_start }} → {{ sales.prior_end }}{% endif %}</p>
+{% if sales.first_sale and sales.first_sale > sales.prior_start %}
+<p class="flash">Square history in the cellar starts {{ sales.first_sale }}. Last-year columns stay thin until older tickets finish copying.</p>
+{% endif %}
+
 <section class="studio-kpis">
   <article class="stat-card">
     <span>Net sales</span>
-    <strong>{{ board.net_sales | money }}</strong>
-    <em>From Square</em>
+    <strong>{{ sales.sales.now | money }}</strong>
+    <em>{% if sales.has_last_year %}{{ sales.sales.delta | signed }} vs last year · {{ sales.sales.pct | signedpct }}{% else %}From Square{% endif %}</em>
+  </article>
+  <article class="stat-card">
+    <span>Last year same dates</span>
+    <strong>{{ sales.sales.then | money }}</strong>
+    <em>{{ sales.prior_start }} → {{ sales.prior_end }}</em>
   </article>
   <article class="stat-card">
     <span>Tickets</span>
-    <strong>{{ board.tickets }}</strong>
-    <em>Square orders</em>
+    <strong>{{ sales.tickets.now | int }}</strong>
+    <em>Avg ticket {{ sales.avg_ticket.now | money }}{% if sales.has_last_year %} · last year {{ sales.avg_ticket.then | money }}{% endif %}</em>
   </article>
   <article class="stat-card">
-    <span>Average ticket</span>
-    <strong>{{ board.avg_ticket | money }}</strong>
-    <em>Sales ÷ tickets</em>
-  </article>
-  <article class="stat-card">
-    <span>Gross profit</span>
-    <strong>{{ board.gross_profit | money }}</strong>
-    <em>{{ board.gross_pct | pct }} after COGS</em>
+    <span>Gift cards</span>
+    <strong>{{ sales.gifts.now | money }}</strong>
+    <em>{{ sales.gifts.qty }} sold · {{ sales.gifts.share | pct }} of sales{% if sales.has_last_year %} · {{ sales.gifts.delta | signed }}{% endif %}</em>
   </article>
 </section>
 
 <section class="studio-grid">
   <div class="card chart-card tall">
     <div class="chart-head">
-      <h2>Square sales</h2>
-      <p class="chart-legend"><span class="swatch gold"></span>Monthly net sales</p>
+      <h2>This year vs last year</h2>
+      <p class="chart-legend"><span class="swatch gold"></span>{{ board.start.year }} <span class="swatch blue"></span>{{ sales.prior_start.year }}</p>
     </div>
     <div class="chart-wrap">
-      <canvas id="sales-chart" aria-label="Monthly Square sales"></canvas>
+      <canvas id="sales-chart" aria-label="Monthly Square sales this year versus last year"></canvas>
     </div>
   </div>
   <div class="card chart-card tall">
-    <h2>Sales mix</h2>
+    <h2>Top 10 categories</h2>
     <div class="chart-wrap">
-      {% if board.mix %}
-      <canvas id="mix-chart" aria-label="Sales mix"></canvas>
+      {% if sales.categories %}
+      <canvas id="category-chart" aria-label="Top sales categories"></canvas>
       {% else %}
       <p class="empty-chart">No Square sales in this window.</p>
       {% endif %}
@@ -188,17 +193,55 @@
 </section>
 
 <section class="card">
-  <h2>Top Square items</h2>
-  <p class="muted">Names as they landed from Square. Unmatched items still count in sales.</p>
-  {% if board.top_items %}
+  <h2>Gift cards</h2>
+  <p class="muted">eGift Card and Gift Card from Square. They count in net sales and stay out of food mix.</p>
   <table class="wide review-table">
-    <thead><tr><th>Item</th><th>Qty</th><th>Sales</th></tr></thead>
+    <thead><tr><th></th><th>This period</th><th>Last year</th><th>Change</th></tr></thead>
     <tbody>
-      {% for row in board.top_items %}
+      <tr><td>Sold</td><td>{{ sales.gifts.now | money }}</td><td>{{ sales.gifts.then | money }}</td><td>{{ sales.gifts.delta | signed }} · {{ sales.gifts.pct | signedpct }}</td></tr>
+      <tr><td>Cards</td><td>{{ sales.gifts.qty }}</td><td>{{ sales.gifts.last_qty }}</td><td></td></tr>
+      <tr><td>Share of sales</td><td>{{ sales.gifts.share | pct }}</td><td></td><td></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="card">
+  <h2>Top 10 categories</h2>
+  <p class="muted">Menu groups from Square item names — breakfast, coffee, wine, gift cards, and the rest.</p>
+  <table class="wide review-table">
+    <thead><tr><th>Category</th><th>Qty</th><th>Sales</th><th>%</th><th>Last year</th><th>Change</th></tr></thead>
+    <tbody>
+      {% for row in sales.categories %}
       <tr>
         <td>{{ row.name }}</td>
         <td>{{ row.qty }}</td>
         <td>{{ row.amount | money }}</td>
+        <td>{{ row.pct | pct }}</td>
+        <td>{{ row.last | money }}</td>
+        <td>{{ row.delta | signed }} · {{ row.change_pct | signedpct }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="card">
+  <h2>Top 20 items</h2>
+  <p class="muted">Names as they landed from Square. Last year is the same item on the same dates.</p>
+  {% if sales.top_items %}
+  <table class="wide review-table">
+    <thead><tr><th>#</th><th>Item</th><th>Category</th><th>Qty</th><th>Sales</th><th>%</th><th>Last year</th><th>Change</th></tr></thead>
+    <tbody>
+      {% for row in sales.top_items %}
+      <tr>
+        <td>{{ loop.index }}</td>
+        <td>{{ row.name }}</td>
+        <td>{{ row.category }}</td>
+        <td>{{ row.qty }}</td>
+        <td>{{ row.amount | money }}</td>
+        <td>{{ row.pct | pct }}</td>
+        <td>{{ row.last | money }}</td>
+        <td>{{ row.delta | signed }} · {{ row.change_pct | signedpct }}</td>
       </tr>
       {% endfor %}
     </tbody>
@@ -207,9 +250,27 @@
   <p class="muted">No Square lines in this window.</p>
   {% endif %}
 </section>
+
+<section class="card">
+  <h2>By weekday</h2>
+  <table class="wide review-table">
+    <thead><tr><th>Day</th><th>Sales</th><th>Last year</th><th>Change</th></tr></thead>
+    <tbody>
+      {% for row in sales.weekday %}
+      <tr>
+        <td>{{ row.name }}</td>
+        <td>{{ row.amount | money }}</td>
+        <td>{{ row.last | money }}</td>
+        <td>{{ row.delta | signed }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
 {% endif %}
 
 {% if view == 'vendors' %}
+<p class="report-kicker">Vendor report · filed bills · {{ board.start }} → {{ board.end }}{% if vendors.has_last_year %} vs {{ vendors.prior_start }} → {{ vendors.prior_end }}{% endif %}</p>
 <section class="studio-kpis">
   <article class="stat-card">
     <span>Vendor spend</span>
@@ -218,7 +279,7 @@
   </article>
   <article class="stat-card">
     <span>Vendors</span>
-    <strong>{{ board.vendor_count }}</strong>
+    <strong>{{ vendors.vendor_count }}</strong>
     <em>With a total in this window</em>
   </article>
   <article class="stat-card">
@@ -256,19 +317,39 @@
 </section>
 
 <section class="card">
-  <h2>Vendors</h2>
-  <p class="muted">QuickBooks sandbox is not used here. These are the filed invoices, grouped the same way as the P&amp;L. Live QuickBooks will add labor and rent later — not a second sales number.</p>
-  {% if board.vendors %}
+  <h2>Spend by group</h2>
   <table class="wide review-table">
-    <thead><tr><th>Vendor</th><th>Group</th><th>Bills</th><th>Spend</th><th>%</th></tr></thead>
+    <thead><tr><th>Group</th><th>This period</th><th>Last year</th><th>Change</th></tr></thead>
     <tbody>
-      {% for row in board.vendors %}
+      {% for row in vendors.groups %}
       <tr>
+        <td>{{ row.name }}</td>
+        <td>{{ row.amount | money }}</td>
+        <td>{{ row.last | money }}</td>
+        <td>{{ row.delta | signed }} · {{ row.change_pct | signedpct }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="card">
+  <h2>Top 20 vendors</h2>
+  <p class="muted">QuickBooks sandbox is not used here. These are the filed invoices, grouped the same way as the P&amp;L. Last year is the same vendor on the same dates.</p>
+  {% if vendors.top_vendors %}
+  <table class="wide review-table">
+    <thead><tr><th>#</th><th>Vendor</th><th>Group</th><th>Bills</th><th>Spend</th><th>%</th><th>Last year</th><th>Change</th></tr></thead>
+    <tbody>
+      {% for row in vendors.top_vendors %}
+      <tr>
+        <td>{{ loop.index }}</td>
         <td>{{ row.name }}</td>
         <td><span class="pill">{{ row.label }}</span></td>
         <td>{{ row.bills }}</td>
         <td>{{ row.amount | money }}</td>
         <td>{{ row.pct | pct }}</td>
+        <td>{{ row.last | money }}</td>
+        <td>{{ row.delta | signed }} · {{ row.change_pct | signedpct }}</td>
       </tr>
       {% endfor %}
     </tbody>
@@ -309,9 +390,9 @@
 {% endif %}
 {% endif %}
 
-<script id="finance-data" type="application/json">{{ board.charts | tojson }}</script>
+<script id="finance-data" type="application/json">{{ charts | tojson }}</script>
 {% endblock %}
 {% block scripts %}
 <script src="/static/vendor/chart.umd.min.js"></script>
-<script src="/static/finance.js?v=1"></script>
+<script src="/static/finance.js?v=2"></script>
 {% endblock %}

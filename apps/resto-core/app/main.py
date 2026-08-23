@@ -26,6 +26,12 @@ from app.web import router as web_router
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 templates.env.filters["money"] = lambda value: f"${value:,.2f}"
 templates.env.filters["pct"] = lambda value: f"{value:.1f}%"
+templates.env.filters["signed"] = lambda value: (
+    f"+${value:,.2f}" if value > 0 else f"-${abs(value):,.2f}" if value < 0 else "$0.00"
+)
+templates.env.filters["signedpct"] = lambda value: (
+    "—" if value is None else (f"+{value:.1f}%" if value > 0 else f"{value:.1f}%")
+)
 templates.env.filters["bottles"] = lambda value: f"{value:.2f}".rstrip("0").rstrip(".")
 
 

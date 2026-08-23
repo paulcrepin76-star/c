@@ -110,16 +110,24 @@ def _square_lookback_days(db: Session, days: int | None) -> int:
         return days
     now = datetime.now(UTC).replace(tzinfo=None)
     year_days = _days_since_year_start(now)
+    needed = datetime(now.year - 1, 1, 1)
+    first = (
+        db.query(func.min(Sale.sold_at))
+        .filter(Sale.square_order_id != "", ~Sale.square_order_id.like("demo-%"))
+        .scalar()
+    )
     last = (
         db.query(func.max(Sale.sold_at))
         .filter(Sale.square_order_id != "", ~Sale.square_order_id.like("demo-%"))
         .scalar()
     )
-    if last is None:
-        return year_days
-    if getattr(last, "tzinfo", None) is not None:
+    if first is not None and getattr(first, "tzinfo", None) is not None:
+        first = first.replace(tzinfo=None)
+    if last is not None and getattr(last, "tzinfo", None) is not None:
         last = last.replace(tzinfo=None)
-    age = max((now - last).days, 0)
+    if first is None or first > needed:
+        return max((now - needed).days + 1, year_days)
+    age = max((now - last).days, 0) if last else year_days
     if age <= 7:
         return 7
     return max(age + 2, year_days)

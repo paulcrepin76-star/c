@@ -74,7 +74,7 @@
   ]);
   lineChart("sales-chart", [
     {
-      label: "Square sales",
+      label: "This year",
       data: data.sales || [],
       borderColor: gold,
       backgroundColor: "rgba(245, 197, 66, 0.16)",
@@ -83,7 +83,19 @@
       pointRadius: 2,
       borderWidth: 3,
     },
+    {
+      label: "Last year",
+      data: data.last_year || [],
+      borderColor: blue,
+      backgroundColor: "rgba(59, 130, 246, 0.10)",
+      fill: false,
+      tension: 0.35,
+      pointRadius: 2,
+      borderWidth: 3,
+      borderDash: [6, 4],
+    },
   ]);
+  doughnut("category-chart", data.categories || []);
   lineChart("vendor-trend-chart", [
     {
       label: "Vendor spend",

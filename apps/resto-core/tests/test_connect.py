@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 
 from app.db import SessionLocal
 from app.main import app
-from app.sync import _days_since_year_start, _square_lookback_days
+from app.sync import _square_lookback_days
 
 
 class FakeResponse:
@@ -153,7 +153,8 @@ def test_square_lookback_is_year_to_date_until_sales_are_current():
     db = SessionLocal()
     try:
         now = datetime.now(UTC).replace(tzinfo=None)
-        assert _square_lookback_days(db, None) == _days_since_year_start(now)
+        needed = datetime(now.year - 1, 1, 1)
+        assert _square_lookback_days(db, None) == (now - needed).days + 1
         assert _square_lookback_days(db, 30) == 30
     finally:
         db.close()

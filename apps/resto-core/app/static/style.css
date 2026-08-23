@@ -533,6 +533,12 @@ code {
 .stat-card em { color: var(--muted); font-style: normal; font-size: 0.8rem; }
 .stat-card canvas.spark { width: 100%; height: 36px; margin-top: 8px; }
 .wine-names { max-height: 420px; overflow: auto; }
+.report-kicker {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 0.86rem;
+  letter-spacing: 0.02em;
+}
 .studio-tabs {
   display: flex;
   flex-wrap: wrap;
