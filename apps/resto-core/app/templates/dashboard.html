@@ -116,6 +116,11 @@
     <strong>{{ purchasing.monthly_total | money }}</strong>
     <em>{% if purchasing.cheaper_elsewhere %}{{ purchasing.cheaper_elsewhere }} products cheaper elsewhere{% else %}No comparable pack prices yet{% endif %} · <a href="/purchasing">Open</a></em>
   </article>
+  <article>
+    <span>Fridges</span>
+    <strong>{{ house.online }} / {{ house.total }}</strong>
+    <em>{% if house.alerts %}{{ house.alerts }} out of range{% else %}All in range or waiting{% endif %} · <a href="/house">Open</a></em>
+  </article>
 </section>
 
 {% if counts.unmatched %}

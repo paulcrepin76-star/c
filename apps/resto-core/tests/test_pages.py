@@ -10,6 +10,7 @@ def test_core_pages_render_demo_wines():
         assert "Wine cost" in home.text
         assert 'href="/connect"' in home.text
         assert 'href="/invoices/scan"' in home.text
+        assert 'href="/house"' in home.text
         assert 'id="sales-chart"' in home.text
         assert "Net sales" in home.text
         assert "Sales vs invoice spend" in home.text

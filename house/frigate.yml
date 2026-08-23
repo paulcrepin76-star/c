@@ -1,0 +1,31 @@
+# Survey Cafe cameras. Add each RTSP URL when the camera is on the LAN.
+# Frigate UI: http://100.116.48.120:8971
+
+mqtt:
+  enabled: true
+  host: mosquitto
+  port: 1883
+  topic_prefix: frigate
+
+detectors:
+  cpu:
+    type: cpu
+
+record:
+  enabled: false
+
+snapshots:
+  enabled: true
+
+cameras:
+  kitchen:
+    enabled: false
+    ffmpeg:
+      inputs:
+        - path: rtsp://127.0.0.1:554/kitchen
+          roles: [detect]
+    detect:
+      enabled: false
+      width: 1280
+      height: 720
+      fps: 5

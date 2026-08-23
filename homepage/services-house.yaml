@@ -1,0 +1,16 @@
+- House:
+    - Home Assistant:
+        icon: home-assistant.png
+        href: http://100.116.48.120:8123
+        description: Fridge sensors and automations
+        weight: 100
+    - Frigate:
+        icon: frigate.png
+        href: http://100.116.48.120:8971
+        description: Cameras
+        weight: 200
+    - Cellar house:
+        icon: mdi-fridge
+        href: http://100.116.48.120:8088/house
+        description: Fridge temperatures
+        weight: 300

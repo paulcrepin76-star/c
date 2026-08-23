@@ -13,6 +13,8 @@
 #   3001  metabase     dashboards
 #   5678  n8n          Square / Mealie / email glue
 #   5433  postgres     optional, for a GUI client
+#   8123  homeassistant  fridge sensors
+#   8971  frigate        cameras
 #
 # Internal-only: redis, tika, gotenberg.
 
@@ -274,6 +276,64 @@ services:
       timeout: 5s
       retries: 8
       start_period: 40s
+    networks: [resto]
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: resto-mosquitto
+    restart: unless-stopped
+    volumes:
+      - ./house/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    networks: [resto]
+
+  homeassistant:
+    image: ghcr.io/home-assistant/home-assistant:stable
+    container_name: resto-homeassistant
+    restart: unless-stopped
+    depends_on:
+      - mosquitto
+    ports:
+      - "8123:8123"
+    volumes:
+      - ${APPDATA:-./appdata}/homeassistant:/config
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      TZ: ${TZ}
+    labels:
+      - homepage.group=House
+      - homepage.name=Home Assistant
+      - homepage.icon=home-assistant.png
+      - homepage.href=http://100.116.48.120:8123
+      - homepage.description=Fridge sensors and automations
+    networks: [resto]
+
+  frigate:
+    image: ghcr.io/blakeblackshear/frigate:stable
+    container_name: resto-frigate
+    restart: unless-stopped
+    depends_on:
+      - mosquitto
+    shm_size: "256mb"
+    ports:
+      - "8971:8971"
+      - "5002:5000"
+      - "8554:8554"
+      - "8555:8555/tcp"
+      - "8555:8555/udp"
+    volumes:
+      - ${APPDATA:-./appdata}/frigate/media:/media/frigate
+      - ./house/frigate.yml:/config/config.yml:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      TZ: ${TZ}
+    labels:
+      - homepage.group=House
+      - homepage.name=Frigate
+      - homepage.icon=frigate.png
+      - homepage.href=http://100.116.48.120:8971
+      - homepage.description=Cameras
     networks: [resto]
 
 networks:

@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-title" content="Survey Cafe">
   <meta name="theme-color" content="#0f3b3e">
   <title>{% block title %}Survey Cafe{% endblock %}</title>
-  <link rel="stylesheet" href="/static/style.css?v=6">
+  <link rel="stylesheet" href="/static/style.css?v=7">
 </head>
 <body class="app">
   <aside class="sidebar">
@@ -28,6 +28,7 @@
       <a href="/purchasing" class="{% if page == 'purchasing' %}on{% endif %}">Price compare</a>
       <a href="/collector" class="{% if page == 'collector' %}on{% endif %}">Vendor logins</a>
       <p class="nav-label">House</p>
+      <a href="/house" class="{% if page == 'house' %}on{% endif %}">Fridges &amp; cameras</a>
       <a href="/inventory" class="{% if page == 'inventory' %}on{% endif %}">Inventory</a>
       <a href="/wines" class="{% if page == 'wines' %}on{% endif %}">Wine cellar</a>
       <p class="nav-label">Setup</p>

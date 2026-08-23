@@ -15,6 +15,7 @@ from app.collector import ingest_collected_items
 from app.equivalents import watch_payload, COLLECTOR_PRODUCT_CAP
 from app.intel import overnight_report, save_collector_run, set_browser_status
 from app.market import scan_external_prices
+from app.house import find_fridge, house_board, house_payload, record_reading, to_fahrenheit
 from app.services import period_costing, wine_rows
 from app.sync import sync_all, sync_paperless
 
@@ -54,9 +55,35 @@ class PaperlessDocument(BaseModel):
     lines: list[dict] = Field(default_factory=list)
 
 
+class FridgeReadingIn(BaseModel):
+    fridge: str = ""
+    slug: str = ""
+    temp_f: Decimal | None = None
+    temp_c: Decimal | None = None
+    humidity: Decimal | None = None
+    source: str = "sensor"
+
+
 @router.get("/health")
 def api_health():
     return {"ok": True}
+
+
+@router.get("/house", dependencies=[Depends(require_key)])
+def house_json(db: Session = Depends(get_db)):
+    return house_payload(house_board(db))
+
+
+@router.post("/house/readings", dependencies=[Depends(require_key)])
+def house_reading_job(payload: FridgeReadingIn, db: Session = Depends(get_db)):
+    fridge = find_fridge(db, payload.fridge, payload.slug)
+    if fridge is None:
+        raise HTTPException(status_code=404, detail="Unknown fridge")
+    temp = to_fahrenheit(payload.temp_f, payload.temp_c)
+    if temp is None:
+        raise HTTPException(status_code=400, detail="temp_f or temp_c is required")
+    row = record_reading(db, fridge, temp, humidity=payload.humidity, source=payload.source)
+    return {"ok": True, "fridge": fridge.name, "temp_f": float(row.temp_f)}
 
 
 @router.get("/costing/summary", dependencies=[Depends(require_key)])

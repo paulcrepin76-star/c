@@ -14,6 +14,7 @@ import pytest
 @pytest.fixture(autouse=True)
 def reset_db():
     from app.db import Base, SessionLocal, engine
+    from app.house import ensure_house
     from app.purchasing import backfill_purchase_prices, ensure_purchasing
     from app.seed import ensure_connections, seed_if_empty
 
@@ -24,6 +25,7 @@ def reset_db():
         seed_if_empty(db)
         ensure_connections(db)
         ensure_purchasing(db)
+        ensure_house(db)
         backfill_purchase_prices(db)
     finally:
         db.close()

@@ -22,6 +22,8 @@ from app.db import get_db
 from app.ingest import INVOICE_TOTAL_MAX, PURCHASE_INVOICE_TYPES
 from app.matching import match_sellables
 from app.models import Connector, Invoice, Product, Recipe, SellableItem, StockMove, WineProfile
+from app.house import ensure_house, house_board, record_reading, safe_http_url, to_fahrenheit
+from app.models import Camera, Fridge
 from app.purchasing import CATEGORIES, COMPARE_DAYS, DEFAULT_COMPARE_DAYS, purchasing_board
 from app.services import catalog_counts, daily_activity, dashboard_charts, period_costing, sales_span, wine_rows
 
@@ -66,6 +68,7 @@ def dashboard(request: Request, days: int = DEFAULT_DAYS, db: Session = Depends(
     report = overnight_report(db)
     activity = daily_activity(db, start, end)
     charts = dashboard_charts(costing, activity)
+    house = house_board(db)
     return render(
         request,
         "dashboard.html",
@@ -76,6 +79,7 @@ def dashboard(request: Request, days: int = DEFAULT_DAYS, db: Session = Depends(
         connectors=connectors,
         invoices=invoices,
         purchasing=purchasing,
+        house=house,
         report=report,
         days=window,
         span=sales_span(db),
@@ -271,6 +275,52 @@ def wine_receive(
         product.current_cost = cost / Decimal(product.wine.bottle_size_ml)
     db.commit()
     return RedirectResponse(f"/wines/{product_id}", status_code=303)
+
+
+@router.get("/house")
+def house_page(request: Request, db: Session = Depends(get_db)):
+    ok, err = _pop_flash(request)
+    return render(
+        request,
+        "house.html",
+        board=house_board(db),
+        flash_ok=ok,
+        flash_err=err,
+        page="house",
+    )
+
+
+@router.post("/house/reading")
+def house_reading(
+    fridge_id: int = Form(...),
+    temp: str = Form(...),
+    unit: str = Form("f"),
+    humidity: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    fridge = db.get(Fridge, fridge_id)
+    if fridge is None:
+        return RedirectResponse("/house", status_code=303)
+    degrees = to_fahrenheit(temp if unit != "c" else None, temp if unit == "c" else None)
+    if degrees is None:
+        return RedirectResponse("/house", status_code=303)
+    record_reading(db, fridge, degrees, humidity=humidity or None, source="manual")
+    return RedirectResponse("/house", status_code=303)
+
+
+@router.post("/house/camera/{camera_id}")
+def house_camera(
+    camera_id: int,
+    snapshot_url: str = Form(""),
+    stream_url: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    camera = db.get(Camera, camera_id)
+    if camera:
+        camera.snapshot_url = safe_http_url(snapshot_url)
+        camera.stream_url = safe_http_url(stream_url)
+        db.commit()
+    return RedirectResponse("/house", status_code=303)
 
 
 @router.get("/inventory")

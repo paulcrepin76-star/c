@@ -370,3 +370,45 @@ class CostSnapshot(Base):
     cost: Mapped[Decimal] = mapped_column(Money, default=0)
 
     __table_args__ = (UniqueConstraint("captured_on", "kind", "ref_id", name="uq_cost_snapshot_day"),)
+
+
+class Fridge(Base):
+    __tablename__ = "fridges"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    slug: Mapped[str] = mapped_column(String(80), unique=True)
+    name: Mapped[str] = mapped_column(String(120))
+    kind: Mapped[str] = mapped_column(String(40), default="cooler")  # cooler, freezer, wine
+    min_temp_f: Mapped[Decimal] = mapped_column(Numeric(6, 1), default=34)
+    max_temp_f: Mapped[Decimal] = mapped_column(Numeric(6, 1), default=40)
+    sort: Mapped[int] = mapped_column(Integer, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    notes: Mapped[str] = mapped_column(Text, default="")
+
+    readings: Mapped[list[FridgeReading]] = relationship(back_populates="fridge")
+
+
+class FridgeReading(Base):
+    __tablename__ = "fridge_readings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    fridge_id: Mapped[int] = mapped_column(ForeignKey("fridges.id"))
+    recorded_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
+    temp_f: Mapped[Decimal] = mapped_column(Numeric(6, 1), default=0)
+    humidity: Mapped[Decimal | None] = mapped_column(Numeric(6, 1), nullable=True)
+    source: Mapped[str] = mapped_column(String(40), default="manual")
+
+    fridge: Mapped[Fridge] = relationship(back_populates="readings")
+
+
+class Camera(Base):
+    __tablename__ = "cameras"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    slug: Mapped[str] = mapped_column(String(80), unique=True)
+    name: Mapped[str] = mapped_column(String(120))
+    kind: Mapped[str] = mapped_column(String(40), default="inside")  # door, kitchen, line, parking
+    snapshot_url: Mapped[str] = mapped_column(String(400), default="")
+    stream_url: Mapped[str] = mapped_column(String(400), default="")
+    sort: Mapped[int] = mapped_column(Integer, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)

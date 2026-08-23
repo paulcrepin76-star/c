@@ -14,6 +14,7 @@ from app.connect_routes import router as connect_router
 from app.db import Base, SessionLocal, engine
 from app.matching import match_sellables
 from app.paperless_hook import ensure_paperless_sync_workflow
+from app.house import ensure_house
 from app.purchasing import backfill_purchase_prices, ensure_purchasing, vendor_short
 from app.catalog import ensure_catalog_suppliers
 from app.collector import source_label
@@ -52,6 +53,7 @@ async def lifespan(_app: FastAPI):
         seed_if_empty(db)
         ensure_connections(db)
         ensure_purchasing(db)
+        ensure_house(db)
         ensure_catalog_suppliers(db)
         backfill_purchase_prices(db)
         match_sellables(db)

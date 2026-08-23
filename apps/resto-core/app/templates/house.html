@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}House{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <p class="eyebrow">Survey Cafe · kitchen house</p>
+    <h1>Fridges &amp; cameras</h1>
+    <p class="lede">One tap for every cooler. Home Assistant and Frigate live next door — sensors and cameras land there, then show up here.</p>
+  </div>
+  <div class="toolbar">
+    <a class="btn" href="http://100.116.48.120:8123" target="_blank" rel="noreferrer">Home Assistant</a>
+    <a class="btn secondary" href="http://100.116.48.120:8971" target="_blank" rel="noreferrer">Frigate</a>
+  </div>
+</div>
+{% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
+{% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
+
+<section class="kpis compact-kpis">
+  <article>
+    <span>Fridges online</span>
+    <strong>{{ board.online }} / {{ board.total }}</strong>
+    <em>Reading in the last 2 hours</em>
+  </article>
+  <article>
+    <span>Out of range</span>
+    <strong>{{ board.alerts }}</strong>
+    <em>Walk-in 34–40°F · freezer −10–5°F</em>
+  </article>
+  <article>
+    <span>Cameras</span>
+    <strong>{{ board.live_cameras }} / {{ board.cameras | length }}</strong>
+    <em>With a snapshot or stream URL</em>
+  </article>
+</section>
+
+<section class="house-grid">
+  {% for card in board.fridges %}
+  <article class="card fridge-card status-{{ card.status }}">
+    <p class="eyebrow">{{ card.fridge.kind }} · {{ card.fridge.min_temp_f }}–{{ card.fridge.max_temp_f }}°F</p>
+    <h2>{{ card.fridge.name }}</h2>
+    {% if card.temp_f is not none %}
+    <p class="fridge-temp">{{ card.temp_f }}°F</p>
+    <p class="muted">{{ card.age }}{% if card.humidity is not none %} · {{ card.humidity }}% humidity{% endif %}</p>
+    {% else %}
+    <p class="fridge-temp muted">—</p>
+    <p class="muted">Waiting for the first reading</p>
+    {% endif %}
+    {% if card.status == "alert" %}<p class="badge badge-switch">Alert</p>
+    {% elif card.status == "warn" %}<p class="badge badge-watch">Stale</p>
+    {% elif card.status == "ok" %}<p class="badge badge-stay">In range</p>
+    {% else %}<p class="badge badge-none">No sensor yet</p>{% endif %}
+  </article>
+  {% endfor %}
+</section>
+
+<div class="card">
+  <h2>Log a temperature</h2>
+  <p class="muted">Use this until Govee / SwitchBot / Home Assistant is posting. °F or °C is fine.</p>
+  <form method="post" action="/house/reading" class="form-grid">
+    <label>Fridge
+      <select name="fridge_id">
+        {% for card in board.fridges %}
+        <option value="{{ card.fridge.id }}">{{ card.fridge.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Temperature
+      <input name="temp" placeholder="37.2" required>
+    </label>
+    <label>Unit
+      <select name="unit">
+        <option value="f">°F</option>
+        <option value="c">°C</option>
+      </select>
+    </label>
+    <label>Humidity %
+      <input name="humidity" placeholder="optional">
+    </label>
+    <p><button type="submit">Save reading</button></p>
+  </form>
+</div>
+
+<h2 class="house-cam-title">Cameras</h2>
+<section class="camera-grid">
+  {% for cam in board.cameras %}
+  <article class="card camera-card">
+    <p class="eyebrow">{{ cam.kind }}</p>
+    <h2>{{ cam.name }}</h2>
+    {% if cam.snapshot_url %}
+    <img class="camera-shot" src="{{ cam.snapshot_url }}" alt="{{ cam.name }}" referrerpolicy="no-referrer">
+    {% elif cam.stream_url %}
+    <p><a class="btn" href="{{ cam.stream_url }}" target="_blank" rel="noreferrer">Open live stream</a></p>
+    {% else %}
+    <div class="camera-empty">No feed yet. Paste a snapshot URL from the NVR or camera app.</div>
+    {% endif %}
+    <form method="post" action="/house/camera/{{ cam.id }}" class="stack-form">
+      <label>Snapshot URL
+        <input name="snapshot_url" value="{{ cam.snapshot_url }}" placeholder="https://nvr.local/front.jpg">
+      </label>
+      <label>Live stream URL
+        <input name="stream_url" value="{{ cam.stream_url }}" placeholder="https://nvr.local/front">
+      </label>
+      <button type="submit" class="btn secondary">Save camera</button>
+    </form>
+  </article>
+  {% endfor %}
+</section>
+
+<details class="card collectors-details">
+  <summary>How the sensors get in</summary>
+  <p class="muted">The cellar does not log into Govee or steal a camera password. The sensor app, Home Assistant, or n8n posts a reading:</p>
+  <pre><code>POST /api/house/readings
+X-API-Key: (cellar key)
+{"fridge": "Walk-in cooler", "temp_f": 37.2}</code></pre>
+  <p class="muted"><code>temp_c</code> also works. Slugs: walk-in-cooler, prep-cooler, line-cooler, pastry-cooler, bar-cooler, wine-cellar, walk-in-freezer.</p>
+</details>
+{% endblock %}
