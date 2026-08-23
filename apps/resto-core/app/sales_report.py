@@ -17,7 +17,7 @@ from app.quickbooks import paperless_expense_lines, vendor_rows
 # First match wins. Gift cards stay out of food.
 SALES_CATEGORY_RULES = (
     ("Gift cards", ("gift card", "egift")),
-    ("Coffee", ("coffee", "espresso", "latte", "cappuccino", "macchiato", "mocha", "cafe cuban", "americano", "cortado")),
+    ("Coffee", ("coffee", "espresso", "latte", "cappuccino", "macchiato", "mocha", "cafe cubano", "americano", "cortado")),
     ("Tea & juice", ("iced tea", "hot tea", "chai", "smoothie", "orange juice", "juice", "lemonade")),
     ("Soda & water", ("coca", "coke", "soda", "sprite", "perrier", "water")),
     ("Wine", ("wine", "sancerre", "chardonnay", "cabernet", "pinot", "prosecco", "champagne", "rosé", "rose ", "parisot", "sauvignon", "merlot", "cote de")),
@@ -26,7 +26,7 @@ SALES_CATEGORY_RULES = (
     ("Crepes", ("crepe", "ficelle", "mongolfiere")),
     ("Breakfast plates", ("breakfast plate", "omelette", "omelet", "quiche", "benedict", "scrambel", "scrambl", "pancake", "french toast", "oatmeal")),
     ("Wraps & biscuits", ("wrap", "biscuit")),
-    ("Sandwiches", ("sandwich", "reuben", "croque", "panini", "burger", "parisian", "bagnat", "turkey bite", "blt")),
+    ("Sandwiches", ("sandwich", "reuben", "croque", "panini", "burger", "parisian", "bagnat", "turkey bite", "blt", "cafe cuban", "cuban")),
     ("Plates & dinner", ("paella", "bourguignon", "poulet", "duck", "lamb", "chicken", "normandy", "escargot", "shank", "provencal", "provençal")),
     ("Salads", ("salad", "salade", "nicoise", "ceasar", "caesar")),
     ("Pastry & dessert", ("croissant", "pie", "muffin", "creme", "brûlée", "brulee", "meringue", "yogurt", "almond")),
@@ -38,6 +38,11 @@ def sales_category(name: str) -> str:
     blob = str(name or "").lower()
     if "gift" in blob and "card" in blob:
         return "Gift cards"
+    # Cafe Cubano is coffee. Cafe Cuban at Survey Cafe is the sandwich.
+    if "cubano" in blob and "sandwich" not in blob:
+        return "Coffee"
+    if "cafe cuban" in blob or blob.strip() in {"cuban", "the cuban"}:
+        return "Sandwiches"
     for label, needles in SALES_CATEGORY_RULES:
         if any(needle in blob for needle in needles):
             return label
