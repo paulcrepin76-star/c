@@ -21,7 +21,8 @@ SALES_CATEGORY_RULES = (
     ("Tea & juice", ("iced tea", "hot tea", "chai", "smoothie", "orange juice", "juice", "lemonade")),
     ("Soda & water", ("coca", "coke", "soda", "sprite", "perrier", "water")),
     ("Wine", ("wine", "sancerre", "chardonnay", "cabernet", "pinot", "prosecco", "champagne", "rosé", "rose ", "parisot", "sauvignon", "merlot", "cote de")),
-    ("Beer & cocktails", ("beer", "ipa", "mimosa", "bloody", "sangria", "cocktail", "spritz", "old fashioned")),
+    ("Beer", ("beer", "ipa")),
+    ("Cocktails", ("mimosa", "bloody", "sangria", "cocktail", "spritz", "old fashioned")),
     ("Crepes", ("crepe", "ficelle", "mongolfiere")),
     ("Breakfast plates", ("breakfast plate", "omelette", "omelet", "quiche", "benedict", "scrambel", "scrambl", "pancake", "french toast", "oatmeal")),
     ("Wraps & biscuits", ("wrap", "biscuit")),
@@ -165,6 +166,47 @@ def _ranked_categories(categories: dict[str, dict], last_cats: dict[str, dict], 
             }
         )
     return rows
+
+
+def category_board(db: Session, start: date, end: date, categories: tuple[str, ...] | list[str], limit: int = 40) -> dict:
+    """Square items in one or more menu groups, compared to the same dates last year."""
+    wanted = set(categories)
+    prior_start, prior_end = prior_window(start, end)
+    current = _summarize(_sale_rows(db, start, end))
+    previous = _summarize(_sale_rows(db, prior_start, prior_end))
+    items = {name: row for name, row in current["items"].items() if sales_category(name) in wanted}
+    last_items = {name: row for name, row in previous["items"].items() if sales_category(name) in wanted}
+    ranked = _ranked_items(items, last_items, limit)
+    now = sum((row["amount"] for row in items.values()), money(0))
+    then = sum((row["amount"] for row in last_items.values()), money(0))
+    qty = sum((row["qty"] for row in items.values()), money(0))
+    groups = []
+    for name in categories:
+        cat_now = current["categories"].get(name) or {}
+        cat_then = previous["categories"].get(name) or {}
+        change = _change(cat_now.get("amount") or 0, cat_then.get("amount") or 0)
+        groups.append(
+            {
+                "name": name,
+                "amount": change["now"],
+                "last": change["then"],
+                "delta": change["delta"],
+                "change_pct": change["pct"],
+                "qty": money(cat_now.get("qty") or 0),
+            }
+        )
+    return {
+        "start": start,
+        "end": end,
+        "prior_start": prior_start,
+        "prior_end": prior_end,
+        "has_last_year": then > 0,
+        "sales": _change(now, then),
+        "qty": qty,
+        "rows": ranked,
+        "best": ranked[0] if ranked else None,
+        "groups": groups,
+    }
 
 
 def sales_report(db: Session, start: date, end: date) -> dict:

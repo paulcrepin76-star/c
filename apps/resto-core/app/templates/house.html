@@ -1,15 +1,15 @@
 {% extends "base.html" %}
-{% block title %}House{% endblock %}
+{% block title %}Fridges · Survey Cafe{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
     <p class="eyebrow">Survey Cafe · kitchen house</p>
-    <h1>Fridges &amp; cameras</h1>
-    <p class="lede">One tap for every cooler. Home Assistant and Frigate live next door — sensors and cameras land there, then show up here.</p>
+    <h1>Fridges</h1>
+    <p class="lede">One tap for every cooler. Cameras live next door. Home Assistant and Frigate still hold the sensors.</p>
   </div>
   <div class="toolbar">
+    <a class="btn secondary" href="/house/cameras">Cameras</a>
     <a class="btn" href="http://100.116.48.120:8123" target="_blank" rel="noreferrer">Home Assistant</a>
-    <a class="btn secondary" href="http://100.116.48.120:8971" target="_blank" rel="noreferrer">Frigate</a>
   </div>
 </div>
 {% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
@@ -25,11 +25,6 @@
     <span>Out of range</span>
     <strong>{{ board.alerts }}</strong>
     <em>Walk-in 34–40°F · freezer −10–5°F</em>
-  </article>
-  <article>
-    <span>Cameras</span>
-    <strong>{{ board.live_cameras }} / {{ board.cameras | length }}</strong>
-    <em>With a snapshot or stream URL</em>
   </article>
 </section>
 
@@ -79,32 +74,6 @@
     <p><button type="submit">Save reading</button></p>
   </form>
 </div>
-
-<h2 class="house-cam-title">Cameras</h2>
-<section class="camera-grid">
-  {% for cam in board.cameras %}
-  <article class="card camera-card">
-    <p class="eyebrow">{{ cam.kind }}</p>
-    <h2>{{ cam.name }}</h2>
-    {% if cam.snapshot_url %}
-    <img class="camera-shot" src="{{ cam.snapshot_url }}" alt="{{ cam.name }}" referrerpolicy="no-referrer">
-    {% elif cam.stream_url %}
-    <p><a class="btn" href="{{ cam.stream_url }}" target="_blank" rel="noreferrer">Open live stream</a></p>
-    {% else %}
-    <div class="camera-empty">No feed yet. Paste a snapshot URL from the NVR or camera app.</div>
-    {% endif %}
-    <form method="post" action="/house/camera/{{ cam.id }}" class="stack-form">
-      <label>Snapshot URL
-        <input name="snapshot_url" value="{{ cam.snapshot_url }}" placeholder="https://nvr.local/front.jpg">
-      </label>
-      <label>Live stream URL
-        <input name="stream_url" value="{{ cam.stream_url }}" placeholder="https://nvr.local/front">
-      </label>
-      <button type="submit" class="btn secondary">Save camera</button>
-    </form>
-  </article>
-  {% endfor %}
-</section>
 
 <details class="card collectors-details">
   <summary>How the sensors get in</summary>

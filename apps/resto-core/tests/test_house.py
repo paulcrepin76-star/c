@@ -14,9 +14,14 @@ def test_house_page_lists_cafe_coolers():
         assert "Walk-in cooler" in page.text
         assert "Walk-in freezer" in page.text
         assert "Home Assistant" in page.text
-        assert "Frigate" in page.text
+        assert "Fridges" in page.text
+        cameras = client.get("/house/cameras")
+        assert cameras.status_code == 200
+        assert "Frigate" in cameras.text
+        assert "Cameras" in cameras.text
         home = client.get("/")
         assert 'href="/house"' in home.text
+        assert 'href="/house/cameras"' in home.text
 
 
 def test_fridge_reading_api_and_alert():

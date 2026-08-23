@@ -12,7 +12,8 @@ def test_sales_category_puts_gift_cards_and_coffee_apart():
     assert sales_category("cafe latte") == "Coffee"
     assert sales_category("survey breakfast plate") == "Breakfast plates"
     assert sales_category("sancerre") == "Wine"
-    assert sales_category("Mimosa") == "Beer & cocktails"
+    assert sales_category("Mimosa") == "Cocktails"
+    assert sales_category("house ipa") == "Beer"
 
 
 def test_prior_window_is_the_same_dates_last_year():

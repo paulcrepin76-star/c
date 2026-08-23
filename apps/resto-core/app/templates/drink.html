@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}{{ drink.label }} · Survey Cafe{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <p class="eyebrow"><a href="/drinks">Drinks</a> · {{ drink.label }}</p>
+    <h1>{{ drink.label }}</h1>
+    <p class="lede">{{ drink.blurb }}</p>
+  </div>
+  {% if drink.slug == 'wine' %}
+  <a class="btn secondary" href="/wines">Wine cellar</a>
+  {% endif %}
+</div>
+<nav class="period" aria-label="Date range">
+  <a href="/drinks/{{ drink.slug }}?period=week" class="{% if period == 'week' %}on{% endif %}">This week</a>
+  <a href="/drinks/{{ drink.slug }}?period=month" class="{% if period == 'month' %}on{% endif %}">This month</a>
+  <a href="/drinks/{{ drink.slug }}?period=ytd" class="{% if period == 'ytd' %}on{% endif %}">This year</a>
+</nav>
+<p class="muted">{{ drink.board.start }} → {{ drink.board.end }}</p>
+
+<nav class="studio-tabs" aria-label="Drinks">
+  <a href="/drinks/coffee?period={{ period }}" class="{% if drink.slug == 'coffee' %}on{% endif %}">Coffee</a>
+  <a href="/drinks/wine?period={{ period }}" class="{% if drink.slug == 'wine' %}on{% endif %}">Wine</a>
+  <a href="/drinks/beer?period={{ period }}" class="{% if drink.slug == 'beer' %}on{% endif %}">Beer</a>
+  <a href="/drinks/soda?period={{ period }}" class="{% if drink.slug == 'soda' %}on{% endif %}">Soda</a>
+</nav>
+
+<section class="kpis">
+  <article>
+    <span>{{ drink.label }} sales</span>
+    <strong>{{ drink.board.sales.now | money }}</strong>
+    <em>{% if drink.board.has_last_year %}last year {{ drink.board.sales.then | money }} · {{ drink.board.sales.pct | signedpct }}{% else %}From Square{% endif %}</em>
+  </article>
+  <article>
+    <span>Best seller</span>
+    {% if drink.board.best %}
+    <strong>{{ drink.board.best.name }}</strong>
+    <em>{{ drink.board.best.amount | money }} · {{ drink.board.best.qty }} sold</em>
+    {% else %}
+    <strong>—</strong>
+    <em>No Square tickets in this window</em>
+    {% endif %}
+  </article>
+  <article>
+    <span>Items sold</span>
+    <strong>{{ drink.board.qty }}</strong>
+    <em>{{ drink.board.rows | length }} names</em>
+  </article>
+</section>
+
+<section class="card">
+  <h2>Which {{ drink.label | lower }} sells</h2>
+  <p class="muted">Ranked by Square dollars. Last year is the same dates, not a quality score.</p>
+  {% if drink.board.rows %}
+  <table class="wide review-table">
+    <thead><tr><th></th><th>Item</th><th>Qty</th><th>Sales</th><th>%</th><th>Last year</th><th>Change</th></tr></thead>
+    <tbody>
+    {% for row in drink.board.rows %}
+      <tr>
+        <td>{{ loop.index }}</td>
+        <td>{{ row.name }}{% if loop.first %} · best seller{% endif %}</td>
+        <td>{{ row.qty }}</td>
+        <td>{{ row.amount | money }}</td>
+        <td>{{ row.pct | pct }}</td>
+        <td>{{ row.last | money }}</td>
+        <td>{{ row.delta | signed }} · {{ row.change_pct | signedpct }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">No {{ drink.label | lower }} tickets in this window yet.</p>
+  {% endif %}
+</section>
+
+{% if drink.slug == 'wine' %}
+<section class="card">
+  <h2>Wine cellar</h2>
+  <p class="muted">Names only. Counts stay off until you take a physical count.</p>
+  {% if wines %}
+  <ul class="plain wine-names">
+    {% for row in wines %}
+    <li>
+      <a href="/wines/{{ row.product.id }}">{{ row.product.name }}</a>
+      <span>{{ row.profile.color }}{% if row.profile.vintage %} · {{ row.profile.vintage }}{% endif %}</span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">No wine labels yet.</p>
+  {% endif %}
+  <p><a href="/wines">Open wine cellar</a> · <a href="/inventory">Open inventory</a></p>
+</section>
+{% endif %}
+{% endblock %}

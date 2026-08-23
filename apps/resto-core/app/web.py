@@ -21,6 +21,7 @@ from app.db import get_db
 from app.ingest import INVOICE_TOTAL_MAX, PURCHASE_INVOICE_TYPES
 from app.matching import match_sellables
 from app.models import Connector, Invoice, Product, Recipe, SellableItem, StockMove, WineProfile
+from app.drinks import DRINK_ORDER, drink_board, drink_spec, drinks_overview
 from app.home import manager_home
 from app.house import ensure_house, house_board, house_series, record_reading, safe_http_url, to_fahrenheit
 from app.models import Camera, Fridge
@@ -126,6 +127,55 @@ def finance_page(
 @router.get("/labor")
 def labor_page(request: Request):
     return render(request, "labor.html", page="labor")
+
+
+@router.get("/drinks")
+def drinks_page(
+    request: Request,
+    period: str = "month",
+    start: str = "",
+    end: str = "",
+    db: Session = Depends(get_db),
+):
+    kind, first, last = finance_period(period, start, end, earliest=earliest_finance_date(db))
+    return render(
+        request,
+        "drinks.html",
+        cards=drinks_overview(db, first, last),
+        period=kind,
+        start=first,
+        end=last,
+        page="drinks",
+        drink="",
+    )
+
+
+@router.get("/drinks/{slug}")
+def drink_page(
+    slug: str,
+    request: Request,
+    period: str = "month",
+    start: str = "",
+    end: str = "",
+    db: Session = Depends(get_db),
+):
+    spec = drink_spec(slug)
+    if spec is None:
+        return RedirectResponse("/drinks", status_code=303)
+    kind, first, last = finance_period(period, start, end, earliest=earliest_finance_date(db))
+    board = drink_board(db, slug, first, last)
+    wines = wine_rows(db) if slug == "wine" else []
+    return render(
+        request,
+        "drink.html",
+        drink=board,
+        wines=wines,
+        period=kind,
+        start=first,
+        end=last,
+        slugs=DRINK_ORDER,
+        page=slug,
+    )
 
 
 @router.get("/intelligence")
@@ -340,6 +390,19 @@ def house_page(request: Request, db: Session = Depends(get_db)):
     )
 
 
+@router.get("/house/cameras")
+def house_cameras_page(request: Request, db: Session = Depends(get_db)):
+    ok, err = _pop_flash(request)
+    return render(
+        request,
+        "house_cameras.html",
+        board=house_board(db),
+        flash_ok=ok,
+        flash_err=err,
+        page="cameras",
+    )
+
+
 @router.post("/house/reading")
 def house_reading(
     fridge_id: int = Form(...),
@@ -370,7 +433,7 @@ def house_camera(
         camera.snapshot_url = safe_http_url(snapshot_url)
         camera.stream_url = safe_http_url(stream_url)
         db.commit()
-    return RedirectResponse("/house", status_code=303)
+    return RedirectResponse("/house/cameras", status_code=303)
 
 
 @router.get("/inventory")
@@ -531,7 +594,7 @@ def invoices_scan(request: Request, db: Session = Depends(get_db)):
         flash_err=err,
         paperless_connected=connected,
         paperless_url=paperless_url,
-        page="scan",
+        page="invoices",
     )
 
 

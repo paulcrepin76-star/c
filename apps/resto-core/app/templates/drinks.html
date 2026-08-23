@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Drinks · Survey Cafe{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <p class="eyebrow">Drinks</p>
+    <h1>Wine, beer, soda, coffee</h1>
+    <p class="lede">Each drink has its own board. Best seller means the Square item that brought in the most money — not which one tastes best.</p>
+  </div>
+</div>
+<nav class="period" aria-label="Date range">
+  <a href="/drinks?period=week" class="{% if period == 'week' %}on{% endif %}">This week</a>
+  <a href="/drinks?period=month" class="{% if period == 'month' %}on{% endif %}">This month</a>
+  <a href="/drinks?period=ytd" class="{% if period == 'ytd' %}on{% endif %}">This year</a>
+</nav>
+<p class="muted">{{ start }} → {{ end }}</p>
+<section class="door-grid">
+  {% for card in cards %}
+  <a class="door" href="/drinks/{{ card.slug }}?period={{ period }}">
+    <strong>{{ card.label }}</strong>
+    <span>{{ card.board.sales.now | money }}{% if card.board.best %} · {{ card.board.best.name }}{% else %} · no tickets yet{% endif %}</span>
+  </a>
+  {% endfor %}
+</section>
+{% endblock %}

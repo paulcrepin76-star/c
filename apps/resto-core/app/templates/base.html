@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-title" content="Survey Cafe">
   <meta name="theme-color" content="#0f1116">
   <title>{% block title %}Survey Cafe{% endblock %}</title>
-  <link rel="stylesheet" href="/static/style.css?v=15">
+  <link rel="stylesheet" href="/static/style.css?v=16">
 </head>
 <body class="app">
   <aside class="sidebar">
@@ -21,17 +21,22 @@
     <nav>
       <a href="/" class="{% if page == 'home' %}on{% endif %}">Home</a>
       <p class="nav-label">Sales</p>
-      <a href="/finance?view=sales" class="{% if page == 'finance' %}on{% endif %}">Sales &amp; P&amp;L</a>
+      <a href="/finance?view=sales" class="{% if page == 'finance' %}on{% endif %}">Sales</a>
+      <a href="/finance" class="{% if page == 'finance' %}on{% endif %}">P&amp;L</a>
       <p class="nav-label">Food</p>
-      <a href="/costing" class="{% if page == 'costing' %}on{% endif %}">Recipes &amp; cost</a>
+      <a href="/costing" class="{% if page == 'costing' %}on{% endif %}">Recipes</a>
       <a href="/invoices" class="{% if page == 'invoices' %}on{% endif %}">Invoices</a>
-      <a href="/invoices/scan" class="{% if page == 'scan' %}on{% endif %}">Scan invoice</a>
-      <a href="/purchasing" class="{% if page == 'purchasing' %}on{% endif %}">Purchasing</a>
       <a href="/labor" class="{% if page == 'labor' %}on{% endif %}">Labor</a>
+      <a href="/purchasing" class="{% if page == 'purchasing' %}on{% endif %}">Purchasing</a>
       <p class="nav-label">House</p>
-      <a href="/house" class="{% if page == 'house' %}on{% endif %}">Fridges &amp; cameras</a>
+      <a href="/house" class="{% if page == 'house' %}on{% endif %}">Fridges</a>
+      <a href="/house/cameras" class="{% if page == 'cameras' %}on{% endif %}">Cameras</a>
       <a href="/inventory" class="{% if page == 'inventory' %}on{% endif %}">Inventory</a>
-      <a href="/wines" class="{% if page == 'wines' %}on{% endif %}">Wine cellar</a>
+      <p class="nav-label">Drinks</p>
+      <a href="/drinks/wine" class="{% if page in ('wine', 'wines') %}on{% endif %}">Wine</a>
+      <a href="/drinks/beer" class="{% if page == 'beer' %}on{% endif %}">Beer</a>
+      <a href="/drinks/soda" class="{% if page == 'soda' %}on{% endif %}">Soda</a>
+      <a href="/drinks/coffee" class="{% if page == 'coffee' %}on{% endif %}">Coffee</a>
       <p class="nav-label">Office</p>
       <a href="/intelligence" class="{% if page == 'intelligence' %}on{% endif %}">Intelligence</a>
       <a href="/documents" class="{% if page == 'documents' %}on{% endif %}">Documents</a>
@@ -41,10 +46,11 @@
   <div class="shell">
     <header class="topbar">
       <form class="top-search" action="/inventory" method="get">
-        <input type="search" name="q" placeholder="Search wines and inventory" value="{{ request.query_params.get('q', '') }}">
+        <input type="search" name="q" placeholder="Search inventory" value="{{ request.query_params.get('q', '') }}">
       </form>
       <div class="top-tools">
-        <a class="top-link" href="/house">House</a>
+        <a class="top-link" href="/house">Fridges</a>
+        <a class="top-link" href="/drinks/coffee">Coffee</a>
         <a class="top-link" href="/finance?view=sales">Sales</a>
         <button type="button" class="theme-btn" id="theme-toggle" aria-label="Switch theme">Theme</button>
       </div>

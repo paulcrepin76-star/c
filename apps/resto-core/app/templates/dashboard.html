@@ -35,9 +35,12 @@
 <section class="door-grid">
   <a class="door" href="/finance?view=sales"><strong>Sales</strong><span>Tickets, items, gift cards</span></a>
   <a class="door" href="/finance"><strong>P&amp;L</strong><span>Square vs mapped bills</span></a>
-  <a class="door" href="/invoices"><strong>Food &amp; invoices</strong><span>What actually arrived</span></a>
-  <a class="door" href="/house"><strong>House</strong><span>Fridges and cameras</span></a>
-  <a class="door" href="/inventory"><strong>Wine</strong><span>Names only. No counts.</span></a>
+  <a class="door" href="/invoices"><strong>Invoices</strong><span>Filed bills · scan lives here</span></a>
+  <a class="door" href="/house"><strong>Fridges</strong><span>Coolers and alerts</span></a>
+  <a class="door" href="/house/cameras"><strong>Cameras</strong><span>Live shots</span></a>
+  <a class="door" href="/inventory"><strong>Inventory</strong><span>Names from orders</span></a>
+  <a class="door" href="/drinks/wine"><strong>Wine</strong><span>What sells · cellar names</span></a>
+  <a class="door" href="/drinks/coffee"><strong>Coffee</strong><span>Best seller from Square</span></a>
   <a class="door" href="/documents"><strong>Documents</strong><span>Paperless and scans</span></a>
   <a class="door" href="/labor"><strong>Labor</strong><span>Empty until payroll is real</span></a>
   <a class="door" href="/intelligence"><strong>Intelligence</strong><span>Overnight purchasing</span></a>
@@ -97,7 +100,7 @@
 <section class="grid-2">
   <div class="card">
     <h2>Cameras</h2>
-    <p class="muted">{{ house.live_cameras }} live · {{ house.cameras | length }} cameras · <a href="/house">Open house</a></p>
+    <p class="muted">{{ house.live_cameras }} live · {{ house.cameras | length }} cameras · <a href="/house/cameras">Open cameras</a></p>
     {% if house.cameras %}
     <ul class="plain">
       {% for camera in house.cameras %}

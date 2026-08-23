@@ -1,9 +1,9 @@
 {% extends "base.html" %}
 {% block title %}Scan invoices{% endblock %}
 {% block content %}
-<p class="eyebrow">iPhone camera → Paperless</p>
-<h1>Photograph paper invoices</h1>
-<p class="lede">Open this page on your iPhone, on Tailscale. Shoot the bill. It goes straight into Paperless, and costing picks it up on its own.</p>
+<p class="eyebrow"><a href="/invoices">Invoices</a> · scan</p>
+<h1>Scan invoices</h1>
+<p class="lede">Photograph paper invoices on your iPhone, on Tailscale. Shoot the bill. It goes straight into Paperless, and costing picks it up on its own.</p>
 {% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
 {% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
 

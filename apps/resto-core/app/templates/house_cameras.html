@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Cameras · Survey Cafe{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <p class="eyebrow">Survey Cafe · kitchen house</p>
+    <h1>Cameras</h1>
+    <p class="lede">Live shots from the NVR. Fridges stay on their own page. Frigate still holds the recordings.</p>
+  </div>
+  <div class="toolbar">
+    <a class="btn secondary" href="/house">Fridges</a>
+    <a class="btn" href="http://100.116.48.120:8971" target="_blank" rel="noreferrer">Frigate</a>
+  </div>
+</div>
+{% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
+{% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
+
+<section class="kpis compact-kpis">
+  <article>
+    <span>Cameras</span>
+    <strong>{{ board.live_cameras }} / {{ board.cameras | length }}</strong>
+    <em>With a snapshot or stream URL</em>
+  </article>
+</section>
+
+<section class="camera-grid">
+  {% for cam in board.cameras %}
+  <article class="card camera-card">
+    <p class="eyebrow">{{ cam.kind }}</p>
+    <h2>{{ cam.name }}</h2>
+    {% if cam.snapshot_url %}
+    <img class="camera-shot" src="{{ cam.snapshot_url }}" alt="{{ cam.name }}" referrerpolicy="no-referrer">
+    {% elif cam.stream_url %}
+    <p><a class="btn" href="{{ cam.stream_url }}" target="_blank" rel="noreferrer">Open live stream</a></p>
+    {% else %}
+    <div class="camera-empty">No feed yet. Paste a snapshot URL from the NVR or camera app.</div>
+    {% endif %}
+    <form method="post" action="/house/camera/{{ cam.id }}" class="stack-form">
+      <label>Snapshot URL
+        <input name="snapshot_url" value="{{ cam.snapshot_url }}" placeholder="https://nvr.local/front.jpg">
+      </label>
+      <label>Live stream URL
+        <input name="stream_url" value="{{ cam.stream_url }}" placeholder="https://nvr.local/front">
+      </label>
+      <button type="submit" class="btn secondary">Save camera</button>
+    </form>
+  </article>
+  {% endfor %}
+</section>
+{% endblock %}

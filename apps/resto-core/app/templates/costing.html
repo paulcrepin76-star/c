@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% block title %}Recipes & cost{% endblock %}
+{% block title %}Recipes{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
     <p class="eyebrow">Last {{ days }} days</p>
-    <h1>Recipes &amp; cost</h1>
+    <h1>Recipes</h1>
     <p class="lede">{{ costing.period_sales | money }} Square sales in this window. Theoretical cost uses Mealie recipes and wine pours. {{ counts.linked }} menu items linked · {{ counts.unmatched }} unmatched. <a href="/costing/match">Match Square to Mealie</a></p>
   </div>
   <nav class="period" aria-label="Date range">

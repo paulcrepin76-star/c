@@ -70,6 +70,35 @@ def test_home_is_one_desk_for_sales_bills_and_house():
         assert "overnight" in intelligence.text.lower()
 
 
+def test_menu_splits_house_and_drinks():
+    with TestClient(app) as client:
+        home = client.get("/")
+        assert ">Recipes<" in home.text
+        assert "Recipes &amp; cost" not in home.text
+        assert ">Scan invoice<" not in home.text
+        assert 'href="/invoices/scan"' in home.text
+        assert 'href="/drinks/coffee"' in home.text
+        assert 'href="/drinks/beer"' in home.text
+        assert 'href="/drinks/soda"' in home.text
+        invoices = client.get("/invoices")
+        assert invoices.status_code == 200
+        assert "Scan invoices" in invoices.text
+        drinks = client.get("/drinks")
+        assert drinks.status_code == 200
+        assert "Coffee" in drinks.text
+        assert "Wine" in drinks.text
+        coffee = client.get("/drinks/coffee")
+        assert coffee.status_code == 200
+        assert "Best seller" in coffee.text
+        assert "taste contest" in coffee.text
+        wine = client.get("/drinks/wine")
+        assert wine.status_code == 200
+        assert "Sauvignon Blanc" in wine.text
+        assert "Counted bottles" not in wine.text
+        missing = client.get("/drinks/juice", follow_redirects=False)
+        assert missing.status_code == 303
+
+
 def test_dashboard_series_includes_seed_sales():
     from datetime import UTC, datetime, timedelta
 

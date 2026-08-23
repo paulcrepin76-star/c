@@ -4,11 +4,16 @@
 <div class="page-head">
   <div>
     <p class="eyebrow">Paperless holds the PDF · this list is the coded order</p>
-    <h1>Orders</h1>
-    <p class="lede">Invoices, credits and receipts. Photograph invoices on iPhone, or let Paperless file the PDF. Survey Cafe keeps vendor, date, category and total for food cost.</p>
+    <h1>Invoices</h1>
+    <p class="lede">Invoices, credits and receipts. Photograph invoices on iPhone, or let Paperless file the PDF. Scan invoices lives on this page.</p>
   </div>
-  <a class="btn" href="/invoices/scan">Scan invoice</a>
+  <a class="btn" href="/invoices/scan">Scan invoices</a>
 </div>
+<section class="card">
+  <h2>Scan invoices</h2>
+  <p class="muted">Open the camera page on your phone. The photo files in Paperless and shows up in this list.</p>
+  <p><a class="btn" href="/invoices/scan">Scan invoices</a></p>
+</section>
 {% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
 {% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
 <p class="muted">{{ total_count }} filed · {{ counts.invoices_with_total }} with dollars · {{ filed_total | money }} read so far</p>
