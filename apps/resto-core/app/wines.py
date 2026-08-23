@@ -28,6 +28,10 @@ SKIP = re.compile(
     re.I,
 )
 NOT_WINE = re.compile(r"\b(chti|blonde|beer|lemonade|vegan|medal|world beer)\b", re.I)
+JUNK_NAME = re.compile(
+    r"\b(survey cafe|wilson street|bonita|honita|llc|davie|invoice|10530|print name|fintech)\b",
+    re.I,
+)
 HINT = re.compile(
     r"\b("
     r"veuve|pinot|sancerre|chardonnay|cabernet|malbec|brouilly|chateau|château|"
@@ -142,14 +146,33 @@ def extract_wine_names(text: str) -> list[str]:
         words = name.split()
         if len(words) > 10:
             name = " ".join(words[:10])
+        if not _good_label(name):
+            continue
         key = _fold(re.sub(r"20\d{2}", "", name))
         if len(name) < 8 or len(key) < 8:
+            continue
+        if any(key in other or other in key for other in seen if min(len(key), len(other)) >= 12):
             continue
         if key in seen:
             continue
         seen.add(key)
         names.append(name)
     return names
+
+
+def _good_label(name: str) -> bool:
+    if not HINT.search(name):
+        return False
+    if JUNK_NAME.search(name) or NOT_WINE.search(name) or "\\" in name:
+        return False
+    words = [part for part in re.split(r"\s+", name) if part and not YEAR.fullmatch(part)]
+    if len(words) < 2:
+        return False
+    short = sum(1 for word in words if len(re.sub(r"[^A-Za-z]", "", word)) <= 2)
+    if short / len(words) > 0.3:
+        return False
+    letters = sum(ch.isalpha() for ch in name)
+    return letters >= 10
 
 
 def _existing_wine(db: Session, name: str) -> Product | None:
@@ -243,10 +266,41 @@ def wine_documents(db: Session, fetch_paperless: bool = True) -> list[dict]:
     return rows
 
 
+def scrub_junk_wine_labels(db: Session) -> int:
+    """Drop OCR junk that was stored as an ordered wine with no stock."""
+    removed = 0
+    for product in db.query(Product).filter(Product.category == "wine").all():
+        if product.sku.startswith(("SB-", "PN-", "CHAMP-", "HOUSE-")):
+            continue
+        if not str(product.notes or "").startswith("Ordered"):
+            continue
+        if _good_label(product.name):
+            continue
+        if on_hand(db, product.id) > 0:
+            continue
+        if product.wine:
+            db.delete(product.wine)
+        db.delete(product)
+        removed += 1
+    if removed:
+        db.commit()
+    return removed
+
+
+def on_hand(db: Session, product_id: int):
+    from sqlalchemy import func, select
+
+    from app.models import StockMove
+
+    total = db.scalar(select(func.coalesce(func.sum(StockMove.qty_base), 0)).where(StockMove.product_id == product_id))
+    return Decimal(total or 0)
+
+
 def import_ordered_wines(db: Session, documents: list[dict] | None = None, fetch_paperless: bool = True) -> dict:
     """Create cellar labels for every wine on a purchase ticket. Never writes a quantity."""
     created = 0
     seen = 0
+    removed = scrub_junk_wine_labels(db)
     docs = documents if documents is not None else wine_documents(db, fetch_paperless=fetch_paperless)
     for doc in docs:
         supplier = str(doc.get("supplier") or "")
@@ -257,4 +311,4 @@ def import_ordered_wines(db: Session, documents: list[dict] | None = None, fetch
             if product is not None and before is None:
                 created += 1
     db.commit()
-    return {"created": created, "seen": seen, "labels": db.query(WineProfile).count()}
+    return {"created": created, "seen": seen, "removed": removed, "labels": db.query(WineProfile).count()}

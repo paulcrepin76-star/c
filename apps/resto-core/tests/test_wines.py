@@ -25,6 +25,11 @@ Sauvignon Blanc 2024 x12
 """
 
 
+def test_extract_wine_names_skips_address_junk():
+    names = extract_wine_names("PG Fine Wines invoice Survey Cafe LLC 10530 Wilson Street Bonita Springs")
+    assert names == []
+
+
 def test_extract_wine_names_skips_beer_and_qty():
     names = extract_wine_names(PG_OCR)
     assert any("Veuve Parisot" in name for name in names)
