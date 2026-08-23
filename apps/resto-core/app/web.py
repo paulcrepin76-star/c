@@ -19,6 +19,7 @@ from app.market import scan_external_prices
 from app.connections import access_token_for
 from app.db import get_db
 from app.ingest import INVOICE_TOTAL_MAX, PURCHASE_INVOICE_TYPES
+from app.counts import COUNT_LOCATIONS, count_detail, count_sheet, recent_counts, save_count
 from app.health import data_health
 from app.matching import link_sellable, match_sellables, suggest_matches
 from app.models import Connector, Invoice, Product, Recipe, SellableItem, StockMove, WineProfile
@@ -440,7 +441,21 @@ def house_camera(
 
 
 @router.get("/inventory")
-def inventory(request: Request, q: str = "", db: Session = Depends(get_db)):
+def inventory(request: Request, db: Session = Depends(get_db)):
+    ok, err = _pop_flash(request)
+    return render(
+        request,
+        "inventory.html",
+        locations=COUNT_LOCATIONS,
+        counts=recent_counts(db),
+        flash_ok=ok,
+        flash_err=err,
+        page="inventory",
+    )
+
+
+@router.get("/inventory/names")
+def inventory_names(request: Request, q: str = "", db: Session = Depends(get_db)):
     wines = wine_rows(db)
     needle = q.strip().lower()
     if needle:
@@ -451,49 +466,60 @@ def inventory(request: Request, q: str = "", db: Session = Depends(get_db)):
             or needle in (row["product"].notes or "").lower()
             or needle in (row["profile"].color or "").lower()
         ]
-    return render(request, "inventory.html", wines=wines, q=q.strip(), page="inventory")
+    return render(request, "inventory_names.html", wines=wines, q=q.strip(), page="inventory")
+
+
+@router.get("/inventory/count")
+def inventory_count_sheet(request: Request, location: str = "walk-in", q: str = "", db: Session = Depends(get_db)):
+    ok, err = _pop_flash(request)
+    sheet = count_sheet(db, location, q)
+    return render(
+        request,
+        "inventory_count.html",
+        sheet=sheet,
+        locations=COUNT_LOCATIONS,
+        flash_ok=ok,
+        flash_err=err,
+        page="inventory",
+    )
 
 
 @router.post("/inventory/count")
-async def inventory_count(request: Request, db: Session = Depends(get_db)):
+async def inventory_count_save(request: Request, db: Session = Depends(get_db)):
     form = await request.form()
-    location = str(form.get("location") or "cellar")
-    notes = str(form.get("notes") or "Physical count")
-    from app.models import InventoryCount, InventoryCountLine
-
-    count = InventoryCount(location=location, notes=notes)
-    db.add(count)
-    db.flush()
-    for row in wine_rows(db):
-        product = row["product"]
-        field = f"count_{product.id}"
-        if field not in form:
+    location = str(form.get("location") or "walk-in")
+    notes = str(form.get("notes") or "Shelf count")
+    raw = {}
+    for key, value in form.items():
+        if not str(key).startswith("qty_"):
             continue
-        counted_bottles = Decimal(str(form.get(field) or "0"))
-        counted_ml = counted_bottles * Decimal(row["profile"].bottle_size_ml)
-        expected = row["on_hand_ml"]
-        db.add(
-            InventoryCountLine(
-                count_id=count.id,
-                product_id=product.id,
-                counted_qty_base=counted_ml,
-                expected_qty_base=expected,
-            )
-        )
-        delta = counted_ml - expected
-        if delta != 0:
-            db.add(
-                StockMove(
-                    product_id=product.id,
-                    qty_base=delta,
-                    unit_cost=row["bottle_cost"],
-                    reason="count_adjust",
-                    location=location,
-                    notes=f"Count variance {delta} ml",
-                )
-            )
-    db.commit()
-    return RedirectResponse("/inventory", status_code=303)
+        try:
+            raw[int(str(key)[4:])] = str(value)
+        except ValueError:
+            continue
+    result = save_count(db, location, raw, notes)
+    if result.get("ok"):
+        _flash(request, ok=f"Saved {result['saved']} counted items.")
+        return RedirectResponse(f"/inventory/counts/{result['count_id']}", status_code=303)
+    _flash(request, err="Type a number on at least one item. Blank lines are skipped.")
+    suffix = f"?location={location}"
+    return RedirectResponse(f"/inventory/count{suffix}", status_code=303)
+
+
+@router.get("/inventory/counts/{count_id}")
+def inventory_count_view(count_id: int, request: Request, db: Session = Depends(get_db)):
+    detail = count_detail(db, count_id)
+    if detail is None:
+        return RedirectResponse("/inventory", status_code=303)
+    ok, err = _pop_flash(request)
+    return render(
+        request,
+        "inventory_count_detail.html",
+        detail=detail,
+        flash_ok=ok,
+        flash_err=err,
+        page="inventory",
+    )
 
 
 @router.get("/costing")

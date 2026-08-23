@@ -214,6 +214,26 @@ h2 {
   align-items: center;
 }
 .match-form select { min-width: 220px; }
+.count-search { margin: 12px 0 16px; }
+.count-notes { display: block; margin: 0 0 14px; color: var(--muted); font-size: 0.86rem; }
+.count-notes input { width: 100%; margin-top: 6px; }
+.count-list { list-style: none; padding: 0; margin: 0 0 18px; }
+.count-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+.count-list strong { display: block; }
+.count-list span { display: block; color: var(--muted); font-size: 0.82rem; margin-top: 4px; }
+.count-qty {
+  width: 88px;
+  font-size: 1.25rem;
+  text-align: right;
+  padding: 10px 8px;
+}
 .door-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));

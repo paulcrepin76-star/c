@@ -1,33 +1,40 @@
 {% extends "base.html" %}
-{% block title %}Ordered names{% endblock %}
+{% block title %}Inventory · Survey Cafe{% endblock %}
 {% block content %}
-<p class="eyebrow">Labels from orders · not a count</p>
-<h1>Ordered names</h1>
-<p class="lede">Wine and goods from purchase tickets. This is not inventory until someone counts a shelf. Quantities stay off.</p>
-{% if q %}
-<p class="muted">Showing names that match “{{ q }}”.</p>
-{% endif %}
-<table class="wide">
-  <thead>
-    <tr>
-      <th>Wine</th>
-      <th>Color</th>
-      <th>Vintage</th>
-      <th>Source</th>
-    </tr>
-  </thead>
-  <tbody>
-  {% for row in wines %}
-    <tr>
-      <td><a href="/wines/{{ row.product.id }}">{{ row.product.name }}</a></td>
-      <td>{{ row.profile.color }}</td>
-      <td>{{ row.profile.vintage or "—" }}</td>
-      <td>{{ row.product.notes or "Cellar" }}</td>
-    </tr>
+<div class="page-head">
+  <div>
+    <p class="eyebrow">House · count</p>
+    <h1>Inventory</h1>
+    <p class="lede">Stand in front of a cooler and count what is there. Leave a line blank to skip it. Zero means you counted zero. Books stay empty until the first count.</p>
+  </div>
+  <a class="btn secondary" href="/inventory/names">Ordered names</a>
+</div>
+{% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
+{% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
+
+<section class="door-grid">
+  {% for slug, label, _cats in locations %}
+  <a class="door" href="/inventory/count?location={{ slug }}"><strong>{{ label }}</strong><span>Count this room</span></a>
   {% endfor %}
-  </tbody>
-</table>
-{% if not wines %}
-<p class="muted">No wine labels match.</p>
-{% endif %}
+</section>
+
+<section class="card">
+  <h2>Recent counts</h2>
+  {% if counts %}
+  <table class="wide">
+    <thead><tr><th>When</th><th>Where</th><th>Note</th></tr></thead>
+    <tbody>
+    {% for row in counts %}
+      <tr>
+        <td><a href="/inventory/counts/{{ row.id }}">{{ row.counted_at.strftime("%Y-%m-%d %H:%M") }}</a></td>
+        <td>{{ row.location }}</td>
+        <td>{{ row.notes }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">No shelf count yet. Pick a room above.</p>
+  {% endif %}
+</section>
 {% endblock %}

@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Count {{ detail.label }} · Survey Cafe{% endblock %}
+{% block content %}
+<p class="eyebrow"><a href="/inventory">Inventory</a> · saved count</p>
+<h1>{{ detail.label }}</h1>
+{% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
+<p class="lede">{{ detail.count.counted_at.strftime("%Y-%m-%d %H:%M") }} · {{ detail.count.notes }}</p>
+<table class="wide review-table">
+  <thead><tr><th>Item</th><th>Counted</th><th>On books</th><th>Variance</th></tr></thead>
+  <tbody>
+  {% for line in detail.lines %}
+    <tr>
+      <td>{{ line.product.name }}</td>
+      <td>{{ line.counted }} {{ line.unit }}</td>
+      <td>{{ line.expected }} {{ line.unit }}</td>
+      <td>{{ line.variance }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+<p><a class="btn" href="/inventory/count?location={{ detail.count.location }}">Count again</a> <a class="btn secondary" href="/inventory">All rooms</a></p>
+{% endblock %}

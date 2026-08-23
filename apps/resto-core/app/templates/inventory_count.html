@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Count {{ sheet.label }} · Survey Cafe{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <p class="eyebrow"><a href="/inventory">Inventory</a> · {{ sheet.label }}</p>
+    <h1>Count {{ sheet.label }}</h1>
+    <p class="lede">Type what you see. Blank skips. 0 is a real zero. After two counts and the bills in between, actual usage can be computed.</p>
+  </div>
+</div>
+{% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
+{% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
+
+<nav class="studio-tabs" aria-label="Count rooms">
+  {% for slug, label, _cats in locations %}
+  <a href="/inventory/count?location={{ slug }}" class="{% if sheet.location == slug %}on{% endif %}">{{ label }}</a>
+  {% endfor %}
+</nav>
+
+<form class="top-search count-search" action="/inventory/count" method="get">
+  <input type="hidden" name="location" value="{{ sheet.location }}">
+  <input type="search" name="q" placeholder="Add another item by name" value="{{ sheet.q }}">
+</form>
+
+{% if sheet.last_count %}
+<p class="muted">Last count here {{ sheet.last_count.counted_at.strftime("%Y-%m-%d %H:%M") }}.</p>
+{% endif %}
+
+<form method="post" action="/inventory/count" class="count-sheet">
+  <input type="hidden" name="location" value="{{ sheet.location }}">
+  <label class="count-notes">Note
+    <input name="notes" placeholder="Morning count, closing, weekly…">
+  </label>
+  {% if sheet.rows %}
+  <ul class="count-list">
+    {% for row in sheet.rows %}
+    <li>
+      <div>
+        <strong>{{ row.product.name }}</strong>
+        <span>{{ row.spec.unit }}{% if row.counted_before and row.last is not none %} · last {{ row.last }}{% else %} · never counted{% endif %}{% if row.par %} · par {{ row.par }}{% endif %}</span>
+      </div>
+      <input class="count-qty" inputmode="decimal" name="qty_{{ row.product.id }}" placeholder="—" aria-label="Count {{ row.product.name }}">
+    </li>
+    {% endfor %}
+  </ul>
+  <p><button class="btn big" type="submit">Save this count</button></p>
+  {% else %}
+  <p class="muted">Nothing listed for this room. Search a name to add it to the sheet.</p>
+  {% endif %}
+</form>
+{% endblock %}

@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Ordered names{% endblock %}
+{% block content %}
+<p class="eyebrow"><a href="/inventory">Inventory</a> · labels from orders</p>
+<h1>Ordered names</h1>
+<p class="lede">Wine and goods from purchase tickets. Count them on the inventory sheet. This list stays names — no quantities here.</p>
+{% if q %}
+<p class="muted">Showing names that match “{{ q }}”.</p>
+{% endif %}
+<table class="wide">
+  <thead>
+    <tr>
+      <th>Wine</th>
+      <th>Color</th>
+      <th>Vintage</th>
+      <th>Source</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for row in wines %}
+    <tr>
+      <td><a href="/wines/{{ row.product.id }}">{{ row.product.name }}</a></td>
+      <td>{{ row.profile.color }}</td>
+      <td>{{ row.profile.vintage or "—" }}</td>
+      <td>{{ row.product.notes or "Cellar" }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% if not wines %}
+<p class="muted">No wine labels match.</p>
+{% endif %}
+<p><a href="/inventory/count?location=wine-cellar">Count the wine cellar</a></p>
+{% endblock %}

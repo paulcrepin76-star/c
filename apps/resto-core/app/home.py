@@ -31,6 +31,8 @@ def manager_home(db: Session, house: dict, report: dict) -> dict:
         actions.append(
             {"title": f"{house['alerts']} fridge{'s' if house['alerts'] != 1 else ''} out of range", "href": "/house", "kind": "alert"}
         )
+    if not health.get("inventory_last"):
+        actions.append({"title": "Count a shelf so inventory is real", "href": "/inventory", "kind": "warn"})
     if month_board["uncategorized"]:
         actions.append(
             {

@@ -18,10 +18,16 @@ def test_core_pages_render_demo_wines():
         assert "Cameras" in home.text
         inventory = client.get("/inventory")
         assert inventory.status_code == 200
-        assert "Sauvignon Blanc" in inventory.text
-        assert "Counted bottles" not in inventory.text
-        assert "Ordered names" in inventory.text
-        assert "not a count" in inventory.text.lower()
+        assert "Count this room" in inventory.text
+        assert "Walk-in cooler" in inventory.text
+        names = client.get("/inventory/names")
+        assert names.status_code == 200
+        assert "Sauvignon Blanc" in names.text
+        assert "Counted bottles" not in names.text
+        sheet = client.get("/inventory/count?location=wine-cellar")
+        assert sheet.status_code == 200
+        assert "Sauvignon Blanc" in sheet.text
+        assert "Save this count" in sheet.text
         purchasing = client.get("/purchasing")
         assert purchasing.status_code == 200
         assert "Purchasing" in purchasing.text
@@ -52,6 +58,7 @@ def test_home_is_one_desk_for_sales_bills_and_house():
         assert "Report " in home.text
         assert "Needs you" in home.text
         assert "Connect Square so sales land here" in home.text
+        assert "Count a shelf so inventory is real" in home.text
         assert 'href="/labor"' in home.text
         assert 'href="/documents"' in home.text
         assert 'href="/intelligence"' in home.text
