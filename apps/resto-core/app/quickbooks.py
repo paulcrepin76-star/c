@@ -54,8 +54,12 @@ DISPLAY_GROUPS = (
 )
 
 
+def oauth_public_url() -> str:
+    return (settings.resto_oauth_url or settings.resto_public_url).rstrip("/")
+
+
 def qb_callback_url() -> str:
-    return settings.resto_public_url.rstrip("/") + "/connect/quickbooks/callback"
+    return oauth_public_url() + "/connect/quickbooks/callback"
 
 
 def qb_app_creds(db: Session) -> tuple[str, str, str]:

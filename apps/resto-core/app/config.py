@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     timezone: str = "America/New_York"
 
     resto_public_url: str = "http://100.116.48.120:8088"
+    resto_oauth_url: str = ""
     mealie_base_url: str = "http://host.docker.internal:9925"
     mealie_api_token: str = ""
     square_access_token: str = ""

@@ -223,6 +223,7 @@ services:
       RESTO_API_KEY: ${RESTO_API_KEY}
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       RESTO_PUBLIC_URL: ${RESTO_URL:-http://100.116.48.120:8088}
+      RESTO_OAUTH_URL: ${RESTO_OAUTH_URL:-http://lerouxfamily.tailbd3356.ts.net:8088}
       MEALIE_BASE_URL: ${MEALIE_BASE_URL:-http://host.docker.internal:9925}
       MEALIE_API_TOKEN: ${MEALIE_API_TOKEN:-}
       SQUARE_ACCESS_TOKEN: ${SQUARE_ACCESS_TOKEN:-}

@@ -117,6 +117,13 @@ def test_square_sales_are_not_added_to_quickbooks_income():
         db.close()
 
 
+def test_qb_callback_uses_hostname_when_oauth_url_is_set(monkeypatch):
+    from app import config, quickbooks
+
+    monkeypatch.setattr(config.settings, "resto_oauth_url", "http://lerouxfamily.example.ts.net:8088")
+    assert quickbooks.qb_callback_url() == "http://lerouxfamily.example.ts.net:8088/connect/quickbooks/callback"
+
+
 def test_connect_page_shows_quickbooks_key_fields():
     with TestClient(app) as client:
         page = client.get("/connect")
