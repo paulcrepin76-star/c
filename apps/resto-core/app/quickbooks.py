@@ -124,7 +124,7 @@ def expense_group(vendor: str = "", title: str = "", invoice_type: str = "") -> 
     for group, needles in EXPENSE_VENDOR_RULES:
         if any(needle in blob for needle in needles):
             return group
-    if "internal" in blob and "menu" in blob:
+    if "internal" in blob and ("menu" in blob or "proof for order" in blob):
         return "marketing"
     if invoice_type == "wine":
         return "cogs_wine"

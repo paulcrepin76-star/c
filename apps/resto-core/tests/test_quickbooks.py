@@ -160,6 +160,7 @@ def test_expense_group_sorts_miscategorized_food_bills():
     assert expense_group("PG Fine Wines", "", "wine") == "cogs_wine"
     assert expense_group("Survey Cafe (Internal)", "sams-club-2026-02-13-800000018839235", "food") == "cogs_food"
     assert expense_group("Survey Cafe (Internal)", "valentine days menu survey cafe", "food") == "marketing"
+    assert expense_group("Survey Cafe (Internal)", "Proof for Order Item #2039451", "food") == "marketing"
     assert expense_group("", "Receipt $324.83 needs review", "food") == "uncategorized"
     assert expense_group("Estiva Collection", "Not an invoice - Samples", "food") == "skip"
     assert expense_group("VistaServ", "VistaServ 2026-08-21", "food") == "uncategorized"
