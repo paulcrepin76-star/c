@@ -7,6 +7,7 @@ from datetime import date
 from sqlalchemy.orm import Session
 
 from app.connections import get_connection
+from app.health import data_health
 from app.quickbooks import finance_board, finance_period
 from app.sales_report import sales_report
 from app.services import catalog_counts
@@ -21,6 +22,7 @@ def manager_home(db: Session, house: dict, report: dict) -> dict:
     ytd_sales = sales_report(db, ytd_start, ytd_end)
     month_board = finance_board(db, month_start, today)
     counts = catalog_counts(db)
+    health = data_health(db, month_start, today, month_board)
     square = get_connection(db, "square")
     paperless = get_connection(db, "paperless")
     quickbooks = get_connection(db, "quickbooks")
@@ -55,6 +57,7 @@ def manager_home(db: Session, house: dict, report: dict) -> dict:
         "ytd": ytd_sales,
         "board": month_board,
         "counts": counts,
+        "health": health,
         "actions": actions,
         "uncategorized": len(month_board["uncategorized"]),
         "sources": {

@@ -18,6 +18,10 @@
   </nav>
 </div>
 
+{% with health=home.health %}
+{% include "_health.html" %}
+{% endwith %}
+
 {% if home.actions %}
 <section class="card">
   <h2>Needs you</h2>
@@ -38,7 +42,7 @@
   <a class="door" href="/invoices"><strong>Invoices</strong><span>Filed bills · scan lives here</span></a>
   <a class="door" href="/house"><strong>Fridges</strong><span>Coolers and alerts</span></a>
   <a class="door" href="/house/cameras"><strong>Cameras</strong><span>Live shots</span></a>
-  <a class="door" href="/inventory"><strong>Inventory</strong><span>Names from orders</span></a>
+  <a class="door" href="/inventory"><strong>Ordered names</strong><span>Not a count yet</span></a>
   <a class="door" href="/drinks/wine"><strong>Wine</strong><span>What sells · cellar names</span></a>
   <a class="door" href="/drinks/coffee"><strong>Coffee</strong><span>Best seller from Square</span></a>
   <a class="door" href="/documents"><strong>Documents</strong><span>Paperless and scans</span></a>
@@ -55,17 +59,22 @@
   <article>
     <span>This month vs last year</span>
     <strong>{{ home.month.sales.now | money }}</strong>
-    <em>last year {{ home.month.sales.then | money }} · {{ home.month.sales.pct | signedpct }}</em>
+    <em>Square {{ home.board.start }} → {{ home.board.end }} · last year {{ home.month.sales.then | money }} · {{ home.month.sales.pct | signedpct }}</em>
   </article>
   <article>
     <span>Vendor spend this month</span>
     <strong>{{ home.board.categorized_spend | money }}</strong>
-    <em>{{ home.board.start }} → {{ home.board.end }}</em>
+    <em>Filed bills {{ home.board.start }} → {{ home.board.end }}</em>
   </article>
   <article>
     <span>Operating profit this month</span>
+    {% if home.health.show_profit %}
     <strong>{{ home.board.operating_profit | money }}</strong>
     <em>Square minus mapped bills. Labor is not in this number.</em>
+    {% else %}
+    <strong>Incomplete</strong>
+    <em>{{ home.health.summary }}</em>
+    {% endif %}
   </article>
   <article>
     <span>Year so far</span>
@@ -149,7 +158,7 @@
   {% else %}
   <p class="muted">No wine labels yet.</p>
   {% endif %}
-  <p><a href="/inventory">Open inventory</a></p>
+  <p><a href="/inventory">Open ordered names</a></p>
 </section>
 <script id="dash-data" type="application/json">{{ charts | tojson }}</script>
 {% endblock %}

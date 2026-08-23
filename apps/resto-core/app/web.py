@@ -19,7 +19,8 @@ from app.market import scan_external_prices
 from app.connections import access_token_for
 from app.db import get_db
 from app.ingest import INVOICE_TOTAL_MAX, PURCHASE_INVOICE_TYPES
-from app.matching import match_sellables
+from app.health import data_health
+from app.matching import link_sellable, match_sellables, suggest_matches
 from app.models import Connector, Invoice, Product, Recipe, SellableItem, StockMove, WineProfile
 from app.drinks import DRINK_ORDER, drink_board, drink_spec, drinks_overview
 from app.home import manager_home
@@ -106,6 +107,7 @@ def finance_page(
     sales = sales_report(db, first, last)
     vendors = vendor_report(db, first, last)
     charts = {**board["charts"], **sales["charts"], **vendors["charts"]}
+    health = data_health(db, first, last, board)
     return render(
         request,
         "finance.html",
@@ -113,6 +115,7 @@ def finance_page(
         sales=sales,
         vendors=vendors,
         charts=charts,
+        health=health,
         period=kind,
         view=chosen,
         queries={
@@ -509,6 +512,7 @@ def costing_page(request: Request, days: int = DEFAULT_DAYS, db: Session = Depen
         days=window,
         counts=counts,
         charts=charts,
+        health=data_health(db, start.date(), end.date()),
         page="costing",
     )
 
@@ -516,19 +520,15 @@ def costing_page(request: Request, days: int = DEFAULT_DAYS, db: Session = Depen
 @router.get("/costing/match")
 def costing_match(request: Request, db: Session = Depends(get_db)):
     ok, err = _pop_flash(request)
-    unmatched = (
-        db.query(SellableItem)
-        .filter(SellableItem.recipe_id.is_(None), SellableItem.product_id.is_(None))
-        .order_by(SellableItem.name)
-        .limit(80)
-        .all()
-    )
+    rows = suggest_matches(db)
     recipes = db.query(Recipe).order_by(Recipe.name).limit(80).all()
+    wines = db.query(Product).filter(Product.category == "wine").order_by(Product.name).limit(80).all()
     return render(
         request,
         "costing_match.html",
-        unmatched=unmatched,
+        rows=rows,
         recipes=recipes,
+        wines=wines,
         counts=catalog_counts(db),
         flash_ok=ok,
         flash_err=err,
@@ -543,6 +543,27 @@ def costing_match_run(request: Request, db: Session = Depends(get_db)):
         request,
         ok=f"Linked {result.get('recipes', 0)} Square items to recipes and {result.get('wines', 0)} to wines.",
     )
+    return RedirectResponse("/costing/match", status_code=303)
+
+
+@router.post("/costing/match/link")
+def costing_match_link(
+    request: Request,
+    item_id: int = Form(...),
+    target: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    kind, _, raw = target.partition(":")
+    try:
+        target_id = int(raw)
+    except ValueError:
+        _flash(request, err="Pick a recipe or a wine.")
+        return RedirectResponse("/costing/match", status_code=303)
+    result = link_sellable(db, item_id, kind, target_id)
+    if result.get("ok"):
+        _flash(request, ok=f"Linked {result['item']} to a {result['kind']}.")
+    else:
+        _flash(request, err=result.get("error") or "Could not link that item.")
     return RedirectResponse("/costing/match", status_code=303)
 
 

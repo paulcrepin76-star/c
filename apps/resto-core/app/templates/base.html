@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-title" content="Survey Cafe">
   <meta name="theme-color" content="#0f1116">
   <title>{% block title %}Survey Cafe{% endblock %}</title>
-  <link rel="stylesheet" href="/static/style.css?v=16">
+  <link rel="stylesheet" href="/static/style.css?v=17">
 </head>
 <body class="app">
   <aside class="sidebar">
@@ -31,7 +31,7 @@
       <p class="nav-label">House</p>
       <a href="/house" class="{% if page == 'house' %}on{% endif %}">Fridges</a>
       <a href="/house/cameras" class="{% if page == 'cameras' %}on{% endif %}">Cameras</a>
-      <a href="/inventory" class="{% if page == 'inventory' %}on{% endif %}">Inventory</a>
+      <a href="/inventory" class="{% if page == 'inventory' %}on{% endif %}">Ordered names</a>
       <p class="nav-label">Drinks</p>
       <a href="/drinks/wine" class="{% if page in ('wine', 'wines') %}on{% endif %}">Wine</a>
       <a href="/drinks/beer" class="{% if page == 'beer' %}on{% endif %}">Beer</a>
@@ -46,7 +46,7 @@
   <div class="shell">
     <header class="topbar">
       <form class="top-search" action="/inventory" method="get">
-        <input type="search" name="q" placeholder="Search inventory" value="{{ request.query_params.get('q', '') }}">
+        <input type="search" name="q" placeholder="Search ordered names" value="{{ request.query_params.get('q', '') }}">
       </form>
       <div class="top-tools">
         <a class="top-link" href="/house">Fridges</a>

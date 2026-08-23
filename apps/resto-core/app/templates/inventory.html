@@ -1,9 +1,9 @@
 {% extends "base.html" %}
-{% block title %}Inventory{% endblock %}
+{% block title %}Ordered names{% endblock %}
 {% block content %}
-<p class="eyebrow">Labels from orders</p>
-<h1>Inventory</h1>
-<p class="lede">What you ordered, by name. Wine sales live under Drinks. This list stays names only — no counts.</p>
+<p class="eyebrow">Labels from orders · not a count</p>
+<h1>Ordered names</h1>
+<p class="lede">Wine and goods from purchase tickets. This is not inventory until someone counts a shelf. Quantities stay off.</p>
 {% if q %}
 <p class="muted">Showing names that match “{{ q }}”.</p>
 {% endif %}

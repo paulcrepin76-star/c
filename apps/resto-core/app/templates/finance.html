@@ -34,6 +34,7 @@
 </nav>
 
 <p class="muted">{{ board.start }} → {{ board.end }}{% if board.company %} · {{ board.company }}{% endif %}</p>
+{% include "_health.html" %}
 
 {% if board.sandbox %}
 <p class="flash">QuickBooks is still a sample company. Labor and rent stay empty until live books are connected. Vendor dollars come from recategorized invoices. <a href="/connect">Open Connections</a>.</p>
@@ -57,8 +58,13 @@
   </article>
   <article class="stat-card">
     <span>Operating profit</span>
+    {% if health.show_profit %}
     <strong>{{ board.operating_profit | money }}</strong>
-    <em>{{ board.profit_pct | pct }} of sales</em>
+    <em>{{ board.profit_pct | pct }} of sales · labor not included</em>
+    {% else %}
+    <strong>Incomplete</strong>
+    <em>{{ health.summary }}</em>
+    {% endif %}
   </article>
   <article class="stat-card">
     <span>Food + wine COGS</span>

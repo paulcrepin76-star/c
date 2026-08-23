@@ -2,7 +2,7 @@ from decimal import Decimal
 
 from app.db import SessionLocal
 from app.services import on_hand_base, wine_rows
-from app.wines import extract_wine_names, import_ordered_wines
+from app.wines import extract_wine_names, import_ordered_wines, infer_color, repair_wine_colors
 
 
 PG_OCR = """
@@ -23,6 +23,29 @@ JONFR-RO-StC Chateau St Croix Cotes de Provence Prestige Rose 2023 12x750
 Classic Lemon Lime French Lemonade BLUE 24x330
 Sauvignon Blanc 2024 x12
 """
+
+
+def test_infer_color_keeps_cabernet_red():
+    assert infer_color("Cabernet Sauvignon Wine Spots") == "red"
+    assert infer_color("Sauvignon Blanc") == "white"
+    assert infer_color("Pinot Noir") == "red"
+    assert infer_color("Pinot Grigio Villa Loren") == "white"
+    assert infer_color("Chateau St Croix Cotes de Provence Prestige Rose") == "rose"
+
+
+def test_repair_wine_colors_fixes_cabernet_stored_as_white():
+    db = SessionLocal()
+    try:
+        result = import_ordered_wines(db, documents=[{"text": PG_OCR, "supplier": "PG Fine Wines"}], fetch_paperless=False)
+        assert result["created"] >= 1
+        cab = next(row for row in wine_rows(db) if "Cabernet" in row["product"].name)
+        cab["profile"].color = "white"
+        db.commit()
+        assert repair_wine_colors(db) >= 1
+        db.refresh(cab["profile"])
+        assert cab["profile"].color == "red"
+    finally:
+        db.close()
 
 
 def test_messy_ocr_collapses_to_real_label():

@@ -1,0 +1,11 @@
+<section class="health health-{{ health.confidence }}">
+  <p><strong>Report {{ health.confidence }}</strong> — {{ health.summary }}</p>
+  <ul class="health-meta">
+    <li>Square {% if health.square_status == 'connected' %}connected{% else %}{{ health.square_status|replace('_', ' ') }}{% endif %}{% if health.square_last %} · last ticket {{ health.square_last }}{% endif %}</li>
+    <li>Recipes {{ health.match_item_pct | pct }} matched · {{ health.unmatched }} leftover{% if health.unmapped_pct %} · {{ health.unmapped_pct | pct }} of sales unmapped{% endif %}</li>
+    <li>Invoices {% if health.paperless_status == 'connected' %}connected{% else %}{{ health.paperless_status|replace('_', ' ') }}{% endif %}{% if health.invoice_last %} · last bill {{ health.invoice_last }}{% endif %}</li>
+    <li>Inventory {% if health.inventory_last %}last counted {{ health.inventory_last }}{% else %}never counted · names only{% endif %}</li>
+    <li>Labor none · no punch clock</li>
+    <li>QuickBooks {{ health.accounting }}</li>
+  </ul>
+</section>

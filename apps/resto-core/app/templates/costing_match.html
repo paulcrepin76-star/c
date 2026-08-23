@@ -1,9 +1,9 @@
 {% extends "base.html" %}
 {% block title %}Match Square to recipes{% endblock %}
 {% block content %}
-<p class="eyebrow"><a href="/costing">Costing</a></p>
-<h1>Match Square items to Mealie recipes</h1>
-<p class="lede">The cellar guesses from the name. Exact and close names link automatically. Leftovers stay here so you can see what still needs a recipe.</p>
+<p class="eyebrow"><a href="/costing">Recipes</a></p>
+<h1>Match Square items to recipes</h1>
+<p class="lede">Link each leftover Square item to a Mealie recipe or a wine. The cellar suggests names. Auto-match only links clear hits. Food cost stays incomplete until this list shrinks.</p>
 {% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
 {% if flash_err %}<div class="flash err">{{ flash_err }}</div>{% endif %}
 <p>{{ counts.linked }} already linked · {{ counts.unmatched }} unmatched · {{ counts.recipes }} Mealie recipes</p>
@@ -11,29 +11,51 @@
   <button class="btn" type="submit">Auto-match now</button>
 </form>
 
-<div class="grid-2">
-  <div class="card">
-    <h2>Unmatched Square items</h2>
-    {% if unmatched %}
-    <ul class="plain">
-      {% for item in unmatched %}
-      <li>
-        {{ item.name }}
-        <span>{{ item.costing_group }} · {{ item.selling_price | money }}</span>
-      </li>
-      {% endfor %}
-    </ul>
-    {% else %}
-    <p class="muted">Every Square item has a recipe or a wine attached.</p>
-    {% endif %}
-  </div>
-  <div class="card">
-    <h2>Mealie recipes</h2>
-    <ul class="plain">
-      {% for recipe in recipes %}
-      <li>{{ recipe.name }}</li>
-      {% endfor %}
-    </ul>
-  </div>
-</div>
+<section class="card">
+  <h2>Needs a match</h2>
+  {% if rows %}
+  <table class="wide review-table">
+    <thead><tr><th>Square item</th><th>Suggested</th><th></th></tr></thead>
+    <tbody>
+    {% for row in rows %}
+      <tr>
+        <td>
+          {{ row.item.name }}
+          <small>{{ row.item.costing_group }} · {{ row.item.selling_price | money }}</small>
+        </td>
+        <td>
+          <form method="post" action="/costing/match/link" class="match-form">
+            <input type="hidden" name="item_id" value="{{ row.item.id }}">
+            <select name="target" required>
+              <option value="">Pick a recipe or wine</option>
+              {% if row.suggestions %}
+              <optgroup label="Suggested">
+                {% for suggestion in row.suggestions %}
+                <option value="{{ suggestion.kind }}:{{ suggestion.id }}">{{ suggestion.label }} · {{ (suggestion.score * 100) | round(0) }}%</option>
+                {% endfor %}
+              </optgroup>
+              {% endif %}
+              <optgroup label="Recipes">
+                {% for recipe in recipes %}
+                <option value="recipe:{{ recipe.id }}">{{ recipe.name }}</option>
+                {% endfor %}
+              </optgroup>
+              <optgroup label="Wines">
+                {% for wine in wines %}
+                <option value="wine:{{ wine.id }}">{{ wine.name }}</option>
+                {% endfor %}
+              </optgroup>
+            </select>
+            <button class="btn secondary" type="submit">Link</button>
+          </form>
+        </td>
+        <td>{% if row.suggestions %}{{ (row.suggestions[0].score * 100) | round(0) }}% best guess{% else %}No close name{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">Every Square item has a recipe or a wine attached.</p>
+  {% endif %}
+</section>
 {% endblock %}

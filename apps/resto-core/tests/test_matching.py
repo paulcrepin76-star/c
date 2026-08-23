@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 from app.db import SessionLocal
 from app.ingest import coerce_money, ingest_paperless_doc, ingest_recipes, ingest_sales, parse_invoice_amount
 from app.main import app
-from app.matching import match_sellables, name_score, normalize_menu_name
+from app.matching import link_sellable, match_sellables, name_score, normalize_menu_name, suggest_matches
 from app.models import Invoice, SellableItem
 
 
@@ -209,4 +209,15 @@ def test_bilingual_mealie_names_match_square_english():
         wine_item = db.query(SellableItem).filter(SellableItem.square_item_id == "sq-sb").one()
         assert wine_item.product_id is not None
         assert wine_item.serving_unit == "ml"
+        leftover = SellableItem(name="House Burger lunch", costing_group="food", selling_price=Decimal("18"))
+        db.add(leftover)
+        db.commit()
+        rows = suggest_matches(db)
+        burger_row = next(row for row in rows if row["item"].name == "House Burger lunch")
+        assert burger_row["suggestions"]
+        assert burger_row["suggestions"][0]["kind"] == "recipe"
+        linked = link_sellable(db, leftover.id, "recipe", burger.recipe_id)
+        assert linked["ok"] is True
+        db.refresh(leftover)
+        assert leftover.recipe_id == burger.recipe_id
         db.close()

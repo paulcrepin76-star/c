@@ -14,18 +14,29 @@
     <a href="/costing?days=365" class="{% if days == 365 %}on{% endif %}">Year</a>
   </nav>
 </div>
+{% include "_health.html" %}
 <section class="kpis">
   {% for key in ['food','wine','beverage','beer'] %}
   <article>
     <span>{{ key }} cost</span>
+    {% if health.show_food_cost %}
     <strong>{{ costing.groups[key].cost_pct | pct }}</strong>
     <em>{{ costing.groups[key].sales | money }} sales · {{ costing.groups[key].margin | money }} margin</em>
+    {% else %}
+    <strong>Incomplete</strong>
+    <em>{{ health.unmapped_pct | pct }} of sales unmapped · {{ costing.groups[key].sales | money }} sales</em>
+    {% endif %}
   </article>
   {% endfor %}
   <article>
     <span>Theoretical COGS</span>
+    {% if health.show_food_cost %}
     <strong>{{ charts.theoretical_pct | pct }}</strong>
     <em>{{ charts.theoretical_cost | money }} cost · {{ charts.margin | money }} margin</em>
+    {% else %}
+    <strong>Incomplete</strong>
+    <em>Incomplete — {{ health.unmapped_pct | pct }} of sales unmapped</em>
+    {% endif %}
   </article>
 </section>
 <section class="charts">

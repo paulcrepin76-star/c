@@ -56,15 +56,20 @@ def name_score(left: str, right: str) -> float:
     return len(overlap) / len(ta | tb)
 
 
-def _best(name: str, candidates: list, attr: str, threshold: float):
+def rank_candidates(name: str, candidates: list, attr: str, floor: float = 0.45, limit: int = 3) -> list[tuple[float, object]]:
     scored = []
     for item in candidates:
         score = name_score(name, getattr(item, attr))
-        if score >= threshold:
+        if score >= floor:
             scored.append((score, item))
+    scored.sort(key=lambda row: row[0], reverse=True)
+    return scored[:limit]
+
+
+def _best(name: str, candidates: list, attr: str, threshold: float):
+    scored = rank_candidates(name, candidates, attr, floor=threshold, limit=2)
     if not scored:
         return None
-    scored.sort(key=lambda row: row[0], reverse=True)
     if len(scored) > 1 and scored[0][0] == scored[1][0] and scored[0][0] < 0.95:
         return None
     return scored[0][1]
@@ -113,3 +118,54 @@ def match_sellables(db: Session) -> dict:
                 linked_recipes += 1
     db.commit()
     return {"recipes": linked_recipes, "wines": linked_wines}
+
+
+def suggest_matches(db: Session, limit: int = 80) -> list[dict]:
+    recipes = db.query(Recipe).order_by(Recipe.name).all()
+    wines = (
+        db.query(Product)
+        .options(joinedload(Product.wine))
+        .filter(Product.category == "wine")
+        .order_by(Product.name)
+        .all()
+    )
+    items = (
+        db.query(SellableItem)
+        .filter(SellableItem.recipe_id.is_(None), SellableItem.product_id.is_(None))
+        .order_by(SellableItem.name)
+        .limit(limit)
+        .all()
+    )
+    rows = []
+    for item in items:
+        suggestions = []
+        for score, wine in rank_candidates(item.name, wines, "name"):
+            suggestions.append({"kind": "wine", "id": wine.id, "name": wine.name, "score": score, "label": f"Wine · {wine.name}"})
+        for score, recipe in rank_candidates(item.name, recipes, "name"):
+            suggestions.append({"kind": "recipe", "id": recipe.id, "name": recipe.name, "score": score, "label": f"Recipe · {recipe.name}"})
+        suggestions.sort(key=lambda row: row["score"], reverse=True)
+        rows.append({"item": item, "suggestions": suggestions[:3]})
+    return rows
+
+
+def link_sellable(db: Session, item_id: int, kind: str, target_id: int) -> dict:
+    item = db.get(SellableItem, item_id)
+    if item is None:
+        return {"ok": False, "error": "Unknown Square item"}
+    if kind == "wine":
+        product = db.get(Product, target_id)
+        if product is None or product.category != "wine":
+            return {"ok": False, "error": "Unknown wine"}
+        item.product_id = product.id
+        item.recipe_id = None
+        _apply_wine_pour(item, product)
+    elif kind == "recipe":
+        recipe = db.get(Recipe, target_id)
+        if recipe is None:
+            return {"ok": False, "error": "Unknown recipe"}
+        item.recipe_id = recipe.id
+        item.product_id = None
+    else:
+        return {"ok": False, "error": "Pick a recipe or a wine"}
+    db.commit()
+    return {"ok": True, "item": item.name, "kind": kind}

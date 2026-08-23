@@ -41,8 +41,16 @@ HINT = re.compile(
     r")\b",
     re.I,
 )
+RED = re.compile(
+    r"\b("
+    r"cabernet|merlot|malbec|syrah|shiraz|pinot noir|noir|bordeaux|cahors|"
+    r"gigondas|brouilly|margaux|zinfandel|tempranillo|sangiovese|petite sirah|"
+    r"cotes du rhone|côtes du rhône|st emilion|saint-emilion"
+    r")\b",
+    re.I,
+)
 WHITE = re.compile(
-    r"\b(blanc|white|chardonnay|grigio|sancerre|sparkling|brut|prosecco|sauvignon)\b",
+    r"\b(blanc|white|chardonnay|grigio|sancerre|sparkling|brut|prosecco|sauvignon blanc)\b",
     re.I,
 )
 ROSE = re.compile(r"\bros(?:e|é)\b", re.I)
@@ -140,11 +148,34 @@ def clean_wine_name(raw: str) -> str:
 
 
 def infer_color(name: str) -> str:
-    if ROSE.search(name):
+    blob = str(name or "")
+    if ROSE.search(blob):
         return "rose"
-    if WHITE.search(name):
+    if RED.search(blob):
+        return "red"
+    if WHITE.search(blob):
         return "white"
     return "red"
+
+
+def repair_wine_colors(db: Session) -> int:
+    """Fix Cabernet Sauvignon and other reds that were stored as white."""
+    from sqlalchemy.orm import joinedload
+
+    fixed = 0
+    rows = db.query(Product).options(joinedload(Product.wine)).filter(Product.category == "wine").all()
+    for product in rows:
+        profile = product.wine
+        if profile is None:
+            continue
+        blob = " ".join(part for part in (product.name, profile.grape, profile.producer) if part)
+        guessed = infer_color(blob)
+        if guessed == "red" and profile.color == "white":
+            profile.color = "red"
+            fixed += 1
+    if fixed:
+        db.commit()
+    return fixed
 
 
 def infer_vintage(name: str) -> str:
@@ -363,4 +394,5 @@ def import_ordered_wines(db: Session, documents: list[dict] | None = None, fetch
             if product is not None and before is None:
                 created += 1
     db.commit()
-    return {"created": created, "seen": seen, "removed": removed, "labels": db.query(WineProfile).count()}
+    repaired = repair_wine_colors(db)
+    return {"created": created, "seen": seen, "removed": removed, "repaired": repaired, "labels": db.query(WineProfile).count()}
