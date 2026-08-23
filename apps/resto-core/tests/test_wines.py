@@ -25,6 +25,12 @@ Sauvignon Blanc 2024 x12
 """
 
 
+def test_messy_ocr_collapses_to_real_label():
+    names = extract_wine_names("6 BIL Veuve Parisot Sparkling B Rut 12/750 JONER RON C Chateau St Croix Cotes de Provence Prestige Rose 2023 12x750")
+    assert "Veuve Parisot Sparkling Brut" in names
+    assert any("St Croix" in name and "Provence" in name for name in names)
+
+
 def test_extract_wine_names_skips_address_junk():
     names = extract_wine_names("PG Fine Wines invoice Survey Cafe LLC 10530 Wilson Street Bonita Springs")
     assert names == []

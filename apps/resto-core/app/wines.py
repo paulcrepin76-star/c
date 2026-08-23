@@ -46,6 +46,30 @@ WHITE = re.compile(
     re.I,
 )
 ROSE = re.compile(r"\bros(?:e|é)\b", re.I)
+MESSY = re.compile(r"\b(bil|joner|parivot|proatig|93pts|pts|if sg|0\.5)\b", re.I)
+CANONICAL = (
+    ("veuveparisot", "Veuve Parisot Sparkling Brut"),
+    ("parisot", "Veuve Parisot Sparkling Brut"),
+    ("villaloren", "Pinot Grigio Delle Venezie Villa Loren"),
+    ("annamia", "Pinot Grigio ANNAMIA"),
+    ("paradiso", "Pinot Grigio Paradiso"),
+    ("paradogso", "Pinot Grigio Paradiso"),
+    ("terreblanche", "Chateau Terre Blanche"),
+    ("chassagne", "Chassagne-Montrachet Red Les Voillenots Dessous"),
+    ("petitmangot", "St Emilion Grand Cru Chateau Petit Mangot"),
+    ("anthelme", "Cotes du Rhone Chevalier D'Anthelme"),
+    ("pougelon", "Brouilly AOP Chateau de Pougelon"),
+    ("pelvillain", "Malbec Chateau du Port Tradition"),
+    ("chateauduport", "Malbec Chateau du Port Tradition"),
+    ("winespots", "Cabernet Sauvignon Wine Spots"),
+    ("stcroix", "Chateau St Croix Cotes de Provence Prestige Rose"),
+    ("cotendeprovence", "Chateau St Croix Cotes de Provence Prestige Rose"),
+    ("cotesdeprovence", "Chateau St Croix Cotes de Provence Prestige Rose"),
+    ("lavoie", "Cotes Blaye Chateau la Voie"),
+    ("gigondas", "Gigondas Les Pierres de Vatlat"),
+    ("cussean", "Margaux Chateau Cussean"),
+    ("sancerre", "Sancerre Sergent du Roy"),
+)
 
 
 def _fold(value: str) -> str:
@@ -142,22 +166,33 @@ def extract_wine_names(text: str) -> list[str]:
             continue
         if not HINT.search(chunk):
             continue
-        name = clean_wine_name(chunk).lstrip("+ ").strip()
-        words = name.split()
-        if len(words) > 10:
-            name = " ".join(words[:10])
-        if not _good_label(name):
+        name = canonicalize_wine_name(clean_wine_name(chunk).lstrip("+ ").strip())
+        if not name:
             continue
         key = _fold(re.sub(r"20\d{2}", "", name))
-        if len(name) < 8 or len(key) < 8:
-            continue
-        if any(key in other or other in key for other in seen if min(len(key), len(other)) >= 12):
-            continue
         if key in seen:
             continue
         seen.add(key)
         names.append(name)
     return names
+
+
+def canonicalize_wine_name(name: str) -> str | None:
+    key = _fold(name)
+    if "longvalley" in key:
+        if "cabernet" in key or "auvignon" in key:
+            return "Long Valley Ranch Cabernet Sauvignon"
+        if "chardonn" in key:
+            return "Long Valley Ranch Chardonnay"
+    for needle, label in CANONICAL:
+        if needle in key:
+            return label
+    words = name.split()
+    if len(words) > 10:
+        name = " ".join(words[:10])
+    if not _good_label(name) or MESSY.search(name):
+        return None
+    return name
 
 
 def _good_label(name: str) -> bool:
@@ -266,22 +301,39 @@ def wine_documents(db: Session, fetch_paperless: bool = True) -> list[dict]:
     return rows
 
 
+def _delete_wine(db: Session, product: Product) -> None:
+    if product.wine:
+        db.delete(product.wine)
+    db.delete(product)
+
+
 def scrub_junk_wine_labels(db: Session) -> int:
-    """Drop OCR junk that was stored as an ordered wine with no stock."""
+    """Drop OCR junk and collapse duplicate ordered wines. Never touches quantities."""
     removed = 0
+    kept: dict[str, Product] = {}
     for product in db.query(Product).filter(Product.category == "wine").all():
         if product.sku.startswith(("SB-", "PN-", "CHAMP-", "HOUSE-")):
             continue
         if not str(product.notes or "").startswith("Ordered"):
             continue
-        if _good_label(product.name):
-            continue
         if on_hand(db, product.id) > 0:
             continue
+        label = canonicalize_wine_name(product.name)
+        if not label:
+            _delete_wine(db, product)
+            removed += 1
+            continue
+        key = _fold(re.sub(r"20\d{2}", "", label))
+        other = kept.get(key) or _existing_wine(db, label)
+        if other and other.id != product.id:
+            _delete_wine(db, product)
+            removed += 1
+            continue
+        product.name = label
         if product.wine:
-            db.delete(product.wine)
-        db.delete(product)
-        removed += 1
+            product.wine.color = infer_color(label)
+            product.wine.vintage = infer_vintage(label) or product.wine.vintage
+        kept[key] = product
     if removed:
         db.commit()
     return removed
