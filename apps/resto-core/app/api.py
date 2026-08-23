@@ -76,7 +76,7 @@ def house_json(db: Session = Depends(get_db)):
 
 
 @router.get("/finance", dependencies=[Depends(require_key)])
-def finance_json(period: str = "month", db: Session = Depends(get_db)):
+def finance_json(period: str = "ytd", db: Session = Depends(get_db)):
     kind, start, end = finance_period(period)
     board = finance_board(db, start, end)
     return {
@@ -86,10 +86,15 @@ def finance_json(period: str = "month", db: Session = Depends(get_db)):
         "net_sales": float(board["net_sales"]),
         "qb_income": float(board["qb_income"]),
         "cogs": float(board["cogs"]),
+        "cogs_food": float(board["cogs_food"]),
+        "cogs_wine": float(board["cogs_wine"]),
         "labor": float(board["labor"]),
         "operating_profit": float(board["operating_profit"]),
         "cogs_source": board["cogs_source"],
+        "expense_source": board["expense_source"],
+        "uncategorized_total": float(board["uncategorized_total"]),
         "connected": board["connected"],
+        "sandbox": board["sandbox"],
     }
 
 

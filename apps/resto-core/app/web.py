@@ -95,7 +95,7 @@ def dashboard(request: Request, days: int = DEFAULT_DAYS, db: Session = Depends(
 
 
 @router.get("/finance")
-def finance_page(request: Request, period: str = "month", db: Session = Depends(get_db)):
+def finance_page(request: Request, period: str = "ytd", db: Session = Depends(get_db)):
     kind, start, end = finance_period(period)
     board = finance_board(db, start, end)
     return render(

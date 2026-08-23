@@ -5,20 +5,22 @@
   <div>
     <p class="eyebrow">Financial overview</p>
     <h1>P&amp;L</h1>
-    <p class="lede">Square is sales. QuickBooks is rent, labor, insurance, and the rest. We do not pay bills here and we do not count Square deposits twice.</p>
+    <p class="lede">Square is sales. Expenses are the bills we already have, sorted by vendor — not every Paperless “food” tag. We do not pay bills here and we do not count Square deposits twice.</p>
   </div>
   <nav class="period" aria-label="Date range">
+    <a href="/finance?period=ytd" class="{% if period == 'ytd' %}on{% endif %}">Year</a>
     <a href="/finance?period=month" class="{% if period == 'month' %}on{% endif %}">This month</a>
     <a href="/finance?period=last" class="{% if period == 'last' %}on{% endif %}">Last month</a>
     <a href="/finance?period=90" class="{% if period == '90' %}on{% endif %}">90 days</a>
-    <a href="/finance?period=ytd" class="{% if period == 'ytd' %}on{% endif %}">Year</a>
   </nav>
 </div>
 
 <p class="muted">{{ board.start }} → {{ board.end }}{% if board.company %} · {{ board.company }}{% endif %}</p>
 
-{% if not board.connected %}
-<p class="flash">Connect QuickBooks read-only to fill labor, rent, and operating expenses. <a href="/connect">Open Connections</a>.</p>
+{% if board.sandbox %}
+<p class="flash">QuickBooks is still a sample company. This year uses Square sales and recategorized invoices. Labor and rent stay empty until live books are connected. <a href="/connect">Open Connections</a>.</p>
+{% elif not board.connected %}
+<p class="flash">Connect live QuickBooks read-only to fill labor, rent, and payroll. <a href="/connect">Open Connections</a>.</p>
 {% elif board.last_error and board.fetched == 'error' %}
 <p class="flash err">QuickBooks needs a refresh. <a href="/connect">Connect again</a>.</p>
 {% endif %}
@@ -63,7 +65,7 @@
         <td>{{ board.prime_pct | pct }}</td>
       </tr>
       {% for row in board.detail %}
-        {% if row.key not in ('cogs_food', 'cogs_wine', 'labor') %}
+        {% if row.key not in ('cogs_food', 'cogs_wine', 'labor') and row.amount %}
         <tr>
           <th>{{ row.label }}</th>
           <td>{{ row.amount | money }}</td>
@@ -78,11 +80,41 @@
       </tr>
     </table>
     <p class="muted">Net sales come from Square. COGS
-      {% if board.cogs_source == 'quickbooks' %}comes from QuickBooks{% else %}uses Paperless food and wine bills until QuickBooks has a COGS account{% endif %}.
-      Purchases filed in Paperless this window: {{ board.purchases | money }}.</p>
+      {% if board.cogs_source == 'quickbooks' %}comes from QuickBooks{% else %}is only food and wine vendors — Parts Town, Tuff Shed, insurance, linen, and the rest are moved out{% endif %}.
+      Paperless still has {{ board.purchases | money }} tagged food or wine in this window; after sorting vendors, COGS is {{ board.paperless_cogs | money }}.</p>
     {% if board.qb_income %}
     <p class="muted">QuickBooks income for the same dates is {{ board.qb_income | money }}. That is a reconciling number only — it is not added to sales.</p>
     {% endif %}
   </div>
 </section>
+
+{% if board.uncategorized %}
+<section class="review-card card">
+  <h2>Needs a category</h2>
+  <p class="muted">{{ board.uncategorized | length }} bill{{ 's' if board.uncategorized | length != 1 else '' }} · {{ board.uncategorized_total | money }}. These are not in COGS or operating profit. Internal menu proofs are already in marketing; leftover scans and card approvals stay here.</p>
+  <table class="wide review-table">
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Vendor / title</th>
+        <th>Filed as</th>
+        <th>Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for line in board.uncategorized %}
+      <tr>
+        <td>{{ line.issued_on or "—" }}</td>
+        <td>
+          {{ line.name }}
+          {% if line.title and line.title != line.name %}<small>{{ line.title }}</small>{% endif %}
+        </td>
+        <td><span class="pill">{{ line.invoice_type }}</span></td>
+        <td>{{ line.amount | money }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
 {% endblock %}

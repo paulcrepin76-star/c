@@ -5,9 +5,11 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
+from app.connections import mark_connected
 from app.db import SessionLocal
 from app.main import app
-from app.quickbooks import finance_board, flatten_pnl, map_account
+from app.models import Invoice, Supplier
+from app.quickbooks import expense_group, finance_board, finance_period, flatten_pnl, map_account
 from app.services import period_costing
 
 
@@ -144,6 +146,76 @@ def test_finance_page_has_no_ap_workflow():
         assert "unpaid bills" not in text.lower()
         assert "due date" not in text.lower()
         assert "Connect QuickBooks" in text or "Open Connections" in text
+        assert f"{date.today().year}-01-01" in text
+        assert 'href="/finance?period=ytd" class="on"' in page.text
+
+
+def test_expense_group_sorts_miscategorized_food_bills():
+    assert expense_group("FPL Bonita Springs", "", "utility") == "utilities"
+    assert expense_group("biBERK", "", "food") == "insurance"
+    assert expense_group("Sam's Club", "", "food") == "cogs_food"
+    assert expense_group("Parts Town, LLC", "", "food") == "repairs"
+    assert expense_group("Tuff Shed", "", "food") == "occupancy"
+    assert expense_group("Vestis", "", "food") == "linen"
+    assert expense_group("PG Fine Wines", "", "wine") == "cogs_wine"
+    assert expense_group("Survey Cafe (Internal)", "sams-club-2026-02-13-800000018839235", "food") == "cogs_food"
+    assert expense_group("Survey Cafe (Internal)", "valentine days menu survey cafe", "food") == "marketing"
+    assert expense_group("", "Receipt $324.83 needs review", "food") == "uncategorized"
+    assert expense_group("Estiva Collection", "Not an invoice - Samples", "food") == "skip"
+    assert expense_group("VistaServ", "VistaServ 2026-08-21", "food") == "uncategorized"
+
+
+def _file_bill(db, name: str, total: str, invoice_type: str = "food", title: str = "", day: date | None = None) -> None:
+    supplier = db.query(Supplier).filter(Supplier.name == name).first()
+    if supplier is None:
+        supplier = Supplier(name=name, category=invoice_type, default_invoice_type=invoice_type)
+        db.add(supplier)
+        db.flush()
+    db.add(
+        Invoice(
+            supplier_id=supplier.id,
+            issued_on=day or date(date.today().year, 1, 15),
+            total=Decimal(total),
+            invoice_type=invoice_type,
+            title=title or name,
+        )
+    )
+    db.commit()
+
+
+def test_year_board_uses_recategorized_invoices_not_sandbox_pnl():
+    db = SessionLocal()
+    try:
+        year = date.today().year
+        start, end = date(year, 1, 1), date(year, 1, 31)
+        mark_connected(db, "quickbooks", "sandbox-token", environment="sandbox", company="Sandbox Company US 42d3")
+        _file_bill(db, "Sam's Club", "100.00")
+        _file_bill(db, "Parts Town, LLC", "400.00")
+        _file_bill(db, "biBERK", "50.00")
+        _file_bill(db, "VistaServ", "20.00", title="VistaServ leftover")
+        board = finance_board(db, start, end)
+        assert board["sandbox"] is True
+        assert board["fetched"] == "sandbox-ignored"
+        assert board["cogs_source"] == "paperless"
+        assert board["expense_source"] == "paperless"
+        assert board["cogs"] == Decimal("100.00")
+        assert board["cogs_food"] == Decimal("100.00")
+        assert board["qb_income"] == Decimal("0")
+        assert any(row["key"] == "repairs" and row["amount"] == Decimal("400.00") for row in board["detail"])
+        assert any(row["key"] == "insurance" and row["amount"] == Decimal("50.00") for row in board["detail"])
+        assert board["uncategorized_total"] == Decimal("20.00")
+        assert board["uncategorized"][0]["name"] == "VistaServ"
+        assert "unpaid" not in str(board).lower()
+    finally:
+        db.close()
+
+
+def test_finance_period_defaults_to_year():
+    kind, start, end = finance_period()
+    today = date.today()
+    assert kind == "ytd"
+    assert start == date(today.year, 1, 1)
+    assert end == today
 
 
 def test_quickbooks_oauth_round_trip():

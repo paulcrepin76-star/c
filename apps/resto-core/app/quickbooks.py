@@ -8,7 +8,7 @@ from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 
 import httpx
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.config import settings
 from app.connections import access_token_for, extra_dict, get_connection, mark_connected, mark_error, set_extra
@@ -50,8 +50,31 @@ DISPLAY_GROUPS = (
     ("repairs", "Repairs"),
     ("software", "Software"),
     ("marketing", "Marketing"),
+    ("linen", "Linen / uniforms"),
     ("other", "Other operating"),
 )
+
+# Vendor / title needles for filed invoices. First match wins.
+# Do not map leftover internals here — those stay on the review list.
+EXPENSE_VENDOR_RULES = (
+    ("cogs_wine", ("pg fine", "wine distributor", "wine house")),
+    ("cogs_food", (
+        "sam's", "sams club", "sams-club", "samsclub",
+        "chef's warehouse", "chefs warehouse",
+        "restaurant depot", "gordon", "gfs",
+        "st. armands", "st armands", "laubry",
+        "stan's coffee", "stans coffee", "bee farm",
+        "publix", "aldi", "costco", "metro france",
+    )),
+    ("insurance", ("biberk", "bi berk", "insurance")),
+    ("utilities", ("fpl", "florida power", "comcast", "bonita springs water", "pest", "sanitation", "grease trap", "waste")),
+    ("repairs", ("parts town", "refrigeration", "air &", "air and", "easy ice", "sea air", "home depot")),
+    ("occupancy", ("tuff shed", "rent")),
+    ("marketing", ("presstige", "musthavemenus", "must have menus", "printing")),
+    ("linen", ("vestis", "aramark", "uniform")),
+    ("other", ("notaire", "maitre", "maître", "uline", "webstaurant", "legal")),
+)
+OPERATING_KEYS = ("occupancy", "utilities", "fees", "insurance", "repairs", "software", "marketing", "linen", "other")
 
 
 def oauth_public_url() -> str:
@@ -87,6 +110,29 @@ def _headers(token: str) -> dict:
         "Accept": "application/json",
         "User-Agent": USER_AGENT,
     }
+
+
+def expense_group(vendor: str = "", title: str = "", invoice_type: str = "") -> str:
+    """Map a filed bill to a cafe group without changing the invoice type."""
+    blob = f"{vendor} {title}".lower()
+    if "not an invoice" in blob:
+        return "skip"
+    if "needs review" in blob or "card approval" in blob:
+        return "uncategorized"
+    if "internal revenue" in blob:
+        return "uncategorized"
+    for group, needles in EXPENSE_VENDOR_RULES:
+        if any(needle in blob for needle in needles):
+            return group
+    if "internal" in blob and "menu" in blob:
+        return "marketing"
+    if invoice_type == "wine":
+        return "cogs_wine"
+    if invoice_type == "utility":
+        return "utilities"
+    if invoice_type == "ignore":
+        return "skip"
+    return "uncategorized"
 
 
 def map_account(name: str) -> str:
@@ -142,11 +188,17 @@ def rollup(lines: list[dict]) -> dict[str, Decimal]:
     buckets = {key: money(0) for key, _label in DISPLAY_GROUPS}
     buckets["income"] = money(0)
     buckets["cogs"] = money(0)
+    buckets["uncategorized"] = money(0)
     for line in lines:
         group = line.get("group") or "other"
         amount = money(line.get("amount") or 0)
+        if group in {"skip", ""}:
+            continue
         if group == "income":
             buckets["income"] += amount
+            continue
+        if group == "uncategorized":
+            buckets["uncategorized"] += amount
             continue
         if group not in buckets:
             group = "other"
@@ -157,7 +209,7 @@ def rollup(lines: list[dict]) -> dict[str, Decimal]:
 
 def finance_period(kind: str | None = None) -> tuple[str, date, date]:
     today = datetime.now(UTC).replace(tzinfo=None).date()
-    key = kind if kind in {"month", "last", "90", "ytd"} else "month"
+    key = kind if kind in {"month", "last", "90", "ytd"} else "ytd"
     if key == "last":
         first_this = today.replace(day=1)
         last = first_this - timedelta(days=1)
@@ -167,6 +219,38 @@ def finance_period(kind: str | None = None) -> tuple[str, date, date]:
     if key == "ytd":
         return key, date(today.year, 1, 1), today
     return key, today.replace(day=1), today
+
+
+def paperless_expense_lines(db: Session, start: date, end: date) -> list[dict]:
+    rows = (
+        db.query(Invoice)
+        .options(joinedload(Invoice.supplier))
+        .filter(
+            Invoice.issued_on.is_not(None),
+            Invoice.issued_on >= start,
+            Invoice.issued_on <= end,
+            Invoice.total > 0,
+            Invoice.total <= INVOICE_TOTAL_MAX,
+        )
+        .all()
+    )
+    lines = []
+    for invoice in rows:
+        vendor = invoice.supplier.name if invoice.supplier else (invoice.title or invoice.number or "Unknown")
+        group = expense_group(vendor, invoice.title or "", invoice.invoice_type)
+        if group == "skip":
+            continue
+        lines.append(
+            {
+                "name": vendor,
+                "title": invoice.title or "",
+                "amount": money(invoice.total or 0),
+                "group": group,
+                "invoice_type": invoice.invoice_type,
+                "issued_on": invoice.issued_on,
+            }
+        )
+    return lines
 
 
 def paperless_purchases(db: Session, start: date, end: date) -> Decimal:
@@ -306,40 +390,74 @@ def fetch_profit_and_loss(db: Session, start: date, end: date) -> dict:
 def sync_quickbooks(db: Session) -> dict:
     if not access_token_for(db, "quickbooks"):
         return {"status": "skipped", "reason": "not connected"}
-    _kind, start, end = finance_period("month")
+    extra = extra_dict(get_connection(db, "quickbooks"))
+    if _qb_is_sandbox(extra):
+        return {"status": "skipped", "reason": "sandbox"}
+    _kind, start, end = finance_period("ytd")
     result = fetch_profit_and_loss(db, start, end)
     return {"status": result.get("status"), "lines": len(result.get("lines") or []), "error": result.get("error")}
 
 
+def _qb_is_sandbox(extra: dict) -> bool:
+    company = str(extra.get("company") or extra.get("company_name") or "").lower()
+    env = str(extra.get("environment") or "").lower()
+    return env == "sandbox" or "sandbox" in company
+
+
 def finance_board(db: Session, start: date, end: date, qb_lines: list[dict] | None = None) -> dict:
-    """Square is sales. QuickBooks is expenses. Never add QB income to net sales."""
+    """Square is sales. Recategorized invoices are expenses until live QuickBooks is connected."""
     start_dt = datetime.combine(start, datetime.min.time())
     end_dt = datetime.combine(end, datetime.max.time()).replace(microsecond=0)
     sales = period_costing(db, start_dt, end_dt)["period_sales"]
     purchases = paperless_purchases(db, start, end)
+    paper_lines = paperless_expense_lines(db, start, end)
+    paper = rollup(paper_lines)
+    uncategorized = sorted(
+        [line for line in paper_lines if line["group"] == "uncategorized"],
+        key=lambda line: (line["amount"], str(line.get("name") or "")),
+        reverse=True,
+    )
     row = get_connection(db, "quickbooks")
     extra = extra_dict(row)
+    sandbox = _qb_is_sandbox(extra)
     connected = bool(row.access_token) or bool(access_token_for(db, "quickbooks"))
     lines = list(qb_lines) if qb_lines is not None else []
     fetched = "local"
-    if qb_lines is None and connected:
+    if qb_lines is None and connected and not sandbox:
         result = fetch_profit_and_loss(db, start, end)
         lines = result.get("lines") or []
         fetched = result.get("status") or "ok"
-    buckets = rollup(lines)
-    qb_cogs = buckets["cogs"]
-    if qb_cogs > 0:
-        cogs = qb_cogs
-        cogs_source = "quickbooks"
+    elif sandbox and connected:
+        fetched = "sandbox-ignored"
+    qb = rollup(lines)
+    use_qb = bool(lines) and (
+        qb["cogs"] > 0 or any(qb[key] > 0 for key in OPERATING_KEYS) or qb["labor"] > 0
+    )
+    if use_qb:
+        buckets = qb
+        cogs = qb["cogs"] if qb["cogs"] > 0 else paper["cogs"]
+        cogs_source = "quickbooks" if qb["cogs"] > 0 else "paperless"
+        expense_source = "quickbooks"
+        labor = qb["labor"]
+        food = qb["cogs_food"] if qb["cogs"] > 0 else paper["cogs_food"]
+        wine = qb["cogs_wine"] if qb["cogs"] > 0 else paper["cogs_wine"]
+        qb_income = qb["income"]
     else:
-        cogs = purchases
+        buckets = paper
+        cogs = paper["cogs"]
         cogs_source = "paperless"
-    labor = buckets["labor"]
+        expense_source = "paperless"
+        labor = paper["labor"]
+        food = paper["cogs_food"]
+        wine = paper["cogs_wine"]
+        qb_income = money(0)
     operating = money(0)
     detail = []
     for key, label in DISPLAY_GROUPS:
-        if key in ("cogs_food", "cogs_wine"):
-            amount = buckets[key]
+        if key == "cogs_food":
+            amount = food
+        elif key == "cogs_wine":
+            amount = wine
         elif key == "labor":
             amount = labor
         else:
@@ -361,23 +479,28 @@ def finance_board(db: Session, start: date, end: date, qb_lines: list[dict] | No
         "end": end,
         "connected": connected,
         "company": extra.get("company") or "",
+        "sandbox": sandbox,
         "fetched": fetched,
         "net_sales": sales,
-        "qb_income": buckets["income"],
+        "qb_income": qb_income,
         "purchases": purchases,
         "cogs": cogs,
-        "cogs_food": buckets["cogs_food"],
-        "cogs_wine": buckets["cogs_wine"],
+        "cogs_food": food,
+        "cogs_wine": wine,
         "cogs_source": cogs_source,
+        "expense_source": expense_source,
+        "paperless_cogs": paper["cogs"],
         "gross_profit": gross,
         "labor": labor,
         "prime": prime,
         "operating": operating,
         "operating_profit": profit,
+        "uncategorized": uncategorized,
+        "uncategorized_total": paper["uncategorized"],
         "sales_pct": pct(sales_num),
         "cogs_pct": pct(cogs),
-        "cogs_food_pct": pct(buckets["cogs_food"]),
-        "cogs_wine_pct": pct(buckets["cogs_wine"]),
+        "cogs_food_pct": pct(food),
+        "cogs_wine_pct": pct(wine),
         "gross_pct": pct(gross),
         "labor_pct": pct(labor),
         "prime_pct": pct(prime),
