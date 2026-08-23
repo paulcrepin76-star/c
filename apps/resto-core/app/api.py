@@ -16,6 +16,7 @@ from app.equivalents import watch_payload, COLLECTOR_PRODUCT_CAP
 from app.intel import overnight_report, save_collector_run, set_browser_status
 from app.market import scan_external_prices
 from app.house import find_fridge, house_board, house_payload, record_reading, to_fahrenheit
+from app.quickbooks import finance_board, finance_period
 from app.services import period_costing, wine_rows
 from app.sync import sync_all, sync_paperless
 
@@ -72,6 +73,24 @@ def api_health():
 @router.get("/house", dependencies=[Depends(require_key)])
 def house_json(db: Session = Depends(get_db)):
     return house_payload(house_board(db))
+
+
+@router.get("/finance", dependencies=[Depends(require_key)])
+def finance_json(period: str = "month", db: Session = Depends(get_db)):
+    kind, start, end = finance_period(period)
+    board = finance_board(db, start, end)
+    return {
+        "period": kind,
+        "start": start.isoformat(),
+        "end": end.isoformat(),
+        "net_sales": float(board["net_sales"]),
+        "qb_income": float(board["qb_income"]),
+        "cogs": float(board["cogs"]),
+        "labor": float(board["labor"]),
+        "operating_profit": float(board["operating_profit"]),
+        "cogs_source": board["cogs_source"],
+        "connected": board["connected"],
+    }
 
 
 @router.post("/house/readings", dependencies=[Depends(require_key)])

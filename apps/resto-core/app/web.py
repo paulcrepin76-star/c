@@ -25,6 +25,7 @@ from app.models import Connector, Invoice, Product, Recipe, SellableItem, StockM
 from app.house import ensure_house, house_board, house_series, record_reading, safe_http_url, to_fahrenheit
 from app.models import Camera, Fridge
 from app.purchasing import CATEGORIES, COMPARE_DAYS, DEFAULT_COMPARE_DAYS, purchasing_board
+from app.quickbooks import finance_board, finance_period
 from app.services import catalog_counts, daily_activity, dashboard_charts, monthly_orders, period_costing, sales_span, wine_rows
 
 router = APIRouter()
@@ -90,6 +91,19 @@ def dashboard(request: Request, days: int = DEFAULT_DAYS, db: Session = Depends(
         charts=charts,
         order_count=order_count,
         page="dashboard",
+    )
+
+
+@router.get("/finance")
+def finance_page(request: Request, period: str = "month", db: Session = Depends(get_db)):
+    kind, start, end = finance_period(period)
+    board = finance_board(db, start, end)
+    return render(
+        request,
+        "finance.html",
+        board=board,
+        period=kind,
+        page="finance",
     )
 
 

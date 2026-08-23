@@ -426,6 +426,9 @@ def sync_all(db: Session) -> dict:
     square = sync_square(db)
     mealie = sync_mealie(db)
     paperless = sync_paperless(db)
+    from app.quickbooks import sync_quickbooks
+
+    quickbooks = sync_quickbooks(db)
     prices = {"status": "ok", "created": backfill_purchase_prices(db)}
     if settings.catalog_scan_enabled:
         try:
@@ -450,6 +453,7 @@ def sync_all(db: Session) -> dict:
         "square": square,
         "mealie": mealie,
         "paperless": paperless,
+        "quickbooks": quickbooks,
         "purchasing": prices,
         "catalogs": catalogs,
         "external": external,

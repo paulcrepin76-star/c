@@ -64,6 +64,9 @@ def test_connect_page_is_the_login_door():
         assert "Connect Square" in text
         assert "Connect Mealie" in text
         assert "Connect Paperless" in text
+        assert "QuickBooks" in text
+        assert "pay bill" not in text.lower()
+        assert "overdue supplier" not in text.lower()
         assert "FPL Bonita Springs" in text
         assert "Chef's Warehouse" in text
         assert "Bonita Springs Water" in text
@@ -141,6 +144,7 @@ def test_sync_all_skips_until_connected():
         assert body["square"]["status"] == "skipped"
         assert body["mealie"]["status"] == "skipped"
         assert body["paperless"]["status"] == "skipped"
+        assert body["quickbooks"]["status"] == "skipped"
 
 
 def test_square_lookback_is_year_to_date_until_sales_are_current():

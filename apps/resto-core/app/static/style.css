@@ -533,6 +533,12 @@ code {
 .stat-card em { color: var(--muted); font-style: normal; font-size: 0.8rem; }
 .stat-card canvas.spark { width: 100%; height: 36px; margin-top: 8px; }
 .wine-names { max-height: 420px; overflow: auto; }
+.pnl-card { max-width: 720px; }
+.pnl-table { width: 100%; }
+.pnl-table th { color: var(--ink); font-weight: 550; font-size: 0.95rem; }
+.pnl-table td { text-align: right; }
+.pnl-table tr.pnl-hero th, .pnl-table tr.pnl-hero td { font-size: 1.15rem; font-weight: 700; padding-top: 16px; }
+.pnl-table tr.pnl-sum th, .pnl-table tr.pnl-sum td { border-top: 1px solid var(--line); font-weight: 700; }
 @media (max-width: 980px) {
   body.app { grid-template-columns: 1fr; }
   .sidebar {

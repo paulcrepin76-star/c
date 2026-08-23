@@ -116,7 +116,11 @@ def disconnect(db: Session, name: str) -> Connection:
     row.last_error = ""
     row.updated_at = datetime.now(UTC).replace(tzinfo=None)
     extra_name = extra_dict(row).get("connector_name")
-    kept = {key: value for key, value in extra_dict(row).items() if key in {"application_id", "application_secret"}}
+    kept = {
+        key: value
+        for key, value in extra_dict(row).items()
+        if key in {"application_id", "application_secret", "environment"}
+    }
     row.extra = json.dumps(kept) if kept else ""
     _sync_connector_status(db, name, "not_connected", row.updated_at, extra_name)
     db.commit()
@@ -131,6 +135,7 @@ def access_token_for(db: Session, name: str) -> str:
         "square": settings.square_access_token,
         "mealie": settings.mealie_api_token,
         "paperless": settings.paperless_api_token,
+        "quickbooks": "",
     }
     return strip_auth_prefix(fallback.get(name, ""))
 

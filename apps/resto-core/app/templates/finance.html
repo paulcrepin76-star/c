@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}P&amp;L · Survey Cafe{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <p class="eyebrow">Financial overview</p>
+    <h1>P&amp;L</h1>
+    <p class="lede">Square is sales. QuickBooks is rent, labor, insurance, and the rest. We do not pay bills here and we do not count Square deposits twice.</p>
+  </div>
+  <nav class="period" aria-label="Date range">
+    <a href="/finance?period=month" class="{% if period == 'month' %}on{% endif %}">This month</a>
+    <a href="/finance?period=last" class="{% if period == 'last' %}on{% endif %}">Last month</a>
+    <a href="/finance?period=90" class="{% if period == '90' %}on{% endif %}">90 days</a>
+    <a href="/finance?period=ytd" class="{% if period == 'ytd' %}on{% endif %}">Year</a>
+  </nav>
+</div>
+
+<p class="muted">{{ board.start }} → {{ board.end }}{% if board.company %} · {{ board.company }}{% endif %}</p>
+
+{% if not board.connected %}
+<p class="flash">Connect QuickBooks read-only to fill labor, rent, and operating expenses. <a href="/connect">Open Connections</a>.</p>
+{% elif board.last_error and board.fetched == 'error' %}
+<p class="flash err">QuickBooks needs a refresh. <a href="/connect">Connect again</a>.</p>
+{% endif %}
+
+<section class="pnl">
+  <div class="card pnl-card">
+    <h2>Survey Cafe</h2>
+    <table class="pnl-table">
+      <tr class="pnl-hero">
+        <th>Net sales</th>
+        <td>{{ board.net_sales | money }}</td>
+        <td></td>
+      </tr>
+      <tr>
+        <th>Food COGS</th>
+        <td>{{ board.cogs_food | money }}</td>
+        <td>{{ board.cogs_food_pct | pct }}</td>
+      </tr>
+      <tr>
+        <th>Beverage COGS</th>
+        <td>{{ board.cogs_wine | money }}</td>
+        <td>{{ board.cogs_wine_pct | pct }}</td>
+      </tr>
+      <tr class="pnl-sum">
+        <th>Total COGS</th>
+        <td>{{ board.cogs | money }}</td>
+        <td>{{ board.cogs_pct | pct }}</td>
+      </tr>
+      <tr class="pnl-hero">
+        <th>Gross profit</th>
+        <td>{{ board.gross_profit | money }}</td>
+        <td>{{ board.gross_pct | pct }}</td>
+      </tr>
+      <tr>
+        <th>Labor</th>
+        <td>{{ board.labor | money }}</td>
+        <td>{{ board.labor_pct | pct }}</td>
+      </tr>
+      <tr class="pnl-sum">
+        <th>Prime cost</th>
+        <td>{{ board.prime | money }}</td>
+        <td>{{ board.prime_pct | pct }}</td>
+      </tr>
+      {% for row in board.detail %}
+        {% if row.key not in ('cogs_food', 'cogs_wine', 'labor') %}
+        <tr>
+          <th>{{ row.label }}</th>
+          <td>{{ row.amount | money }}</td>
+          <td></td>
+        </tr>
+        {% endif %}
+      {% endfor %}
+      <tr class="pnl-hero">
+        <th>Operating profit</th>
+        <td>{{ board.operating_profit | money }}</td>
+        <td>{{ board.profit_pct | pct }}</td>
+      </tr>
+    </table>
+    <p class="muted">Net sales come from Square. COGS
+      {% if board.cogs_source == 'quickbooks' %}comes from QuickBooks{% else %}uses Paperless food and wine bills until QuickBooks has a COGS account{% endif %}.
+      Purchases filed in Paperless this window: {{ board.purchases | money }}.</p>
+    {% if board.qb_income %}
+    <p class="muted">QuickBooks income for the same dates is {{ board.qb_income | money }}. That is a reconciling number only — it is not added to sales.</p>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

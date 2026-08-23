@@ -9,6 +9,7 @@ def test_core_pages_render_demo_wines():
         assert home.status_code == 200
         assert "Wines on list" in home.text
         assert 'href="/connect"' in home.text
+        assert 'href="/finance"' in home.text
         assert 'href="/invoices/scan"' in home.text
         assert 'href="/house"' in home.text
         assert 'id="house-chart"' in home.text
@@ -28,6 +29,9 @@ def test_core_pages_render_demo_wines():
         connect = client.get("/connect")
         assert connect.status_code == 200
         assert "Connect Square" in connect.text
+        finance = client.get("/finance")
+        assert finance.status_code == 200
+        assert "Net sales" in finance.text
         wines = client.get("/wines")
         assert wines.status_code == 200
         assert "Sauvignon Blanc" in wines.text

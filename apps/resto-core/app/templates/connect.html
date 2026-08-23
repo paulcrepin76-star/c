@@ -92,6 +92,46 @@
     {% endif %}
     {% if paperless.last_error %}<p class="flash err">{{ paperless.last_error }}</p>{% endif %}
   </article>
+
+  <article class="card connect-card">
+    <p class="eyebrow">4 · Books</p>
+    <h2>QuickBooks</h2>
+    <p class="status-line">
+      <span class="dot {{ quickbooks.status }}"></span>
+      {% if quickbooks.status == 'connected' %}Connected{% elif quickbooks.status == 'error' %}Needs attention{% else %}Not connected{% endif %}
+    </p>
+    {% if quickbooks.status == 'connected' %}
+      <p class="muted">Read-only. P&amp;L and expenses only{% if qb_company %} · {{ qb_company }}{% endif %}. Square stays the sales number.</p>
+      <p><a class="btn" href="/finance">Open P&amp;L</a></p>
+      <form method="post" action="/connect/quickbooks/disconnect">
+        <button type="submit" class="btn secondary">Disconnect</button>
+      </form>
+    {% else %}
+      <p class="muted">Intuit sign-in for a read-only P&amp;L. You log in at Intuit. The cellar keeps the token. We do not pay vendors from here.</p>
+      {% if qb_app_ready %}
+        <a class="btn big" href="/connect/quickbooks">Sign in with Intuit</a>
+        <p class="muted">Redirect URL: <code>{{ qb_callback }}</code></p>
+      {% else %}
+        <details class="connect-details">
+          <summary>One-time Intuit app</summary>
+          <p class="muted">On <a href="https://developer.intuit.com/app/developer/dashboard" target="_blank" rel="noreferrer">developer.intuit.com</a> create an app, add the redirect URL, then paste Client ID and Secret.</p>
+          <p class="muted">Redirect URL: <code>{{ qb_callback }}</code></p>
+          <form method="post" action="/connect/quickbooks/app" class="stack-form">
+            <label>Client ID <input name="application_id" autocomplete="off"></label>
+            <label>Client secret <input type="password" name="application_secret" autocomplete="off"></label>
+            <label>Keys
+              <select name="environment">
+                <option value="production" {% if qb_environment != 'sandbox' %}selected{% endif %}>Production</option>
+                <option value="sandbox" {% if qb_environment == 'sandbox' %}selected{% endif %}>Sandbox</option>
+              </select>
+            </label>
+            <button type="submit">Save app</button>
+          </form>
+        </details>
+      {% endif %}
+    {% endif %}
+    {% if quickbooks.last_error %}<p class="flash err">{{ quickbooks.last_error }}</p>{% endif %}
+  </article>
 </section>
 
 <h2>Bills and invoices</h2>

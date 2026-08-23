@@ -19,7 +19,7 @@ from app.models import (
 )
 from app.vendors import vendor_names
 
-CONNECTION_NAMES = ("square", "mealie", "paperless")
+CONNECTION_NAMES = ("square", "mealie", "paperless", "quickbooks")
 
 
 def _fold_alias_suppliers(db: Session, vendor: dict, canonical: Supplier) -> None:
@@ -100,6 +100,15 @@ def ensure_connections(db: Session) -> None:
     for name in CONNECTION_NAMES:
         if name not in existing:
             db.add(Connection(name=name, status="not_connected"))
+    if db.query(Connector).filter(Connector.name == "QuickBooks").first() is None:
+        db.add(
+            Connector(
+                name="QuickBooks",
+                kind="api",
+                status="not_connected",
+                notes="Read-only P&L and expenses. Square stays the sales number.",
+            )
+        )
     db.commit()
     ensure_vendors(db)
 

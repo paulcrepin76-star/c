@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import secrets
 from urllib.parse import urlencode
 
@@ -24,6 +25,15 @@ from app.connections import (
 from app.db import get_db
 from app.models import Invoice, Supplier
 from app.paperless_hook import ensure_paperless_sync_workflow
+from app.quickbooks import (
+    ACCOUNTING_SCOPE,
+    AUTH_URL,
+    TOKEN_URL,
+    fetch_company_name,
+    qb_app_creds,
+    qb_callback_url,
+    store_oauth_tokens,
+)
 from app.sync import sync_all
 from app.vendors import VENDORS, vendor_by_slug
 from app.web import render
@@ -31,7 +41,7 @@ from app.web import render
 router = APIRouter()
 TIMEOUT = httpx.Timeout(20.0, connect=8.0)
 SQUARE_SCOPES = "ORDERS_READ ITEMS_READ MERCHANT_PROFILE_READ PAYMENTS_READ"
-SYSTEM_NAMES = {"square", "mealie", "paperless"}
+SYSTEM_NAMES = {"square", "mealie", "paperless", "quickbooks"}
 VENDOR_SLUGS = {vendor["slug"] for vendor in VENDORS}
 
 
@@ -105,8 +115,11 @@ def connect_page(request: Request, db: Session = Depends(get_db)):
     square = get_connection(db, "square")
     mealie = get_connection(db, "mealie")
     paperless = get_connection(db, "paperless")
+    quickbooks = get_connection(db, "quickbooks")
     app_id, app_secret = square_app_creds(db)
+    qb_id, qb_secret, qb_env = qb_app_creds(db)
     extra = extra_dict(square)
+    qb_extra = extra_dict(quickbooks)
     return render(
         request,
         "connect.html",
@@ -116,9 +129,14 @@ def connect_page(request: Request, db: Session = Depends(get_db)):
         square=square,
         mealie=mealie,
         paperless=paperless,
+        quickbooks=quickbooks,
         square_app_ready=bool(app_id and app_secret),
         square_location=extra.get("location_id") or settings.square_location_id,
         square_callback=square_callback_url(),
+        qb_app_ready=bool(qb_id and qb_secret),
+        qb_callback=qb_callback_url(),
+        qb_environment=qb_env,
+        qb_company=qb_extra.get("company") or "",
         mealie_url=settings.mealie_base_url,
         paperless_url=settings.paperless_public_url or settings.paperless_base_url,
         vendors=_vendor_cards(db),
@@ -329,6 +347,93 @@ def connect_paperless(
     return _redirect_connect()
 
 
+@router.post("/connect/quickbooks/app")
+def save_quickbooks_app(
+    request: Request,
+    application_id: str = Form(""),
+    application_secret: str = Form(""),
+    environment: str = Form("production"),
+    db: Session = Depends(get_db),
+):
+    row = get_connection(db, "quickbooks")
+    env = "sandbox" if environment == "sandbox" else "production"
+    set_extra(
+        row,
+        application_id=strip_auth_prefix(application_id),
+        application_secret=application_secret.strip(),
+        environment=env,
+    )
+    db.commit()
+    _flash(request, ok="QuickBooks app saved. Now click Sign in with Intuit.")
+    return _redirect_connect()
+
+
+@router.get("/connect/quickbooks")
+def start_quickbooks_oauth(request: Request, db: Session = Depends(get_db)):
+    app_id, app_secret, _env = qb_app_creds(db)
+    if not app_id or not app_secret:
+        _flash(request, err="Save the Intuit Client ID and Secret first.")
+        return _redirect_connect()
+    state = secrets.token_urlsafe(24)
+    request.session["qb_oauth_state"] = state
+    query = urlencode(
+        {
+            "client_id": app_id,
+            "scope": ACCOUNTING_SCOPE,
+            "redirect_uri": qb_callback_url(),
+            "response_type": "code",
+            "state": state,
+        }
+    )
+    return RedirectResponse(f"{AUTH_URL}?{query}", status_code=302)
+
+
+@router.get("/connect/quickbooks/callback")
+def quickbooks_callback(
+    request: Request,
+    code: str | None = None,
+    state: str | None = None,
+    realmId: str | None = None,
+    error: str | None = None,
+    db: Session = Depends(get_db),
+):
+    if error:
+        _flash(request, err=f"Intuit said: {error}")
+        return _redirect_connect()
+    expected = request.session.pop("qb_oauth_state", "")
+    if not code or not state or state != expected or not realmId:
+        _flash(request, err="QuickBooks login was cancelled or expired. Try Connect again.")
+        return _redirect_connect()
+    app_id, app_secret, environment = qb_app_creds(db)
+    try:
+        with httpx.Client(timeout=TIMEOUT) as client:
+            token_resp = client.post(
+                TOKEN_URL,
+                headers={
+                    "Authorization": "Basic " + base64.b64encode(f"{app_id}:{app_secret}".encode()).decode(),
+                    "Accept": "application/json",
+                    "Content-Type": "application/x-www-form-urlencoded",
+                },
+                data={
+                    "grant_type": "authorization_code",
+                    "code": code,
+                    "redirect_uri": qb_callback_url(),
+                },
+            )
+            token_resp.raise_for_status()
+            payload = token_resp.json()
+            access = payload.get("access_token") or ""
+            if not access:
+                raise RuntimeError("Intuit did not return an access token")
+            company = fetch_company_name(access, realmId, environment)
+        store_oauth_tokens(db, payload, realmId, environment, company)
+        _flash(request, ok="QuickBooks is connected read-only. Open P&L for the financial board.")
+    except Exception as exc:  # noqa: BLE001
+        mark_error(db, "quickbooks", str(exc))
+        _flash(request, err=f"QuickBooks connect failed: {exc}")
+    return _redirect_connect()
+
+
 @router.post("/connect/vendor/{slug}")
 def connect_vendor(
     slug: str,
@@ -420,6 +525,8 @@ def sync_now(request: Request, db: Session = Depends(get_db)):
                 created = payload.get("created", 0)
                 updated = payload.get("updated", 0)
                 parts.append(f"Paperless {created} new, {updated} updated invoices")
+            elif name == "quickbooks":
+                parts.append(f"QuickBooks {payload.get('lines', 0)} P&L lines")
             elif name == "matched":
                 parts.append(
                     f"matched {payload.get('recipes', 0)} recipes and {payload.get('wines', 0)} wines"
