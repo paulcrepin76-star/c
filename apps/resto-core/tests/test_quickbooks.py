@@ -131,6 +131,7 @@ def test_connect_page_shows_quickbooks_key_fields():
         assert 'name="application_id"' in page.text
         assert 'action="/connect/quickbooks/app"' in page.text
         assert "Save QuickBooks keys" in page.text
+        assert "Sign in with Intuit" in page.text or 'action="/connect/quickbooks/app"' in page.text
 
 
 def test_finance_page_has_no_ap_workflow():

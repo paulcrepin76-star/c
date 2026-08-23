@@ -356,15 +356,21 @@ def save_quickbooks_app(
     db: Session = Depends(get_db),
 ):
     row = get_connection(db, "quickbooks")
+    extra = extra_dict(row)
     env = "sandbox" if environment == "sandbox" else "production"
+    client_id = strip_auth_prefix(application_id) or str(extra.get("application_id") or "")
+    client_secret = application_secret.strip() or str(extra.get("application_secret") or "")
+    if not client_id or not client_secret:
+        _flash(request, err="Paste both the Client ID and Client Secret from the Intuit Keys page.")
+        return _redirect_connect()
     set_extra(
         row,
-        application_id=strip_auth_prefix(application_id),
-        application_secret=application_secret.strip(),
+        application_id=client_id,
+        application_secret=client_secret,
         environment=env,
     )
     db.commit()
-    _flash(request, ok="QuickBooks app saved. Now click Sign in with Intuit.")
+    _flash(request, ok="QuickBooks keys are saved. Click Sign in with Intuit below.")
     return _redirect_connect()
 
 
