@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Documents · Survey Cafe{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <p class="eyebrow">Library</p>
+    <h1>Documents</h1>
+    <p class="lede">Paperless holds the PDFs. This cellar holds the coded bills. One door, not a second filing cabinet.</p>
+  </div>
+</div>
+<section class="door-grid">
+  <a class="card door" href="{{ paperless_url }}" target="_blank" rel="noreferrer">
+    <h2>Paperless</h2>
+    <p>Every invoice PDF, statement, and scan.</p>
+  </a>
+  <a class="card door" href="/invoices">
+    <h2>Coded invoices</h2>
+    <p>Vendor, date, category, and total used on the P&amp;L.</p>
+  </a>
+  <a class="card door" href="/invoices/scan">
+    <h2>Scan a bill</h2>
+    <p>Photograph a paper invoice from the phone.</p>
+  </a>
+</section>
+{% endblock %}

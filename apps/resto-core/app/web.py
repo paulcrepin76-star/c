@@ -17,17 +17,17 @@ from app.equivalents import connection_status, relevant_products, watch_payload
 from app.geo import FAR_MILES, HOME_MARKET, NEAR_MILES
 from app.market import scan_external_prices
 from app.connections import access_token_for
-from app.costing import money
 from app.db import get_db
 from app.ingest import INVOICE_TOTAL_MAX, PURCHASE_INVOICE_TYPES
 from app.matching import match_sellables
 from app.models import Connector, Invoice, Product, Recipe, SellableItem, StockMove, WineProfile
+from app.home import manager_home
 from app.house import ensure_house, house_board, house_series, record_reading, safe_http_url, to_fahrenheit
 from app.models import Camera, Fridge
 from app.purchasing import CATEGORIES, COMPARE_DAYS, DEFAULT_COMPARE_DAYS, purchasing_board
 from app.quickbooks import earliest_finance_date, finance_board, finance_period, finance_query, finance_view
 from app.sales_report import sales_report, vendor_report
-from app.services import catalog_counts, daily_activity, dashboard_charts, monthly_orders, period_costing, sales_span, wine_rows
+from app.services import catalog_counts, daily_activity, dashboard_charts, period_costing, wine_rows
 
 router = APIRouter()
 ALLOWED_DAYS = (7, 30, 90, 365)
@@ -62,37 +62,32 @@ def dashboard(request: Request, days: int = DEFAULT_DAYS, db: Session = Depends(
     window, start, end = _period(days)
     costing = period_costing(db, start, end)
     wines = wine_rows(db)
-    cellar_value = money(sum((row["cellar_value"] for row in wines), Decimal(0)))
-    below_par = [row for row in wines if row["below_par"]]
-    connectors = db.query(Connector).order_by(Connector.name).all()
     invoices = db.query(Invoice).order_by(Invoice.issued_on.desc()).limit(6).all()
-    purchasing = purchasing_board(db)
     report = overnight_report(db)
     activity = daily_activity(db, start, end)
     house = house_board(db)
     series = house_series(db, start, end, live_cameras=house["live_cameras"])
-    months = monthly_orders(db, start, end)
-    charts = dashboard_charts(costing, activity, series, months)
-    order_count = sum(1 for total in activity["purchases"] if total)
+    charts = dashboard_charts(costing, activity, series)
+    home = manager_home(db, house, report)
     return render(
         request,
         "dashboard.html",
         costing=costing,
         wines=wines,
-        cellar_value=cellar_value,
-        below_par=below_par,
-        connectors=connectors,
         invoices=invoices,
-        purchasing=purchasing,
         house=house,
+        home=home,
         report=report,
         days=window,
-        span=sales_span(db),
         counts=catalog_counts(db),
         charts=charts,
-        order_count=order_count,
-        page="dashboard",
+        page="home",
     )
+
+
+@router.get("/dashboard")
+def dashboard_redirect():
+    return RedirectResponse("/", status_code=303)
 
 
 @router.get("/finance")
@@ -126,6 +121,22 @@ def finance_page(
         },
         page="finance",
     )
+
+
+@router.get("/labor")
+def labor_page(request: Request):
+    return render(request, "labor.html", page="labor")
+
+
+@router.get("/intelligence")
+def intelligence_page(request: Request, db: Session = Depends(get_db)):
+    return render(request, "intelligence.html", report=overnight_report(db), page="intelligence")
+
+
+@router.get("/documents")
+def documents_page(request: Request):
+    paperless_url = settings.paperless_public_url or "http://100.116.48.120:8011"
+    return render(request, "documents.html", paperless_url=paperless_url, page="documents")
 
 
 @router.get("/wines")

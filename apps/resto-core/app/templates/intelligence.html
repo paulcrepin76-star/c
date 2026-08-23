@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Intelligence · Survey Cafe{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <p class="eyebrow">Overnight</p>
+    <h1>Intelligence</h1>
+    <p class="lede">Price jumps, cheaper vendors, and recipe cost moves. Sales vs last year lives on the Sales board.</p>
+  </div>
+  <a class="btn" href="/purchasing">Open purchasing</a>
+</div>
+{% if report.needs_reauth %}
+<p class="flash err">Log in again: {% for slug in report.needs_reauth %}{{ slug }}{% if not loop.last %}, {% endif %}{% endfor %} · <a href="/collector">Vendor logins</a></p>
+{% endif %}
+<section class="card">
+  <h2>Purchasing opportunities</h2>
+  {% if report.opportunities %}
+  <table class="wide">
+    <thead><tr><th>Item</th><th>You pay</th><th>Better</th><th>/month</th></tr></thead>
+    <tbody>
+    {% for row in report.opportunities %}
+      <tr>
+        <td>{{ row.product }}</td>
+        <td>{{ row.you_pay }}</td>
+        <td>{{ row.best }} · {{ row.gap_pct | pct }}</td>
+        <td>{{ row.monthly | money }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">No switch worth $25/month after the last check.</p>
+  {% endif %}
+</section>
+{% if report.recipes %}
+<section class="card">
+  <h2>Recipe cost moves</h2>
+  <table class="wide">
+    <thead><tr><th>Recipe</th><th>Yesterday</th><th>Today</th><th>Change</th></tr></thead>
+    <tbody>
+    {% for row in report.recipes %}
+      <tr>
+        <td>{{ row.recipe }}</td>
+        <td>{{ row.yesterday | money }}</td>
+        <td>{{ row.today | money }}</td>
+        <td>{{ row.delta | money }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+<p class="muted">{% if report.run %}Last collector run checked {{ report.checked }} items.{% else %}Collector has not posted a run yet.{% endif %} <a href="/finance?view=sales">Sales vs last year</a></p>
+{% endblock %}

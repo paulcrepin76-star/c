@@ -259,7 +259,10 @@ def test_collector_auth_and_run_and_skipped_scan():
         sams = next(row for row in body["sources"] if row["slug"] == "sams-club")
         assert sams["status"] == "needs_reauth"
         home = client.get("/")
-        assert "Purchasing intelligence" in home.text or "Overnight check" in home.text
+        assert "Log in again: sams-club" in home.text
+        intelligence = client.get("/intelligence")
+        assert intelligence.status_code == 200
+        assert "sams-club" in intelligence.text
         skipped = client.post("/api/jobs/scan-browser", headers={"X-API-Key": "test"})
         assert skipped.status_code == 200
         assert skipped.json()["status"] == "skipped"

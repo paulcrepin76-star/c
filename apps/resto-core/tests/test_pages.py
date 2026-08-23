@@ -42,6 +42,34 @@ def test_core_pages_render_demo_wines():
         assert "wine" in summary.json()["groups"]
 
 
+def test_home_is_one_desk_for_sales_bills_and_house():
+    with TestClient(app) as client:
+        home = client.get("/")
+        assert home.status_code == 200
+        assert "Home" in home.text
+        assert "Needs you" in home.text
+        assert "Connect Square so sales land here" in home.text
+        assert 'href="/labor"' in home.text
+        assert 'href="/documents"' in home.text
+        assert 'href="/intelligence"' in home.text
+        assert "unpaid bills" not in home.text.lower()
+        assert "accounts payable" not in home.text.lower()
+        redirect = client.get("/dashboard", follow_redirects=False)
+        assert redirect.status_code == 303
+        assert redirect.headers["location"] == "/"
+        labor = client.get("/labor")
+        assert labor.status_code == 200
+        assert "will not invent labor" in labor.text.lower()
+        documents = client.get("/documents")
+        assert documents.status_code == 200
+        assert "Paperless" in documents.text
+        assert 'href="/invoices/scan"' in documents.text
+        intelligence = client.get("/intelligence")
+        assert intelligence.status_code == 200
+        assert "Intelligence" in intelligence.text
+        assert "overnight" in intelligence.text.lower()
+
+
 def test_dashboard_series_includes_seed_sales():
     from datetime import UTC, datetime, timedelta
 

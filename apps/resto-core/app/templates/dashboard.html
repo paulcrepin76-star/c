@@ -1,11 +1,14 @@
 {% extends "base.html" %}
-{% block title %}Dashboard · Survey Cafe{% endblock %}
+{% block title %}Home · Survey Cafe{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
-    <p class="eyebrow">Survey Cafe · live back office</p>
-    <h1>Dashboard</h1>
-    <p class="lede">House temperatures and cameras on one chart. Fresh stats below. Wine labels from orders sit in inventory without a count.</p>
+    <p class="eyebrow">Survey Cafe · one desk</p>
+    <h1>Home</h1>
+    <p class="lede">
+      Square sales, filed invoices, recipes, wine, fridges, and cameras live here.
+      Labor stays empty until a real punch clock or payroll file exists.
+    </p>
   </div>
   <nav class="period" aria-label="Date range">
     <a href="/?days=7" class="{% if days == 7 %}on{% endif %}">7 days</a>
@@ -15,110 +18,100 @@
   </nav>
 </div>
 
-<section class="rocker-top">
-  <div class="card chart-card tall">
-    <div class="chart-head">
-      <h2>House overview</h2>
-      <p class="chart-legend"><span class="swatch gold"></span>Temperature <span class="swatch blue"></span>Cameras</p>
-    </div>
-    <div class="chart-wrap">
-      <canvas id="house-chart" aria-label="Temperature and cameras"></canvas>
-    </div>
-    <p class="muted chart-note">The gold line is average fridge °F. The blue line is cameras with a live feed. Empty until a sensor posts or a camera URL is saved.</p>
-  </div>
-  <div class="card chart-card tall">
-    <h2>Orders</h2>
-    <div class="chart-wrap">
-      {% if charts.months %}
-      <canvas id="orders-chart" aria-label="Orders by month"></canvas>
-      {% else %}
-      <p class="empty-chart">No invoices in this window.</p>
-      {% endif %}
-    </div>
-  </div>
-</section>
-
-<section class="rocker-bottom">
-  <div class="card chart-card">
-    <h2>Sales mix</h2>
-    <div class="chart-wrap">
-      {% if charts.mix %}
-      <canvas id="mix-chart" aria-label="Sales mix by costing group"></canvas>
-      {% else %}
-      <p class="empty-chart">No sales in this window yet.</p>
-      {% endif %}
-    </div>
-  </div>
-  <div class="stat-grid">
-    <article class="stat-card">
-      <span>Net sales</span>
-      <strong>{{ costing.period_sales | money }}</strong>
-      <em>Last {{ days }} days</em>
-      <canvas class="spark" data-spark="sales" aria-hidden="true"></canvas>
-    </article>
-    <article class="stat-card">
-      <span>Invoice spend</span>
-      <strong>{{ charts.invoice_spend | money }}</strong>
-      <em>Food and wine bills</em>
-      <canvas class="spark" data-spark="spend" aria-hidden="true"></canvas>
-    </article>
-    <article class="stat-card">
-      <span>Fridges</span>
-      <strong>{{ house.online }} / {{ house.total }}</strong>
-      <em>{% if house.alerts %}{{ house.alerts }} out of range{% else %}Waiting for sensors{% endif %} · <a href="/house">Open</a></em>
-    </article>
-    <article class="stat-card">
-      <span>Cameras</span>
-      <strong>{{ house.live_cameras }} / {{ house.cameras | length }}</strong>
-      <em>Live feeds · <a href="/house">Open</a></em>
-    </article>
-    <article class="stat-card">
-      <span>Wines on list</span>
-      <strong>{{ wines | length }}</strong>
-      <em>Names only · no quantity</em>
-    </article>
-    <article class="stat-card">
-      <span>Orders</span>
-      <strong>{{ order_count }}</strong>
-      <em>{{ counts.invoices }} filed all-time</em>
-    </article>
-  </div>
-</section>
-
-{% if counts.unmatched %}
-<p class="flash">Food cost stays near 0% until Square items attach to Mealie recipes. <a href="/costing/match">Match them now</a>.</p>
-{% endif %}
-
-{% if report and (report.opportunities or report.needs_reauth or report.run) %}
-{% if report.needs_reauth %}
-<p class="flash err">Log in again: {% for slug in report.needs_reauth %}{{ slug }}{% if not loop.last %}, {% endif %}{% endfor %} · <a href="/collector">Open vendor logins</a></p>
-{% endif %}
-<div class="card">
-  <h2>Purchasing intelligence</h2>
-  {% if report.opportunities %}
-  <table class="wide">
-    <thead><tr><th>Item</th><th>You pay</th><th>Better</th><th>/month</th></tr></thead>
-    <tbody>
-    {% for row in report.opportunities %}
-      <tr>
-        <td>{{ row.product }}</td>
-        <td>{{ row.you_pay }}</td>
-        <td>{{ row.best }} · {{ row.gap_pct | pct }}</td>
-        <td>{{ row.monthly | money }}</td>
-      </tr>
+{% if home.actions %}
+<section class="card">
+  <h2>Needs you</h2>
+  <ul class="plain">
+    {% for action in home.actions %}
+    <li>
+      <a href="{{ action.href }}">{{ action.title }}</a>
+      {% if action.detail %} — {{ action.detail }}{% endif %}
+    </li>
     {% endfor %}
-    </tbody>
-  </table>
-  {% else %}
-  <p class="muted">No switch worth $25/month after the last check. <a href="/collector">Log suppliers in</a> so tonight can fill prices.</p>
-  {% endif %}
-</div>
+  </ul>
+</section>
 {% endif %}
+
+<section class="door-grid">
+  <a class="door" href="/finance?view=sales"><strong>Sales</strong><span>Tickets, items, gift cards</span></a>
+  <a class="door" href="/finance"><strong>P&amp;L</strong><span>Square vs mapped bills</span></a>
+  <a class="door" href="/invoices"><strong>Food &amp; invoices</strong><span>What actually arrived</span></a>
+  <a class="door" href="/house"><strong>House</strong><span>Fridges and cameras</span></a>
+  <a class="door" href="/inventory"><strong>Wine</strong><span>Names only. No counts.</span></a>
+  <a class="door" href="/documents"><strong>Documents</strong><span>Paperless and scans</span></a>
+  <a class="door" href="/labor"><strong>Labor</strong><span>Empty until payroll is real</span></a>
+  <a class="door" href="/intelligence"><strong>Intelligence</strong><span>Overnight purchasing</span></a>
+</section>
+
+<section class="kpis">
+  <article>
+    <span>Net sales</span>
+    <strong>{{ home.today.sales.now | money }}</strong>
+    <em>Square today · {{ home.today.tickets.now | int }} tickets</em>
+  </article>
+  <article>
+    <span>This month vs last year</span>
+    <strong>{{ home.month.sales.now | money }}</strong>
+    <em>last year {{ home.month.sales.then | money }} · {{ home.month.sales.pct | signedpct }}</em>
+  </article>
+  <article>
+    <span>Vendor spend this month</span>
+    <strong>{{ home.board.categorized_spend | money }}</strong>
+    <em>{{ home.board.start }} → {{ home.board.end }}</em>
+  </article>
+  <article>
+    <span>Operating profit this month</span>
+    <strong>{{ home.board.operating_profit | money }}</strong>
+    <em>Square minus mapped bills. Labor is not in this number.</em>
+  </article>
+  <article>
+    <span>Year so far</span>
+    <strong>{{ home.ytd.sales.now | money }}</strong>
+    <em>vs last year {{ home.ytd.sales.then | money }} · {{ home.ytd.sales.pct | signedpct }}</em>
+  </article>
+  <article>
+    <span>Wines on list</span>
+    <strong>{{ wines | length }}</strong>
+    <em>{{ home.counts.recipes }} recipes · {{ home.counts.invoices }} invoices</em>
+  </article>
+</section>
+
+<p class="muted source-pills">
+  Square {% if home.connections.square %}connected{% else %}not connected{% endif %}
+  · Paperless {% if home.connections.paperless %}connected{% else %}not connected{% endif %}
+  · QuickBooks {% if home.connections.quickbooks %}connected{% else %}sandbox / not connected{% endif %}
+  · {{ home.uncategorized }} bills still need a category
+</p>
+
+<section class="card chart-card tall">
+  <div class="chart-head">
+    <h2>House overview</h2>
+    <p class="chart-legend"><span class="swatch gold"></span>Temperature <span class="swatch blue"></span>Cameras</p>
+  </div>
+  <div class="chart-wrap">
+    <canvas id="house-chart" aria-label="Temperature and cameras"></canvas>
+  </div>
+  <p class="muted chart-note">The gold line is average fridge °F. The blue line is cameras with a live feed. Empty until a sensor posts or a camera URL is saved.</p>
+</section>
 
 <section class="grid-2">
   <div class="card">
-    <h2>Recent orders</h2>
+    <h2>Cameras</h2>
+    <p class="muted">{{ house.live_cameras }} live · {{ house.cameras | length }} cameras · <a href="/house">Open house</a></p>
+    {% if house.cameras %}
+    <ul class="plain">
+      {% for camera in house.cameras %}
+      <li>{{ camera.name }}{% if camera.snapshot_url or camera.stream_url %} — live{% endif %}</li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted">Cameras stay with the house stack, not here.</p>
+    {% endif %}
+  </div>
+  <div class="card">
+    <h2>Latest invoices</h2>
     <p><a href="/invoices/scan">Photograph a paper invoice</a> · <a href="/invoices">All orders</a></p>
+    {% if invoices %}
     <table>
       <thead><tr><th>Date</th><th>Vendor</th><th>Type</th><th>Total</th></tr></thead>
       <tbody>
@@ -132,24 +125,28 @@
       {% endfor %}
       </tbody>
     </table>
-  </div>
-  <div class="card">
-    <h2>Wine inventory</h2>
-    <p class="muted">Every wine from a purchase ticket. Quantities stay off until you count.</p>
-    {% if wines %}
-    <ul class="plain wine-names">
-      {% for row in wines %}
-      <li>
-        <a href="/wines/{{ row.product.id }}">{{ row.product.name }}</a>
-        <span>{{ row.profile.color }}{% if row.profile.vintage %} · {{ row.profile.vintage }}{% endif %}</span>
-      </li>
-      {% endfor %}
-    </ul>
     {% else %}
-    <p class="muted">No wine labels yet.</p>
+    <p class="muted">Scan a bill and it shows up here.</p>
     {% endif %}
-    <p><a href="/inventory">Open inventory</a></p>
   </div>
+</section>
+
+<section class="card">
+  <h2>Wine inventory</h2>
+  <p class="muted">Every wine from a purchase ticket. Quantities stay off until you count.</p>
+  {% if wines %}
+  <ul class="plain wine-names">
+    {% for row in wines %}
+    <li>
+      <a href="/wines/{{ row.product.id }}">{{ row.product.name }}</a>
+      <span>{{ row.profile.color }}{% if row.profile.vintage %} · {{ row.profile.vintage }}{% endif %}</span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">No wine labels yet.</p>
+  {% endif %}
+  <p><a href="/inventory">Open inventory</a></p>
 </section>
 <script id="dash-data" type="application/json">{{ charts | tojson }}</script>
 {% endblock %}

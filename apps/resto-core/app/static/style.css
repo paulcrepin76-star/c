@@ -186,6 +186,26 @@ h2 {
   font-variant-numeric: tabular-nums;
 }
 .kpis em { color: var(--muted); font-style: normal; font-size: 0.82rem; }
+.door-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin: 0 0 22px;
+}
+a.door {
+  display: block;
+  padding: 16px 18px;
+  border-radius: var(--radius);
+  background: var(--card);
+  border: 1px solid var(--line);
+  color: inherit;
+  text-decoration: none;
+  box-shadow: var(--shadow);
+}
+a.door:hover { border-color: var(--accent); }
+a.door strong, a.door h2 { display: block; margin: 0; font-size: 1rem; }
+a.door span, a.door p { display: block; color: var(--muted); font-size: 0.86rem; margin: 6px 0 0; }
+.source-pills { margin: 0 0 18px; }
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
 .charts { display: grid; grid-template-columns: 1.6fr 1fr; gap: 16px; margin-bottom: 16px; }
 .chart-card { min-height: 320px; }

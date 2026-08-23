@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-title" content="Survey Cafe">
   <meta name="theme-color" content="#0f1116">
   <title>{% block title %}Survey Cafe{% endblock %}</title>
-  <link rel="stylesheet" href="/static/style.css?v=13">
+  <link rel="stylesheet" href="/static/style.css?v=15">
 </head>
 <body class="app">
   <aside class="sidebar">
@@ -19,21 +19,23 @@
       </span>
     </a>
     <nav>
-      <p class="nav-label">Performance</p>
-      <a href="/" class="{% if page == 'dashboard' %}on{% endif %}">Dashboard</a>
-      <a href="/finance" class="{% if page == 'finance' %}on{% endif %}">Finance</a>
+      <a href="/" class="{% if page == 'home' %}on{% endif %}">Home</a>
+      <p class="nav-label">Sales</p>
+      <a href="/finance?view=sales" class="{% if page == 'finance' %}on{% endif %}">Sales &amp; P&amp;L</a>
+      <p class="nav-label">Food</p>
       <a href="/costing" class="{% if page == 'costing' %}on{% endif %}">Recipes &amp; cost</a>
-      <p class="nav-label">Purchasing</p>
-      <a href="/invoices" class="{% if page == 'invoices' %}on{% endif %}">Orders</a>
+      <a href="/invoices" class="{% if page == 'invoices' %}on{% endif %}">Invoices</a>
       <a href="/invoices/scan" class="{% if page == 'scan' %}on{% endif %}">Scan invoice</a>
-      <a href="/purchasing" class="{% if page == 'purchasing' %}on{% endif %}">Price compare</a>
-      <a href="/collector" class="{% if page == 'collector' %}on{% endif %}">Vendor logins</a>
+      <a href="/purchasing" class="{% if page == 'purchasing' %}on{% endif %}">Purchasing</a>
+      <a href="/labor" class="{% if page == 'labor' %}on{% endif %}">Labor</a>
       <p class="nav-label">House</p>
       <a href="/house" class="{% if page == 'house' %}on{% endif %}">Fridges &amp; cameras</a>
       <a href="/inventory" class="{% if page == 'inventory' %}on{% endif %}">Inventory</a>
       <a href="/wines" class="{% if page == 'wines' %}on{% endif %}">Wine cellar</a>
-      <p class="nav-label">Setup</p>
-      <a href="/connect" class="{% if page == 'connect' %}on{% endif %}">Connections</a>
+      <p class="nav-label">Office</p>
+      <a href="/intelligence" class="{% if page == 'intelligence' %}on{% endif %}">Intelligence</a>
+      <a href="/documents" class="{% if page == 'documents' %}on{% endif %}">Documents</a>
+      <a href="/connect" class="{% if page == 'connect' %}on{% endif %}">Admin</a>
     </nav>
   </aside>
   <div class="shell">
@@ -43,7 +45,7 @@
       </form>
       <div class="top-tools">
         <a class="top-link" href="/house">House</a>
-        <a class="top-link" href="/purchasing">Purchasing</a>
+        <a class="top-link" href="/finance?view=sales">Sales</a>
         <button type="button" class="theme-btn" id="theme-toggle" aria-label="Switch theme">Theme</button>
       </div>
     </header>
