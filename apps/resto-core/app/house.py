@@ -15,13 +15,23 @@ DEAD_MINUTES = 120
 
 DEFAULT_FRIDGES = (
     {"slug": "walk-in-cooler", "name": "Walk-in cooler", "kind": "cooler", "min_temp_f": 34, "max_temp_f": 40, "sort": 10},
-    {"slug": "prep-cooler", "name": "Prep cooler", "kind": "cooler", "min_temp_f": 34, "max_temp_f": 40, "sort": 20},
+    {"slug": "prep-cooler", "name": "Prep fridge", "kind": "cooler", "min_temp_f": 34, "max_temp_f": 40, "sort": 20},
     {"slug": "line-cooler", "name": "Line cooler", "kind": "cooler", "min_temp_f": 34, "max_temp_f": 40, "sort": 30},
-    {"slug": "pastry-cooler", "name": "Pastry cooler", "kind": "cooler", "min_temp_f": 34, "max_temp_f": 40, "sort": 40},
-    {"slug": "bar-cooler", "name": "Bar cooler", "kind": "cooler", "min_temp_f": 34, "max_temp_f": 40, "sort": 50},
+    {"slug": "pastry-cooler", "name": "Dessert fridge", "kind": "cooler", "min_temp_f": 34, "max_temp_f": 40, "sort": 40},
+    {"slug": "bar-cooler", "name": "Soda fridge", "kind": "cooler", "min_temp_f": 34, "max_temp_f": 40, "sort": 50},
+    {"slug": "salad-fridge", "name": "Salad fridge", "kind": "cooler", "min_temp_f": 34, "max_temp_f": 40, "sort": 55},
+    {"slug": "coffee-station", "name": "Coffee station", "kind": "cooler", "min_temp_f": 34, "max_temp_f": 40, "sort": 58},
     {"slug": "wine-cellar", "name": "Wine cellar", "kind": "wine", "min_temp_f": 50, "max_temp_f": 58, "sort": 60},
-    {"slug": "walk-in-freezer", "name": "Walk-in freezer", "kind": "freezer", "min_temp_f": -10, "max_temp_f": 5, "sort": 70},
+    {"slug": "walk-in-freezer", "name": "Walk-in freezer", "kind": "freezer", "min_temp_f": -10, "max_temp_f": 10, "sort": 70},
 )
+
+# YoLink entity names Paul already set in the app.
+FRIDGE_ALIASES = {
+    "walkin-cooler": "walk-in-cooler",
+    "prep-fridge": "prep-cooler",
+    "dessert-fridge": "pastry-cooler",
+    "soda-fridge": "bar-cooler",
+}
 
 DEFAULT_CAMERAS = (
     {"slug": "front-door", "name": "Front door", "kind": "door", "sort": 10},
@@ -60,8 +70,11 @@ def safe_http_url(value: str) -> str:
 
 
 def find_fridge(db: Session, name: str = "", slug: str = "") -> Fridge | None:
-    if slug:
-        row = db.query(Fridge).filter(Fridge.slug == slugify(slug)).first()
+    key = slugify(slug or "")
+    if key in FRIDGE_ALIASES:
+        key = FRIDGE_ALIASES[key]
+    if key:
+        row = db.query(Fridge).filter(Fridge.slug == key).first()
         if row:
             return row
     label = str(name or slug or "").strip()

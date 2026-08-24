@@ -77,10 +77,10 @@
 
 <details class="card collectors-details">
   <summary>How the sensors get in</summary>
-  <p class="muted">The cellar does not log into YoLink. Home Assistant posts a reading after you add the YoLink integration and rename the temperature entity (wine cellar → <code>sensor.wine_cellar_temperature</code>).</p>
+  <p class="muted">The cellar does not log into YoLink. Home Assistant posts each named sensor onto the matching tile.</p>
   <pre><code>POST /api/house/readings
 X-API-Key: (cellar key)
-{"slug": "wine-cellar", "temp_f": 55.0, "source": "yolink"}</code></pre>
-  <p class="muted"><code>temp_c</code> also works. Slugs: walk-in-cooler, prep-cooler, line-cooler, pastry-cooler, bar-cooler, wine-cellar, walk-in-freezer. Setup: <code>./scripts/install-yolink-bridge.sh</code></p>
+{"slug": "walk-in-cooler", "temp_f": 37.2, "source": "yolink"}</code></pre>
+  <p class="muted">YoLink names already mapped: walk-in cooler, prep fridge, dessert fridge, soda fridge, salad fridge, coffee station, walk-in freezer. Wine cellar and line cooler wait for a sensor.</p>
 </details>
 {% endblock %}

@@ -71,6 +71,32 @@ def test_wine_cellar_yolink_reading():
         assert float(wine["humidity"]) == 62.0
 
 
+def test_yolink_device_names_fill_the_right_tiles():
+    with TestClient(app) as client:
+        walk = client.post(
+            "/api/house/readings",
+            headers={"X-API-Key": "test"},
+            json={"slug": "walkin-cooler", "temp_f": 37.0, "source": "yolink"},
+        )
+        prep = client.post(
+            "/api/house/readings",
+            headers={"X-API-Key": "test"},
+            json={"slug": "prep-fridge", "temp_f": 36.4, "source": "yolink"},
+        )
+        salad = client.post(
+            "/api/house/readings",
+            headers={"X-API-Key": "test"},
+            json={"slug": "salad-fridge", "temp_f": 38.1, "source": "yolink"},
+        )
+        assert walk.status_code == 200 and walk.json()["fridge"] == "Walk-in cooler"
+        assert prep.status_code == 200 and prep.json()["fridge"] == "Prep fridge"
+        assert salad.status_code == 200 and salad.json()["fridge"] == "Salad fridge"
+        page = client.get("/house")
+        assert "Dessert fridge" in page.text
+        assert "Soda fridge" in page.text
+        assert "Coffee station" in page.text
+
+
 def test_celsius_converts_and_matches_slug():
     db = SessionLocal()
     fridge = find_fridge(db, slug="prep-cooler")

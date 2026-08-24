@@ -1,8 +1,5 @@
-# Posts YoLink (or any HA) fridge temps into Survey Cafe.
-# Rename each temperature entity to sensor.<fridge>_temperature
-# using the cellar slugs with underscores:
-#   wine_cellar, walk_in_cooler, prep_cooler, line_cooler,
-#   pastry_cooler, bar_cooler, walk_in_freezer
+# Posts YoLink fridge temps into Survey Cafe.
+# Entity IDs match the names already in the YoLink app.
 
 rest_command:
   cellar_fridge_reading:
@@ -30,22 +27,34 @@ automation:
     condition:
       - condition: template
         value_template: >
-          {% set known = [
-            'wine-cellar','walk-in-cooler','prep-cooler','line-cooler',
-            'pastry-cooler','bar-cooler','walk-in-freezer'
-          ] %}
+          {% set map = {
+            'sensor.walkin_cooler_temperature': 'walk-in-cooler',
+            'sensor.prep_fridge_temperature': 'prep-cooler',
+            'sensor.dessert_fridge_temperature': 'pastry-cooler',
+            'sensor.soda_fridge_temperature': 'bar-cooler',
+            'sensor.salad_fridge_temperature': 'salad-fridge',
+            'sensor.coffee_station_temperature': 'coffee-station',
+            'sensor.walk_in_freezer_temperature': 'walk-in-freezer'
+          } %}
           {% set eid = trigger.event.data.entity_id | default('') %}
-          {% set slug = eid | replace('sensor.','') | replace('_temperature','') | replace('_','-') %}
           {% set new = trigger.event.data.new_state %}
-          {{ eid.startswith('sensor.')
-             and eid.endswith('_temperature')
-             and slug in known
+          {{ eid in map
              and new is not none
              and new.state not in ['unknown','unavailable','none',''] }}
     action:
       - service: rest_command.cellar_fridge_reading
         data:
-          slug: "{{ trigger.event.data.entity_id | replace('sensor.','') | replace('_temperature','') | replace('_','-') }}"
+          slug: >
+            {% set map = {
+              'sensor.walkin_cooler_temperature': 'walk-in-cooler',
+              'sensor.prep_fridge_temperature': 'prep-cooler',
+              'sensor.dessert_fridge_temperature': 'pastry-cooler',
+              'sensor.soda_fridge_temperature': 'bar-cooler',
+              'sensor.salad_fridge_temperature': 'salad-fridge',
+              'sensor.coffee_station_temperature': 'coffee-station',
+              'sensor.walk_in_freezer_temperature': 'walk-in-freezer'
+            } %}
+            {{ map[trigger.event.data.entity_id] }}
           temp_f: >
             {% set state = trigger.event.data.new_state %}
             {% set t = state.state | float(0) %}
@@ -54,40 +63,39 @@ automation:
               {% set t = t * 9 / 5 + 32 %}
             {% endif %}
             {{ t | round(1) }}
-          humidity: "{% set slug = trigger.event.data.entity_id | replace('sensor.','') | replace('_temperature','') %}{% set hum = states('sensor.' ~ slug ~ '_humidity') %}{{ hum | float if hum not in ['unknown','unavailable','none',''] else 'null' }}"
+          humidity: "{% set hum = states(trigger.event.data.entity_id | replace('_temperature', '_humidity')) %}{{ hum | float if hum not in ['unknown','unavailable','none',''] else 'null' }}"
 
   - id: survey_cafe_yolink_every_10
     alias: YoLink fridge refresh → Survey Cafe
     mode: single
     trigger:
+      - platform: homeassistant
+        event: start
       - platform: time_pattern
         minutes: "/10"
     action:
       - repeat:
           for_each:
-            - wine-cellar
-            - walk-in-cooler
-            - prep-cooler
-            - line-cooler
-            - pastry-cooler
-            - bar-cooler
-            - walk-in-freezer
+            - {entity: sensor.walkin_cooler_temperature, slug: walk-in-cooler}
+            - {entity: sensor.prep_fridge_temperature, slug: prep-cooler}
+            - {entity: sensor.dessert_fridge_temperature, slug: pastry-cooler}
+            - {entity: sensor.soda_fridge_temperature, slug: bar-cooler}
+            - {entity: sensor.salad_fridge_temperature, slug: salad-fridge}
+            - {entity: sensor.coffee_station_temperature, slug: coffee-station}
+            - {entity: sensor.walk_in_freezer_temperature, slug: walk-in-freezer}
           sequence:
             - if:
                 - condition: template
-                  value_template: >
-                    {% set eid = 'sensor.' ~ (repeat.item | replace('-', '_')) ~ '_temperature' %}
-                    {{ states(eid) not in ['unknown','unavailable','none'] }}
+                  value_template: "{{ states(repeat.item.entity) not in ['unknown','unavailable','none'] }}"
               then:
                 - service: rest_command.cellar_fridge_reading
                   data:
-                    slug: "{{ repeat.item }}"
+                    slug: "{{ repeat.item.slug }}"
                     temp_f: >
-                      {% set eid = 'sensor.' ~ (repeat.item | replace('-', '_')) ~ '_temperature' %}
-                      {% set t = states(eid) | float(0) %}
-                      {% set unit = state_attr(eid, 'unit_of_measurement') | string %}
+                      {% set t = states(repeat.item.entity) | float(0) %}
+                      {% set unit = state_attr(repeat.item.entity, 'unit_of_measurement') | string %}
                       {% if 'C' in unit and 'F' not in unit %}
                         {% set t = t * 9 / 5 + 32 %}
                       {% endif %}
                       {{ t | round(1) }}
-                    humidity: "{% set hum_eid = 'sensor.' ~ (repeat.item | replace('-', '_')) ~ '_humidity' %}{% set hum = states(hum_eid) %}{{ hum | float if hum not in ['unknown','unavailable','none',''] else 'null' }}"
+                    humidity: "{% set hum = states(repeat.item.entity | replace('_temperature', '_humidity')) %}{{ hum | float if hum not in ['unknown','unavailable','none',''] else 'null' }}"
