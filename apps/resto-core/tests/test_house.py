@@ -54,21 +54,29 @@ def test_house_series_has_temperature_and_camera_lines():
     db.close()
 
 
-def test_wine_cellar_yolink_reading():
+def test_wine_cellar_and_line_cooler_are_not_on_the_fridge_board():
     with TestClient(app) as client:
+        page = client.get("/house")
+        assert "Line cooler" not in page.text
+        assert "Wine cellar" not in page.text
+        missing = client.post(
+            "/api/house/readings",
+            headers={"X-API-Key": "test"},
+            json={"slug": "wine-cellar", "temp_f": 54.6, "source": "yolink"},
+        )
+        assert missing.status_code == 404
         ok = client.post(
             "/api/house/readings",
             headers={"X-API-Key": "test"},
-            json={"slug": "wine-cellar", "temp_f": 54.6, "humidity": 62.0, "source": "yolink"},
+            json={"slug": "walk-in-cooler", "temp_f": 37.2, "humidity": 62.0, "source": "yolink"},
         )
         assert ok.status_code == 200
-        assert ok.json()["fridge"] == "Wine cellar"
-        assert ok.json()["temp_f"] == 54.6
         board = house_board(SessionLocal())
-        wine = next(card for card in board["fridges"] if card["fridge"].slug == "wine-cellar")
-        assert wine["status"] == "ok"
-        assert float(wine["temp_f"]) == 54.6
-        assert float(wine["humidity"]) == 62.0
+        slugs = [card["fridge"].slug for card in board["fridges"]]
+        assert "wine-cellar" not in slugs
+        assert "line-cooler" not in slugs
+        walk = next(card for card in board["fridges"] if card["fridge"].slug == "walk-in-cooler")
+        assert float(walk["humidity"]) == 62.0
 
 
 def test_yolink_device_names_fill_the_right_tiles():

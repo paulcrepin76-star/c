@@ -14,7 +14,6 @@ The YoLink app names are already mapped:
 | coffee station | Coffee station |
 | walk in freezer | Walk-in freezer |
 
-Wine cellar and line cooler stay empty until you add those sensors.
 
 After connecting YoLink in Home Assistant, run:
 

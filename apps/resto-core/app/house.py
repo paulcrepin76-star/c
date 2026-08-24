@@ -16,12 +16,10 @@ DEAD_MINUTES = 120
 DEFAULT_FRIDGES = (
     {"slug": "walk-in-cooler", "name": "Walk-in cooler", "kind": "cooler", "min_temp_f": 34, "max_temp_f": 40, "sort": 10},
     {"slug": "prep-cooler", "name": "Prep fridge", "kind": "cooler", "min_temp_f": 34, "max_temp_f": 40, "sort": 20},
-    {"slug": "line-cooler", "name": "Line cooler", "kind": "cooler", "min_temp_f": 34, "max_temp_f": 40, "sort": 30},
     {"slug": "pastry-cooler", "name": "Dessert fridge", "kind": "cooler", "min_temp_f": 34, "max_temp_f": 40, "sort": 40},
     {"slug": "bar-cooler", "name": "Soda fridge", "kind": "cooler", "min_temp_f": 34, "max_temp_f": 40, "sort": 50},
     {"slug": "salad-fridge", "name": "Salad fridge", "kind": "cooler", "min_temp_f": 34, "max_temp_f": 40, "sort": 55},
     {"slug": "coffee-station", "name": "Coffee station", "kind": "cooler", "min_temp_f": 34, "max_temp_f": 40, "sort": 58},
-    {"slug": "wine-cellar", "name": "Wine cellar", "kind": "wine", "min_temp_f": 50, "max_temp_f": 58, "sort": 60},
     {"slug": "walk-in-freezer", "name": "Walk-in freezer", "kind": "freezer", "min_temp_f": -10, "max_temp_f": 10, "sort": 70},
 )
 
@@ -74,20 +72,22 @@ def find_fridge(db: Session, name: str = "", slug: str = "") -> Fridge | None:
     if key in FRIDGE_ALIASES:
         key = FRIDGE_ALIASES[key]
     if key:
-        row = db.query(Fridge).filter(Fridge.slug == key).first()
+        row = db.query(Fridge).filter(Fridge.slug == key, Fridge.is_active.is_(True)).first()
         if row:
             return row
     label = str(name or slug or "").strip()
     if not label:
         return None
-    row = db.query(Fridge).filter(Fridge.name.ilike(label)).first()
+    row = db.query(Fridge).filter(Fridge.name.ilike(label), Fridge.is_active.is_(True)).first()
     if row:
         return row
     key = slugify(label)
-    row = db.query(Fridge).filter(Fridge.slug == key).first()
+    if key in FRIDGE_ALIASES:
+        key = FRIDGE_ALIASES[key]
+    row = db.query(Fridge).filter(Fridge.slug == key, Fridge.is_active.is_(True)).first()
     if row:
         return row
-    return db.query(Fridge).filter(Fridge.slug.ilike(f"%{key}%") | Fridge.name.ilike(f"%{label}%")).first()
+    return db.query(Fridge).filter(Fridge.is_active.is_(True), Fridge.slug.ilike(f"%{key}%") | Fridge.name.ilike(f"%{label}%")).first()
 
 
 def ensure_house(db: Session) -> None:
@@ -102,6 +102,9 @@ def ensure_house(db: Session) -> None:
         row.max_temp_f = Decimal(str(spec["max_temp_f"]))
         row.sort = spec["sort"]
         row.is_active = True
+    keep = {spec["slug"] for spec in DEFAULT_FRIDGES}
+    for row in db.query(Fridge).all():
+        row.is_active = row.slug in keep
     for spec in DEFAULT_CAMERAS:
         row = db.query(Camera).filter(Camera.slug == spec["slug"]).first()
         if row is None:
