@@ -425,6 +425,7 @@ def house_fridge_page(request: Request, slug: str, hours: int = 24, db: Session 
         chart=chart,
         camera=camera_for_fridge(db, fridge),
         cameras=board["cameras"],
+        live_slugs=board["live_slugs"],
         frigate_url=settings.frigate_public_url.rstrip("/"),
         hours=window,
         page="house",

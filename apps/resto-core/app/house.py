@@ -110,6 +110,26 @@ def camera_for_fridge(db: Session, fridge: Fridge | None) -> Camera | None:
     return db.query(Camera).filter(Camera.slug == slug, Camera.is_active.is_(True)).first()
 
 
+def frigate_live_slugs() -> set[str]:
+    """Camera names that are actually sending frames right now."""
+    try:
+        import httpx
+
+        with httpx.Client(timeout=httpx.Timeout(2.5, connect=1.0)) as client:
+            payload = client.get(f"{settings.frigate_internal_url.rstrip('/')}/api/stats").json()
+    except Exception:
+        return set()
+    live: set[str] = set()
+    for name, stats in (payload.get("cameras") or {}).items():
+        try:
+            fps = float((stats or {}).get("camera_fps") or 0)
+        except (TypeError, ValueError):
+            fps = 0.0
+        if fps > 0:
+            live.add(str(name))
+    return live
+
+
 def find_fridge(db: Session, name: str = "", slug: str = "") -> Fridge | None:
     key = slugify(slug or "")
     if key in FRIDGE_ALIASES:
@@ -255,13 +275,15 @@ def house_board(db: Session) -> dict:
             }
         )
     cameras = db.query(Camera).filter(Camera.is_active.is_(True)).order_by(Camera.sort, Camera.name).all()
+    live_slugs = frigate_live_slugs()
     return {
         "fridges": fridges,
         "cameras": cameras,
         "alerts": alerts,
         "online": online,
         "total": len(fridges),
-        "live_cameras": sum(1 for cam in cameras if cam.snapshot_url or cam.stream_url),
+        "live_slugs": live_slugs,
+        "live_cameras": sum(1 for cam in cameras if cam.slug in live_slugs),
     }
 
 

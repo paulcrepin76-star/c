@@ -55,13 +55,13 @@
     <p class="muted"><a href="/house/cameras">All cameras</a></p>
   </div>
   <div class="camera-strip">
-    {% for cam in board.cameras %}
-      {% if cam.snapshot_url %}
+    {% for cam in board.cameras if cam.slug in board.live_slugs and cam.snapshot_url %}
       <figure>
-        <img class="camera-shot js-frigate" data-src="{{ cam.snapshot_url }}" src="{{ cam.snapshot_url }}" alt="{{ cam.name }}" onerror="this.parentElement.style.display='none'">
+        <img class="camera-shot js-frigate" data-src="{{ cam.snapshot_url }}" src="{{ cam.snapshot_url }}" alt="{{ cam.name }}">
         <figcaption>{{ cam.name }}</figcaption>
       </figure>
-      {% endif %}
+    {% else %}
+      <p class="muted">Frigate is up, but no camera is sending frames yet. The kitchen / door / line / parking slots are still dummy URLs in <code>house/frigate.yml</code>.</p>
     {% endfor %}
   </div>
 </section>

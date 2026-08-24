@@ -22,7 +22,7 @@ def test_house_page_lists_cafe_coolers():
         assert "Cameras" in cameras.text
         assert 'href="https://100.116.48.120:8971"' in cameras.text
         assert "/frigate/api/kitchen/latest.jpg" in cameras.text
-        assert "/frigate/api/kitchen/latest.jpg" in page.text
+        assert "No live frames" in cameras.text
         home = client.get("/")
         assert 'href="/house"' in home.text
         assert 'href="/house/cameras"' in home.text
@@ -126,7 +126,7 @@ def test_fridge_chart_page_shows_swing():
         assert 'id="fridge-chart"' in page.text
         assert "Swing" in page.text
         assert "3.4°F" in page.text
-        assert "/frigate/api/kitchen/latest.jpg" in page.text
+        assert "No live frames from Frigate" in page.text
         missing = client.get("/house/not-a-fridge", follow_redirects=False)
         assert missing.status_code == 303
 

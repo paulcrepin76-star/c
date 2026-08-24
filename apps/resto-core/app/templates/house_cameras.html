@@ -5,7 +5,7 @@
   <div>
     <p class="eyebrow">Survey Cafe · kitchen house</p>
     <h1>Cameras</h1>
-    <p class="lede">Live shots from the NVR. Fridges stay on their own page. Frigate still holds the recordings.</p>
+    <p class="lede">Live shots from Frigate. These cameras are named, but they need a real Lorex RTSP URL before a picture appears.</p>
   </div>
   <div class="toolbar">
     <a class="btn secondary" href="/house">Fridges</a>
@@ -19,7 +19,7 @@
   <article>
     <span>Cameras</span>
     <strong>{{ board.live_cameras }} / {{ board.cameras | length }}</strong>
-    <em>With a snapshot or stream URL</em>
+    <em>Frigate cameras sending frames</em>
   </article>
 </section>
 
@@ -28,12 +28,10 @@
   <article class="card camera-card">
     <p class="eyebrow">{{ cam.kind }}</p>
     <h2>{{ cam.name }}</h2>
-    {% if cam.snapshot_url %}
-    <img class="camera-shot js-frigate" data-src="{{ cam.snapshot_url }}" src="{{ cam.snapshot_url }}" alt="{{ cam.name }}" referrerpolicy="no-referrer" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'camera-empty',textContent:'No still from Frigate yet.'}))">
-    {% elif cam.stream_url %}
-    <p><a class="btn" href="{{ cam.stream_url }}" target="_blank" rel="noreferrer">Open live stream</a></p>
+    {% if cam.slug in board.live_slugs and cam.snapshot_url %}
+    <img class="camera-shot js-frigate" data-src="{{ cam.snapshot_url }}" src="{{ cam.snapshot_url }}" alt="{{ cam.name }}" referrerpolicy="no-referrer">
     {% else %}
-    <div class="camera-empty">No feed yet. Paste a snapshot URL from the NVR or camera app.</div>
+    <div class="camera-empty">No live frames. Frigate is running, but this camera is disabled and still pointed at a dummy RTSP URL. Add the Lorex address in <code>house/frigate.yml</code> and set <code>enabled: true</code>.</div>
     {% endif %}
     <form method="post" action="/house/camera/{{ cam.id }}" class="stack-form">
       <label>Snapshot URL
