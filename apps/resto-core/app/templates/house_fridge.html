@@ -60,7 +60,7 @@
       {% endif %}
     </div>
     {% if camera and camera.snapshot_url %}
-    <img class="camera-shot js-frigate" data-src="{{ camera.snapshot_url }}" src="{{ camera.snapshot_url }}" alt="{{ camera.name }}">
+    <img class="camera-shot js-frigate" data-src="{{ camera.snapshot_url }}" src="{{ camera.snapshot_url }}" alt="{{ camera.name }}" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'camera-empty',textContent:'Frigate has no still for this camera yet.'}))">
     <p class="muted chart-note">Live Frigate still. Refreshes every 10 seconds.</p>
     {% else %}
     <div class="camera-empty">No Frigate snapshot yet. Kitchen is the camera that is live today.</div>

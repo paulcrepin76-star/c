@@ -29,7 +29,7 @@
     <p class="eyebrow">{{ cam.kind }}</p>
     <h2>{{ cam.name }}</h2>
     {% if cam.snapshot_url %}
-    <img class="camera-shot js-frigate" data-src="{{ cam.snapshot_url }}" src="{{ cam.snapshot_url }}" alt="{{ cam.name }}" referrerpolicy="no-referrer">
+    <img class="camera-shot js-frigate" data-src="{{ cam.snapshot_url }}" src="{{ cam.snapshot_url }}" alt="{{ cam.name }}" referrerpolicy="no-referrer" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'camera-empty',textContent:'No still from Frigate yet.'}))">
     {% elif cam.stream_url %}
     <p><a class="btn" href="{{ cam.stream_url }}" target="_blank" rel="noreferrer">Open live stream</a></p>
     {% else %}

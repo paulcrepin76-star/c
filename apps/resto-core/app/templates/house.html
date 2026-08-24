@@ -58,7 +58,7 @@
     {% for cam in board.cameras %}
       {% if cam.snapshot_url %}
       <figure>
-        <img class="camera-shot js-frigate" data-src="{{ cam.snapshot_url }}" src="{{ cam.snapshot_url }}" alt="{{ cam.name }}">
+        <img class="camera-shot js-frigate" data-src="{{ cam.snapshot_url }}" src="{{ cam.snapshot_url }}" alt="{{ cam.name }}" onerror="this.parentElement.style.display='none'">
         <figcaption>{{ cam.name }}</figcaption>
       </figure>
       {% endif %}
