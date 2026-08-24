@@ -560,6 +560,16 @@ code {
   margin: 8px 0 20px;
 }
 .fridge-card h2, .camera-card h2 { margin-bottom: 6px; }
+a.fridge-card {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+}
+a.fridge-card:hover {
+  border-color: var(--gold);
+  transform: translateY(-1px);
+}
+.fridge-chart-hint { margin: 10px 0 0; font-size: 0.78rem; }
 .fridge-temp { font-size: 2rem; font-weight: 650; letter-spacing: -0.04em; margin: 8px 0 4px; }
 .fridge-card.status-alert { border-color: var(--bad); background: #2a1518; }
 .fridge-card.status-ok { border-color: var(--ok); }

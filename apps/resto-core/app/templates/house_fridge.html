@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}{{ fridge.name }} · Fridges{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <p class="eyebrow">Survey Cafe · {{ fridge.kind }} · {{ fridge.min_temp_f }}–{{ fridge.max_temp_f }}°F</p>
+    <h1>{{ fridge.name }}</h1>
+    <p class="lede">YoLink readings in this window. The gold band is the target range. Swing is the gap between the coldest and warmest points.</p>
+  </div>
+  <div class="toolbar">
+    <a class="btn secondary" href="/house">All fridges</a>
+    <a class="btn{% if hours != 24 %} secondary{% endif %}" href="/house/{{ fridge.slug }}?hours=24">24 hours</a>
+    <a class="btn{% if hours != 168 %} secondary{% endif %}" href="/house/{{ fridge.slug }}?hours=168">7 days</a>
+  </div>
+</div>
+
+<section class="kpis compact-kpis">
+  <article>
+    <span>Now</span>
+    <strong>{% if chart.latest is not none %}{{ chart.latest }}°F{% else %}—{% endif %}</strong>
+    <em>{% if card %}{{ card.age }}{% else %}No reading{% endif %}</em>
+  </article>
+  <article>
+    <span>Low</span>
+    <strong>{% if chart.low is not none %}{{ chart.low }}°F{% else %}—{% endif %}</strong>
+    <em>Coldest in this window</em>
+  </article>
+  <article>
+    <span>High</span>
+    <strong>{% if chart.high is not none %}{{ chart.high }}°F{% else %}—{% endif %}</strong>
+    <em>Warmest in this window</em>
+  </article>
+  <article>
+    <span>Swing</span>
+    <strong>{% if chart.swing is not none %}{{ chart.swing }}°F{% else %}—{% endif %}</strong>
+    <em>{{ chart.count }} reading{% if chart.count != 1 %}s{% endif %}{% if chart.out_of_range %} · {{ chart.out_of_range }} out of range{% endif %}</em>
+  </article>
+</section>
+
+<section class="card chart-card tall">
+  <div class="chart-head">
+    <h2>Temperature</h2>
+    <p class="chart-legend"><span class="swatch gold"></span>Actual <span class="swatch blue"></span>Target range</p>
+  </div>
+  {% if chart.temperature %}
+  <div class="chart-wrap">
+    <canvas id="fridge-chart" aria-label="{{ fridge.name }} temperature"></canvas>
+  </div>
+  <p class="muted chart-note">A small swing means the box is holding. A jump of several degrees is a door, a load of warm product, or a failing compressor.</p>
+  {% else %}
+  <p class="empty-chart">No readings in the last {{ hours }} hours yet. YoLink posts about every 10 minutes.</p>
+  {% endif %}
+</section>
+{% if chart.temperature %}
+<script id="fridge-data" type="application/json">{{ chart | tojson }}</script>
+<script src="/static/vendor/chart.umd.min.js"></script>
+<script src="/static/fridge.js"></script>
+{% endif %}
+{% endblock %}

@@ -3,7 +3,7 @@ from fastapi.testclient import TestClient
 from app.db import SessionLocal
 from datetime import UTC, datetime, timedelta
 
-from app.house import find_fridge, house_board, house_series, record_reading
+from app.house import find_fridge, fridge_chart, house_board, house_series, record_reading
 from app.main import app
 
 
@@ -12,6 +12,7 @@ def test_house_page_lists_cafe_coolers():
         page = client.get("/house")
         assert page.status_code == 200
         assert "Walk-in cooler" in page.text
+        assert 'href="/house/walk-in-cooler"' in page.text
         assert "Walk-in freezer" in page.text
         assert "Home Assistant" in page.text
         assert "Fridges" in page.text
@@ -103,6 +104,27 @@ def test_yolink_device_names_fill_the_right_tiles():
         assert "Dessert fridge" in page.text
         assert "Soda fridge" in page.text
         assert "Coffee station" in page.text
+
+
+def test_fridge_chart_page_shows_swing():
+    db = SessionLocal()
+    fridge = find_fridge(db, slug="walk-in-cooler")
+    now = datetime.now(UTC).replace(tzinfo=None)
+    record_reading(db, fridge, temp_f=36.0, source="test", recorded_at=now - timedelta(hours=3))
+    record_reading(db, fridge, temp_f=39.4, source="test", recorded_at=now - timedelta(hours=1))
+    chart = fridge_chart(db, fridge, hours=24)
+    assert chart["low"] == 36.0
+    assert chart["high"] == 39.4
+    assert chart["swing"] == 3.4
+    db.close()
+    with TestClient(app) as client:
+        page = client.get("/house/walk-in-cooler")
+        assert page.status_code == 200
+        assert 'id="fridge-chart"' in page.text
+        assert "Swing" in page.text
+        assert "3.4°F" in page.text
+        missing = client.get("/house/not-a-fridge", follow_redirects=False)
+        assert missing.status_code == 303
 
 
 def test_celsius_converts_and_matches_slug():

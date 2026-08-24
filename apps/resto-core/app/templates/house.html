@@ -24,13 +24,13 @@
   <article>
     <span>Out of range</span>
     <strong>{{ board.alerts }}</strong>
-    <em>Walk-in 34–40°F · freezer −10–5°F</em>
+    <em>Walk-in 34–40°F · freezer −10–10°F</em>
   </article>
 </section>
 
 <section class="house-grid">
   {% for card in board.fridges %}
-  <article class="card fridge-card status-{{ card.status }}">
+  <a class="card fridge-card status-{{ card.status }}" href="/house/{{ card.fridge.slug }}">
     <p class="eyebrow">{{ card.fridge.kind }} · {{ card.fridge.min_temp_f }}–{{ card.fridge.max_temp_f }}°F</p>
     <h2>{{ card.fridge.name }}</h2>
     {% if card.temp_f is not none %}
@@ -44,7 +44,8 @@
     {% elif card.status == "warn" %}<p class="badge badge-watch">Stale</p>
     {% elif card.status == "ok" %}<p class="badge badge-stay">In range</p>
     {% else %}<p class="badge badge-none">No sensor yet</p>{% endif %}
-  </article>
+    <p class="muted fridge-chart-hint">Open temperature chart</p>
+  </a>
   {% endfor %}
 </section>
 

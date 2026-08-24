@@ -25,7 +25,7 @@ from app.matching import link_sellable, match_sellables, suggest_matches
 from app.models import Connector, Invoice, Product, Recipe, SellableItem, StockMove, WineProfile
 from app.drinks import DRINK_ORDER, drink_board, drink_spec, drinks_overview
 from app.home import manager_home
-from app.house import ensure_house, house_board, house_series, record_reading, safe_http_url, to_fahrenheit
+from app.house import ensure_house, find_fridge, fridge_chart, house_board, house_series, record_reading, safe_http_url, to_fahrenheit
 from app.models import Camera, Fridge
 from app.purchasing import CATEGORIES, COMPARE_DAYS, DEFAULT_COMPARE_DAYS, purchasing_board
 from app.quickbooks import earliest_finance_date, finance_board, finance_period, finance_query, finance_view
@@ -404,6 +404,26 @@ def house_cameras_page(request: Request, db: Session = Depends(get_db)):
         flash_ok=ok,
         flash_err=err,
         page="cameras",
+    )
+
+
+@router.get("/house/{slug}")
+def house_fridge_page(request: Request, slug: str, hours: int = 24, db: Session = Depends(get_db)):
+    fridge = find_fridge(db, slug=slug)
+    if fridge is None:
+        return RedirectResponse("/house", status_code=303)
+    window = 168 if hours >= 48 else 24
+    chart = fridge_chart(db, fridge, window)
+    board = house_board(db)
+    card = next((row for row in board["fridges"] if row["fridge"].id == fridge.id), None)
+    return render(
+        request,
+        "house_fridge.html",
+        fridge=fridge,
+        card=card,
+        chart=chart,
+        hours=window,
+        page="house",
     )
 
 

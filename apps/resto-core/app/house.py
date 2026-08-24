@@ -250,6 +250,44 @@ def house_series(db: Session, start: datetime, end: datetime, live_cameras: int 
     return {"labels": labels, "temperature": temperature, "cameras": cameras}
 
 
+def fridge_chart(db: Session, fridge: Fridge, hours: int = 24) -> dict:
+    """Point-by-point °F for one fridge, plus the swing in that window."""
+    window = 168 if int(hours or 24) >= 48 else 24
+    now = _now()
+    start = now - timedelta(hours=window)
+    rows = (
+        db.query(FridgeReading)
+        .filter(
+            FridgeReading.fridge_id == fridge.id,
+            FridgeReading.recorded_at >= start,
+            FridgeReading.recorded_at <= now,
+        )
+        .order_by(FridgeReading.recorded_at, FridgeReading.id)
+        .all()
+    )
+    temps = [float(row.temp_f) for row in rows]
+    labels = [row.recorded_at.replace(microsecond=0).isoformat() + "Z" for row in rows]
+    low = min(temps) if temps else None
+    high = max(temps) if temps else None
+    min_ok = float(fridge.min_temp_f)
+    max_ok = float(fridge.max_temp_f)
+    return {
+        "labels": labels,
+        "temperature": temps,
+        "min_ok": [min_ok for _ in labels],
+        "max_ok": [max_ok for _ in labels],
+        "low": low,
+        "high": high,
+        "swing": round(high - low, 1) if temps else None,
+        "latest": temps[-1] if temps else None,
+        "hours": window,
+        "count": len(rows),
+        "out_of_range": sum(1 for temp in temps if temp < min_ok or temp > max_ok),
+        "min_temp_f": min_ok,
+        "max_temp_f": max_ok,
+    }
+
+
 def house_payload(board: dict) -> dict:
     fridges = []
     for card in board["fridges"]:
