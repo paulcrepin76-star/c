@@ -33,7 +33,7 @@ Give Paperless a minute on first boot (OCR stack + migrations). Then:
 - Mealie: `http://TOWER:9925` — create the admin user, then set `ALLOW_SIGNUP=false` and recreate the container
 - n8n: `http://TOWER:5678`
 - Metabase: `http://TOWER:3001`
-- Home Assistant: `http://TOWER:8123` — create the first user, then add the fridge sensors
+- Home Assistant: `http://TOWER:8123` — create the first user, add the **YoLink** integration, rename the temperature entity (`sensor.wine_cellar_temperature`), then run `./scripts/install-yolink-bridge.sh`
 - Frigate: `http://TOWER:8971` — add camera RTSP URLs in `house/frigate.yml`
 - Homarr: `http://TOWER:7575` — add Home Assistant and Frigate app tiles
 - Homepage: House group is in `homepage/services-house.yaml`

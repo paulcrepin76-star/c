@@ -38,6 +38,7 @@ done
 
 echo
 echo "Home Assistant: http://100.116.48.120:8123"
-echo "Frigate:        http://100.116.48.120:8971"
+echo "Frigate:        https://100.116.48.120:8971"
 echo "Cellar house:   http://100.116.48.120:8088/house"
+echo "YoLink bridge:  ./scripts/install-yolink-bridge.sh  (after the YoLink integration is added)"
 echo "Homarr:         http://100.116.48.120:7575  (add the same two app tiles if the board is empty)"

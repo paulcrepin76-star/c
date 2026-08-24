@@ -54,6 +54,23 @@ def test_house_series_has_temperature_and_camera_lines():
     db.close()
 
 
+def test_wine_cellar_yolink_reading():
+    with TestClient(app) as client:
+        ok = client.post(
+            "/api/house/readings",
+            headers={"X-API-Key": "test"},
+            json={"slug": "wine-cellar", "temp_f": 54.6, "humidity": 62.0, "source": "yolink"},
+        )
+        assert ok.status_code == 200
+        assert ok.json()["fridge"] == "Wine cellar"
+        assert ok.json()["temp_f"] == 54.6
+        board = house_board(SessionLocal())
+        wine = next(card for card in board["fridges"] if card["fridge"].slug == "wine-cellar")
+        assert wine["status"] == "ok"
+        assert float(wine["temp_f"]) == 54.6
+        assert float(wine["humidity"]) == 62.0
+
+
 def test_celsius_converts_and_matches_slug():
     db = SessionLocal()
     fridge = find_fridge(db, slug="prep-cooler")
