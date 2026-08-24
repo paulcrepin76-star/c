@@ -570,6 +570,21 @@ a.fridge-card:hover {
   transform: translateY(-1px);
 }
 .fridge-chart-hint { margin: 10px 0 0; font-size: 0.78rem; }
+.fridge-split {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr;
+  gap: 16px;
+  margin: 8px 0 20px;
+}
+.fridge-camera .camera-shot { min-height: 220px; }
+.fridge-camera .btn { margin-top: 12px; }
+.camera-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+.camera-strip figcaption { margin-top: 6px; color: var(--muted); font-size: 0.82rem; }
+.fridge-cameras { margin-bottom: 20px; }
 .fridge-temp { font-size: 2rem; font-weight: 650; letter-spacing: -0.04em; margin: 8px 0 4px; }
 .fridge-card.status-alert { border-color: var(--bad); background: #2a1518; }
 .fridge-card.status-ok { border-color: var(--ok); }
@@ -698,7 +713,7 @@ a.fridge-card:hover {
     gap: 4px;
   }
   .nav-label { display: none; }
-  .charts, .grid-2, .form-grid, .rocker-top, .rocker-bottom, .stat-grid, .studio-kpis, .studio-grid { grid-template-columns: 1fr; }
+  .charts, .grid-2, .form-grid, .rocker-top, .rocker-bottom, .stat-grid, .studio-kpis, .studio-grid, .fridge-split { grid-template-columns: 1fr; }
   .topbar { padding: 16px 16px 0; }
   main { padding: 20px 16px 48px; }
 }

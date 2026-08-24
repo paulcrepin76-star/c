@@ -25,7 +25,7 @@ from app.matching import link_sellable, match_sellables, suggest_matches
 from app.models import Connector, Invoice, Product, Recipe, SellableItem, StockMove, WineProfile
 from app.drinks import DRINK_ORDER, drink_board, drink_spec, drinks_overview
 from app.home import manager_home
-from app.house import ensure_house, find_fridge, fridge_chart, house_board, house_series, record_reading, safe_http_url, to_fahrenheit
+from app.house import camera_for_fridge, ensure_house, find_fridge, fridge_chart, house_board, house_series, record_reading, safe_http_url, to_fahrenheit
 from app.models import Camera, Fridge
 from app.purchasing import CATEGORIES, COMPARE_DAYS, DEFAULT_COMPARE_DAYS, purchasing_board
 from app.quickbooks import earliest_finance_date, finance_board, finance_period, finance_query, finance_view
@@ -401,6 +401,7 @@ def house_cameras_page(request: Request, db: Session = Depends(get_db)):
         request,
         "house_cameras.html",
         board=house_board(db),
+        frigate_url=settings.frigate_public_url.rstrip("/"),
         flash_ok=ok,
         flash_err=err,
         page="cameras",
@@ -422,9 +423,33 @@ def house_fridge_page(request: Request, slug: str, hours: int = 24, db: Session 
         fridge=fridge,
         card=card,
         chart=chart,
+        camera=camera_for_fridge(db, fridge),
+        cameras=board["cameras"],
+        frigate_url=settings.frigate_public_url.rstrip("/"),
         hours=window,
         page="house",
     )
+
+
+@router.api_route("/frigate", methods=["GET", "HEAD"])
+@router.api_route("/frigate/{path:path}", methods=["GET", "HEAD"])
+def frigate_proxy(request: Request, path: str = ""):
+    """Same-host Frigate API so camera JPEGs do not hit the self-signed :8971 cert."""
+    from fastapi.responses import Response
+
+    base = settings.frigate_internal_url.rstrip("/")
+    target = f"{base}/{path}" if path else f"{base}/"
+    query = str(request.url.query or "")
+    if query:
+        target = f"{target}?{query}"
+    try:
+        with httpx.Client(timeout=httpx.Timeout(12.0, connect=3.0), follow_redirects=True) as client:
+            upstream = client.request(request.method, target, headers={"Accept": request.headers.get("accept", "*/*")})
+    except httpx.HTTPError:
+        return Response("Frigate is not answering.", status_code=502)
+    skip = {"content-encoding", "transfer-encoding", "connection"}
+    headers = {key: value for key, value in upstream.headers.items() if key.lower() not in skip}
+    return Response(content=upstream.content, status_code=upstream.status_code, headers=headers, media_type=upstream.headers.get("content-type"))
 
 
 @router.post("/house/reading")

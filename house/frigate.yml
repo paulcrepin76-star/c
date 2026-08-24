@@ -1,5 +1,6 @@
 # Survey Cafe cameras. Add each RTSP URL when the camera is on the LAN.
-# Frigate UI: http://100.116.48.120:8971
+# Frigate UI: https://100.116.48.120:8971
+# Snapshots in the cellar: /frigate/api/<camera>/latest.jpg
 
 mqtt:
   enabled: true
@@ -23,6 +24,39 @@ cameras:
     ffmpeg:
       inputs:
         - path: rtsp://127.0.0.1:554/kitchen
+          roles: [detect]
+    detect:
+      enabled: false
+      width: 1280
+      height: 720
+      fps: 5
+  front-door:
+    enabled: false
+    ffmpeg:
+      inputs:
+        - path: rtsp://127.0.0.1:554/front-door
+          roles: [detect]
+    detect:
+      enabled: false
+      width: 1280
+      height: 720
+      fps: 5
+  line:
+    enabled: false
+    ffmpeg:
+      inputs:
+        - path: rtsp://127.0.0.1:554/line
+          roles: [detect]
+    detect:
+      enabled: false
+      width: 1280
+      height: 720
+      fps: 5
+  parking:
+    enabled: false
+    ffmpeg:
+      inputs:
+        - path: rtsp://127.0.0.1:554/parking
           roles: [detect]
     detect:
       enabled: false

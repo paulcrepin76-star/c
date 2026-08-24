@@ -9,7 +9,7 @@
   </div>
   <div class="toolbar">
     <a class="btn secondary" href="/house">Fridges</a>
-    <a class="btn" href="http://100.116.48.120:8971" target="_blank" rel="noreferrer">Frigate</a>
+    <a class="btn" href="{{ frigate_url or 'https://100.116.48.120:8971' }}" target="_blank" rel="noreferrer">Frigate</a>
   </div>
 </div>
 {% if flash_ok %}<div class="flash ok">{{ flash_ok }}</div>{% endif %}
@@ -29,7 +29,7 @@
     <p class="eyebrow">{{ cam.kind }}</p>
     <h2>{{ cam.name }}</h2>
     {% if cam.snapshot_url %}
-    <img class="camera-shot" src="{{ cam.snapshot_url }}" alt="{{ cam.name }}" referrerpolicy="no-referrer">
+    <img class="camera-shot js-frigate" data-src="{{ cam.snapshot_url }}" src="{{ cam.snapshot_url }}" alt="{{ cam.name }}" referrerpolicy="no-referrer">
     {% elif cam.stream_url %}
     <p><a class="btn" href="{{ cam.stream_url }}" target="_blank" rel="noreferrer">Open live stream</a></p>
     {% else %}
@@ -37,7 +37,7 @@
     {% endif %}
     <form method="post" action="/house/camera/{{ cam.id }}" class="stack-form">
       <label>Snapshot URL
-        <input name="snapshot_url" value="{{ cam.snapshot_url }}" placeholder="https://nvr.local/front.jpg">
+        <input name="snapshot_url" value="{{ cam.snapshot_url }}" placeholder="/frigate/api/kitchen/latest.jpg">
       </label>
       <label>Live stream URL
         <input name="stream_url" value="{{ cam.stream_url }}" placeholder="https://nvr.local/front">
@@ -47,4 +47,5 @@
   </article>
   {% endfor %}
 </section>
+<script src="/static/cameras.js"></script>
 {% endblock %}

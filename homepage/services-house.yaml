@@ -6,7 +6,7 @@
         weight: 100
     - Frigate:
         icon: frigate.png
-        href: http://100.116.48.120:8971
+        href: https://100.116.48.120:8971
         description: Cameras
         weight: 200
     - Cellar house:

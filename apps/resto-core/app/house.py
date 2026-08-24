@@ -8,6 +8,7 @@ from decimal import Decimal
 
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.models import Camera, Fridge, FridgeReading
 
 STALE_MINUTES = 30
@@ -38,6 +39,17 @@ DEFAULT_CAMERAS = (
     {"slug": "parking", "name": "Parking", "kind": "parking", "sort": 40},
 )
 
+# Kitchen is the live Frigate camera today. Point every cooler at it until the others have RTSP.
+FRIDGE_CAMERA = {
+    "walk-in-cooler": "kitchen",
+    "prep-cooler": "kitchen",
+    "pastry-cooler": "kitchen",
+    "bar-cooler": "kitchen",
+    "salad-fridge": "kitchen",
+    "coffee-station": "kitchen",
+    "walk-in-freezer": "kitchen",
+}
+
 
 def _now() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
@@ -62,9 +74,40 @@ def safe_http_url(value: str) -> str:
     if not text:
         return ""
     lowered = text.lower()
-    if lowered.startswith("https://") or lowered.startswith("http://"):
+    if lowered.startswith("/frigate/") or lowered.startswith("https://") or lowered.startswith("http://"):
         return text[:400]
     return ""
+
+
+def frigate_snapshot_url(slug: str) -> str:
+    return f"/frigate/api/{slugify(slug)}/latest.jpg"
+
+
+def frigate_stream_url(slug: str) -> str:
+    return f"{settings.frigate_public_url.rstrip('/')}/#{slugify(slug)}"
+
+
+def _managed_camera_url(url: str) -> bool:
+    text = str(url or "")
+    return (not text) or "/frigate/api/" in text or ":8971" in text or text.endswith("latest.jpg")
+
+
+def apply_frigate_camera_urls(db: Session) -> None:
+    """Point cellar cameras at Frigate's per-camera snapshot, proxied on this host."""
+    for spec in DEFAULT_CAMERAS:
+        row = db.query(Camera).filter(Camera.slug == spec["slug"]).first()
+        if row is None:
+            continue
+        if _managed_camera_url(row.snapshot_url):
+            row.snapshot_url = frigate_snapshot_url(spec["slug"])
+        if _managed_camera_url(row.stream_url):
+            row.stream_url = frigate_stream_url(spec["slug"])
+    db.commit()
+
+
+def camera_for_fridge(db: Session, fridge: Fridge | None) -> Camera | None:
+    slug = FRIDGE_CAMERA.get(fridge.slug if fridge else "", "kitchen")
+    return db.query(Camera).filter(Camera.slug == slug, Camera.is_active.is_(True)).first()
 
 
 def find_fridge(db: Session, name: str = "", slug: str = "") -> Fridge | None:
@@ -118,6 +161,7 @@ def ensure_house(db: Session) -> None:
                 )
             )
     db.commit()
+    apply_frigate_camera_urls(db)
 
 
 def record_reading(

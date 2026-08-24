@@ -37,23 +37,41 @@
   </article>
 </section>
 
-<section class="card chart-card tall">
-  <div class="chart-head">
-    <h2>Temperature</h2>
-    <p class="chart-legend"><span class="swatch gold"></span>Actual <span class="swatch blue"></span>Target range</p>
-  </div>
-  {% if chart.temperature %}
-  <div class="chart-wrap">
-    <canvas id="fridge-chart" aria-label="{{ fridge.name }} temperature"></canvas>
-  </div>
-  <p class="muted chart-note">A small swing means the box is holding. A jump of several degrees is a door, a load of warm product, or a failing compressor.</p>
-  {% else %}
-  <p class="empty-chart">No readings in the last {{ hours }} hours yet. YoLink posts about every 10 minutes.</p>
-  {% endif %}
+<section class="fridge-split">
+  <section class="card chart-card tall">
+    <div class="chart-head">
+      <h2>Temperature</h2>
+      <p class="chart-legend"><span class="swatch gold"></span>Actual <span class="swatch blue"></span>Target range</p>
+    </div>
+    {% if chart.temperature %}
+    <div class="chart-wrap">
+      <canvas id="fridge-chart" aria-label="{{ fridge.name }} temperature"></canvas>
+    </div>
+    <p class="muted chart-note">A small swing means the box is holding. A jump of several degrees is a door, a load of warm product, or a failing compressor.</p>
+    {% else %}
+    <p class="empty-chart">No readings in the last {{ hours }} hours yet. YoLink posts about every 10 minutes.</p>
+    {% endif %}
+  </section>
+  <aside class="card fridge-camera">
+    <div class="chart-head">
+      <h2>{{ camera.name if camera else "Camera" }}</h2>
+      {% if camera and camera.stream_url %}
+      <p class="muted"><a href="{{ camera.stream_url }}" target="_blank" rel="noreferrer">Open in Frigate</a></p>
+      {% endif %}
+    </div>
+    {% if camera and camera.snapshot_url %}
+    <img class="camera-shot js-frigate" data-src="{{ camera.snapshot_url }}" src="{{ camera.snapshot_url }}" alt="{{ camera.name }}">
+    <p class="muted chart-note">Live Frigate still. Refreshes every 10 seconds.</p>
+    {% else %}
+    <div class="camera-empty">No Frigate snapshot yet. Kitchen is the camera that is live today.</div>
+    {% endif %}
+    <p><a class="btn secondary" href="/house/cameras">All cameras</a></p>
+  </aside>
 </section>
 {% if chart.temperature %}
 <script id="fridge-data" type="application/json">{{ chart | tojson }}</script>
 <script src="/static/vendor/chart.umd.min.js"></script>
 <script src="/static/fridge.js"></script>
 {% endif %}
+<script src="/static/cameras.js"></script>
 {% endblock %}

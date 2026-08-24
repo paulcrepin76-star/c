@@ -240,6 +240,8 @@ services:
       USDA_MMN_API_KEY: ${USDA_MMN_API_KEY:-}
       COLLECTOR_URL: http://price-collector:8099
       COLLECTOR_VNC_URL: ${COLLECTOR_VNC_URL:-http://100.116.48.120:7900}
+      FRIGATE_PUBLIC_URL: ${FRIGATE_URL:-https://100.116.48.120:8971}
+      FRIGATE_INTERNAL_URL: ${FRIGATE_INTERNAL_URL:-http://resto-frigate:5000}
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
       interval: 20s
@@ -333,7 +335,7 @@ services:
       - homepage.group=House
       - homepage.name=Frigate
       - homepage.icon=frigate.png
-      - homepage.href=http://100.116.48.120:8971
+      - homepage.href=https://100.116.48.120:8971
       - homepage.description=Cameras
     networks: [resto]
 

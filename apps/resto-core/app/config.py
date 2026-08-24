@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     price_gap_pct: float = 8.0
     collector_url: str = ""
     collector_vnc_url: str = "http://100.116.48.120:7900"
+    frigate_public_url: str = "https://100.116.48.120:8971"
+    frigate_internal_url: str = "http://resto-frigate:5000"
+    frigate_magicdns_url: str = "https://lerouxfamily.tailbd3356.ts.net:8971"
     quickbooks_client_id: str = ""
     quickbooks_client_secret: str = ""
     quickbooks_environment: str = "production"

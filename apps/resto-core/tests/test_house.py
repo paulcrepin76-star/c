@@ -20,6 +20,9 @@ def test_house_page_lists_cafe_coolers():
         assert cameras.status_code == 200
         assert "Frigate" in cameras.text
         assert "Cameras" in cameras.text
+        assert 'href="https://100.116.48.120:8971"' in cameras.text
+        assert "/frigate/api/kitchen/latest.jpg" in cameras.text
+        assert "/frigate/api/kitchen/latest.jpg" in page.text
         home = client.get("/")
         assert 'href="/house"' in home.text
         assert 'href="/house/cameras"' in home.text
@@ -123,8 +126,20 @@ def test_fridge_chart_page_shows_swing():
         assert 'id="fridge-chart"' in page.text
         assert "Swing" in page.text
         assert "3.4°F" in page.text
+        assert "/frigate/api/kitchen/latest.jpg" in page.text
         missing = client.get("/house/not-a-fridge", follow_redirects=False)
         assert missing.status_code == 303
+
+
+def test_frigate_proxy_returns_502_when_down(monkeypatch):
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "frigate_internal_url", "http://127.0.0.1:9")
+    with TestClient(app) as client:
+        dead = client.get("/frigate/api/kitchen/latest.jpg")
+        assert dead.status_code == 502
+        kept = __import__("app.house", fromlist=["safe_http_url"]).safe_http_url("/frigate/api/kitchen/latest.jpg")
+        assert kept.startswith("/frigate/")
 
 
 def test_celsius_converts_and_matches_slug():
