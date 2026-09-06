@@ -33,6 +33,7 @@ Give Paperless a minute on first boot (OCR stack + migrations). Then:
 - Mealie: `http://TOWER:9925` — create the admin user, then set `ALLOW_SIGNUP=false` and recreate the container
 - n8n: `http://TOWER:5678`
 - Metabase: `http://TOWER:3001`
+- grok-bot: `http://TOWER:8090/health` — the phone assistant. Pair it with [BOT.md](BOT.md)
 - Home Assistant: `http://TOWER:8123` — create the first user, add the **YoLink** integration, rename the temperature entity (`sensor.wine_cellar_temperature`), then run `./scripts/install-yolink-bridge.sh`
 - Frigate: `http://TOWER:8971` — add camera RTSP URLs in `house/frigate.yml`
 - Homarr: `http://TOWER:7575` — add Home Assistant and Frigate app tiles
@@ -87,5 +88,6 @@ docker exec resto-postgres pg_dump -U resto resto > /mnt/user/backups/resto-$(da
 ## What not to do
 
 - Do not expose Paperless, n8n, or Postgres to the internet without a reverse proxy and auth.
+- Do not publish port 8090 outside Tailscale. grok-bot holds the Docker socket, so anyone who reaches it can restart containers.
 - Do not start with Playwright logins for FPL and Sam's Club. Get email ingest working first.
 - Do not put live passwords in the Compose file or in this repo.

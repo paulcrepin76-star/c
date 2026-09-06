@@ -15,6 +15,7 @@ from app.collector import ingest_collected_items
 from app.equivalents import watch_payload, COLLECTOR_PRODUCT_CAP
 from app.intel import overnight_report, save_collector_run, set_browser_status
 from app.market import scan_external_prices
+from app.home import manager_home
 from app.house import find_fridge, house_board, house_payload, record_reading, to_fahrenheit
 from app.quickbooks import earliest_finance_date, finance_board, finance_period
 from app.services import period_costing, wine_rows
@@ -68,6 +69,49 @@ class FridgeReadingIn(BaseModel):
 @router.get("/health")
 def api_health():
     return {"ok": True}
+
+
+@router.get("/status", dependencies=[Depends(require_key)])
+def status_json(db: Session = Depends(get_db)):
+    """One call that answers "how are things" — for the phone assistant."""
+    house = house_board(db)
+    report = overnight_report(db)
+    home = manager_home(db, house, report)
+    board = home["board"]
+    fridges = house_payload(house)["fridges"]
+    return {
+        "restaurant": "Survey Cafe",
+        "as_of": datetime.now(UTC).replace(tzinfo=None).isoformat(timespec="seconds"),
+        "sales": {
+            "today": float(home["today"]["sales"]["now"]),
+            "month_to_date": float(home["month"]["sales"]["now"]),
+            "year_to_date": float(home["ytd"]["sales"]["now"]),
+            "tickets_today": int(home["today"]["tickets"]["now"]),
+            "avg_ticket_today": float(home["today"]["avg_ticket"]["now"]),
+        },
+        "month": {
+            "net_sales": float(board["net_sales"]),
+            "cogs": float(board["cogs"]),
+            "food_cost_pct": float(board["cogs_food_pct"]),
+            "wine_cost_pct": float(board["cogs_wine_pct"]),
+            "labor": float(board["labor"]),
+            "operating_profit": float(board["operating_profit"]),
+        },
+        "fridges": {
+            "alerts": house["alerts"],
+            "online": house["online"],
+            "total": house["total"],
+            "out_of_range": [
+                {"name": row["name"], "temp_f": row["temp_f"], "status": row["status"]}
+                for row in fridges
+                if row["status"] != "ok"
+            ],
+        },
+        "wine_below_par": [row["product"].name for row in wine_rows(db) if row["below_par"]],
+        "needs_you": [action["title"] for action in home["actions"]],
+        "connections": home["sources"],
+        "data_confidence": home["health"]["confidence"],
+    }
 
 
 @router.get("/house", dependencies=[Depends(require_key)])
