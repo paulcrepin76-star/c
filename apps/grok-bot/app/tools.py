@@ -108,7 +108,8 @@ def install_app(app: str = "", image: str = "", port: int | None = None) -> dict
     if clash:
         return {"error": clash}
     slug = catalog.add_service(known)
-    result = dockerctl.compose("up", "-d", slug)
+    # --no-deps so adding an app never restarts Postgres or anything else.
+    result = dockerctl.compose("up", "-d", "--no-deps", slug)
     if not result["ok"]:
         catalog.remove_service(slug)
         return {"error": f"Install failed, rolled the compose file back.\n{dockerctl.tail(result['output'], 800)}"}
@@ -140,7 +141,7 @@ def update_app(app: str) -> dict:
     pulled = dockerctl.compose("pull", service)
     if not pulled["ok"]:
         return {"error": f"Could not pull a new image for '{service}'.\n{dockerctl.tail(pulled['output'], 800)}"}
-    upped = dockerctl.compose("up", "-d", service)
+    upped = dockerctl.compose("up", "-d", "--no-deps", service)
     return {
         "ok": upped["ok"],
         "app": service,
@@ -207,7 +208,10 @@ SCHEMAS = [
         {
             "app": {"type": "string", "description": "Catalog slug, or the name to give a custom container."},
             "image": {"type": "string", "description": "Docker image, only for apps outside the catalog."},
-            "port": {"type": "integer", "description": "Host port to publish."},
+            "port": {
+                "type": "integer",
+                "description": "Host port to publish. Catalog apps already have one, so leave this out unless the owner named a port or the image is not in the catalog.",
+            },
         },
     ),
     _tool("remove_app", "Remove an app the assistant installed earlier.", {"app": {"type": "string"}}, ["app"]),

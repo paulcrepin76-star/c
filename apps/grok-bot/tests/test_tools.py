@@ -42,7 +42,7 @@ def test_install_writes_compose_then_brings_the_app_up(monkeypatch):
     monkeypatch.setattr(dockerctl, "compose", lambda *args, **_kw: seen.append(args) or {"ok": True, "code": 0, "output": "Container resto-ntfy Started"})
     result = tools.install_app(app="ntfy")
     assert result["ok"] is True
-    assert seen == [("up", "-d", "ntfy")]
+    assert seen == [("up", "-d", "--no-deps", "ntfy")]
     assert catalog.installed() == ["ntfy"]
 
 
@@ -91,6 +91,14 @@ def test_restart_reports_the_state_after(monkeypatch):
     result = tools.restart_app("n8n")
     assert result["app"] == "resto-n8n"
     assert result["action"] == "restart"
+
+
+def test_updating_one_app_leaves_its_dependencies_alone(monkeypatch):
+    seen = []
+    monkeypatch.setattr(dockerctl, "containers", lambda include_stopped=True: CONTAINERS)
+    monkeypatch.setattr(dockerctl, "compose", lambda *args, **_kw: seen.append(args) or {"ok": True, "code": 0, "output": ""})
+    tools.update_app("n8n")
+    assert seen == [("pull", "n8n"), ("up", "-d", "--no-deps", "n8n")]
 
 
 def test_update_stack_pulls_then_rebuilds(monkeypatch):

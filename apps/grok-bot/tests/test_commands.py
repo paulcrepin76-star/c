@@ -37,3 +37,12 @@ def test_update_alone_is_the_whole_stack():
 
 def test_nonsense_returns_nothing():
     assert commands.parse("tell me a joke about wine") is None
+
+
+def test_short_commands_are_shortcuts_and_sentences_are_not():
+    assert commands.shortcut("restart n8n") == {"tool": "restart_app", "args": {"app": "n8n"}}
+    assert commands.shortcut("status")["tool"] == "restaurant_status"
+    assert commands.shortcut("install ntfy")["tool"] == "install_app"
+    assert commands.shortcut("How are things at the cafe today?") is None
+    assert commands.shortcut("n8n looks stuck, bounce it for me") is None
+    assert commands.shortcut("") is None

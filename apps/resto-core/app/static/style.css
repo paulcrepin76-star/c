@@ -700,10 +700,13 @@ a.fridge-card:hover {
 .review-card h2 { margin-top: 0; }
 .review-table td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
 .review-table small { display: block; color: var(--muted); font-size: 0.8rem; }
+.steps { margin: 0 0 4px; padding-left: 20px; }
+.steps li { padding: 5px 0; }
 .chat-log {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  min-height: 140px;
   max-height: 460px;
   overflow-y: auto;
   padding: 4px 2px 12px;

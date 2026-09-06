@@ -103,6 +103,12 @@ Text `apps` for the list it knows: ntfy, uptime-kuma, dozzle, homepage, ollama, 
 
 > "sync" — pull Square sales, Paperless invoices, and Mealie recipes without waiting for tonight's job.
 
+## Short commands are exact, sentences go to Grok
+
+A message of three words or fewer that looks like a command runs exactly as written, without asking the model anything. `restart n8n` restarts n8n. `install ntfy` installs ntfy on its catalog port. `status` gives the restaurant board. These are instant, free, and always mean the same thing.
+
+Anything longer is a question, and Grok answers it — *"why did metabase stop last night?"*, *"is the walk-in cold enough?"*, *"mets à jour n8n s'il te plaît"*.
+
 ## The safety rules
 
 - **Only your chat ids get answers.** Everyone else gets one sentence and nothing else. Leave `TELEGRAM_ALLOWED_CHAT_IDS` empty and the bot refuses to do anything at all — it only tells you your id.
@@ -119,9 +125,9 @@ Text `apps` for the list it knows: ntfy, uptime-kuma, dozzle, homepage, ollama, 
 
 Telegram is free and needs nothing open. Real SMS needs a public URL, so it means Twilio plus Tailscale Funnel or a reverse proxy. The endpoint exists if you want it: point a Twilio number's webhook at `https://your-public-host/sms` (POST) and put your mobile number in `TELEGRAM_ALLOWED_CHAT_IDS`. Telegram is the easier path and does not cost per message.
 
-## Plain commands (no Grok key needed)
+## The command list
 
-These always work, and they are the fallback the night xAI is unreachable:
+These run exactly as written, with or without a Grok key, and they are the fallback the night xAI is unreachable:
 
 | Text | What happens |
 | --- | --- |

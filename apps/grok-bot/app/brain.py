@@ -14,6 +14,7 @@ The server runs one Docker Compose stack: resto-core (the cellar, costing, and s
 
 How to answer:
 - Use the tools. Never guess a number, a container state, or a price.
+- Never say you did something unless a tool result says you did. You cannot restart, install, or update anything by writing a sentence about it.
 - Keep it short enough to read on a phone. Plain sentences, no markdown tables, no headings.
 - Lead with the answer. Add detail only if it changes what he should do.
 - Answer in the language he wrote in. He writes English and French.
@@ -53,7 +54,9 @@ def _grok_answer(chat: str, text: str) -> str:
         message = grok.complete(messages, tools=tools.SCHEMAS, conversation=chat)
         calls = grok.tool_calls(message)
         if not calls:
-            reply = grok.text_of(message) or "I do not have an answer for that."
+            reply = grok.text_of(message)
+            if not reply:
+                break
             state.remember(chat, "user", text)
             state.remember(chat, "assistant", reply)
             return reply
@@ -76,7 +79,13 @@ def _grok_answer(chat: str, text: str) -> str:
                     "content": json.dumps(result, default=str)[:12000],
                 }
             )
-    return "I kept looking things up and never landed on an answer. Ask me for one thing at a time."
+    parsed = commands.parse(text)
+    if parsed is not None:
+        return _run_or_ask(chat, parsed["tool"], parsed["args"])
+    return (
+        f"{settings.grok_model} did not come back with an answer for that. "
+        "Ask for one thing at a time, or use a plain command.\n\n" + commands.HELP
+    )
 
 
 def answer(text: str, chat: str = "web") -> str:
@@ -102,6 +111,11 @@ def answer(text: str, chat: str = "web") -> str:
     if lowered in ("/forget", "forget", "/reset"):
         state.forget(chat)
         return "Forgot the conversation. Start fresh."
+
+    # `restart n8n` means restart n8n, model or no model.
+    exact = commands.shortcut(clean)
+    if exact is not None:
+        return _run_or_ask(chat, exact["tool"], exact["args"])
 
     direct = commands.parse(clean)
     if settings.grok_enabled:

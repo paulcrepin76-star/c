@@ -113,7 +113,7 @@ def test_grok_calls_a_tool_then_answers_in_words(monkeypatch, mock_http):
         return replies.pop(0)
 
     monkeypatch.setattr(brain.grok, "complete", fake_complete)
-    reply = brain.answer("how are things", chat="test")
+    reply = brain.answer("how are things at the cafe today?", chat="test")
     assert "prep fridge is warm" in reply.lower()
     assert any(message.get("role") == "tool" for message in sent[-1])
 
@@ -138,9 +138,44 @@ def test_when_xai_is_down_plain_commands_still_work(monkeypatch):
         raise brain.GrokError("xAI answered 503")
 
     monkeypatch.setattr(brain.grok, "complete", boom)
-    reply = brain.answer("status", chat="test")
+    reply = brain.answer("how are things looking right now?", chat="test")
     assert "xAI answered 503" in reply
     assert "$1,240" in reply
+
+
+def test_a_short_command_never_reaches_the_model(monkeypatch):
+    monkeypatch.setattr(settings, "xai_api_key", "test-xai")
+    ran = []
+    monkeypatch.setitem(tools.HANDLERS, "restart_app", lambda app: ran.append(app) or {"ok": True, "app": app, "action": "restart", "state": "running"})
+
+    def never(*_a, **_k):
+        raise AssertionError("the model was asked about a plain command")
+
+    monkeypatch.setattr(brain.grok, "complete", never)
+    assert "Reply yes" in brain.answer("restart n8n", chat="test")
+    brain.answer("yes", chat="test")
+    assert ran == ["n8n"]
+
+
+def test_a_sentence_still_goes_to_the_model(monkeypatch):
+    monkeypatch.setattr(settings, "xai_api_key", "test-xai")
+    monkeypatch.setattr(brain.grok, "complete", lambda *_a, **_k: _grok_reply("Grok answered."))
+    assert brain.answer("n8n looks stuck, what do you think?", chat="test") == "Grok answered."
+
+
+def test_an_empty_completion_falls_back_instead_of_dead_ending(monkeypatch):
+    monkeypatch.setattr(settings, "xai_api_key", "test-xai")
+    monkeypatch.setattr(tools.resto, "restaurant_status", lambda: STATUS)
+    monkeypatch.setattr(brain.grok, "complete", lambda *_a, **_k: _grok_reply(""))
+    assert "$1,240" in brain.answer("how are things looking tonight?", chat="test")
+
+
+def test_an_empty_completion_on_free_text_says_what_to_try(monkeypatch):
+    monkeypatch.setattr(settings, "xai_api_key", "test-xai")
+    monkeypatch.setattr(brain.grok, "complete", lambda *_a, **_k: _grok_reply(""))
+    reply = brain.answer("tell me something about the walk in cooler", chat="test")
+    assert settings.grok_model in reply
+    assert "plain command" in reply
 
 
 def test_grok_history_survives_between_messages(monkeypatch):

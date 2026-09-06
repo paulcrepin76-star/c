@@ -41,6 +41,7 @@ _PATTERNS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
 
 
 WHOLE_STACK = {"everything", "all", "stack", "tout", "server"}
+SHORTCUT_WORDS = 3
 
 
 def parse(text: str) -> dict | None:
@@ -64,6 +65,18 @@ def parse(text: str) -> dict | None:
                 args = {**args, "app": "", "image": target}
         return {"tool": tool, "args": args}
     return None
+
+
+def shortcut(text: str) -> dict | None:
+    """A short exact command runs the same way whether or not a model is loaded.
+
+    `restart n8n` should restart n8n, never become a sentence a model made up.
+    Anything longer than a few words is a question, so it goes to Grok.
+    """
+    words = (text or "").strip().split()
+    if not words or len(words) > SHORTCUT_WORDS:
+        return None
+    return parse(text)
 
 
 def unknown(has_model: bool) -> str:
