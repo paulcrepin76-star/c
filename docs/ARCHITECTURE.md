@@ -13,6 +13,7 @@ Each tool does one job. Nothing scrapes a website unless email and APIs have fai
 | resto-core | Products, wine, inventory, costing, supplier price comparison | Document vault |
 | Postgres | Source of truth for numbers | PDFs |
 | Metabase | Charts on a screen | Data entry |
+| Orbit | One-page command board: CPU/RAM, Docker, files, library | Costing, document vault |
 
 ## Why not one Invoice Fetcher that logs into everything
 

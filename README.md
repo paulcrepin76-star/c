@@ -71,6 +71,7 @@ One Compose stack, one Postgres, these containers:
 | mealie | 9925 | Recipes |
 | n8n | 5678 | Square / mail / rare portal jobs |
 | metabase | 3001 | Dashboards |
+| orbit | 7575 | Personal command page: CPU, RAM, Docker, files, library |
 | postgres | 5433 | Shared database server |
 
 On Unraid (`ssh root@100.116.48.120`) Paperless and Mealie are already running. Install only the missing pieces:
@@ -79,7 +80,7 @@ On Unraid (`ssh root@100.116.48.120`) Paperless and Mealie are already running. 
 curl -fsSL https://raw.githubusercontent.com/paulcrepin76-star/c/main/scripts/on-unraid-install.sh | bash
 ```
 
-Open `http://100.116.48.120:8088` for the cellar. This will not start a second Paperless or Mealie. Details: [docs/SSH.md](docs/SSH.md).
+Open `http://100.116.48.120:8088` for the cellar and `http://100.116.48.120:7575` for Orbit, the personal command page. This will not start a second Paperless or Mealie. Details: [docs/SSH.md](docs/SSH.md).
 
 ## What you do on day one
 

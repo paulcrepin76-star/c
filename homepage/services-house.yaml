@@ -1,4 +1,9 @@
 - House:
+    - Orbit:
+        icon: mdi-orbit-variant
+        href: http://100.116.48.120:7575
+        description: Personal command page
+        weight: 50
     - Home Assistant:
         icon: home-assistant.png
         href: http://100.116.48.120:8123

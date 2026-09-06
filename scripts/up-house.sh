@@ -21,7 +21,7 @@ if [ ! -f "${APPDATA:-/mnt/user/appdata/resto}/frigate/config/config.yml" ]; the
   cp "$ROOT/house/frigate.yml" "${APPDATA:-/mnt/user/appdata/resto}/frigate/config/config.yml"
 fi
 
-compose up -d --no-deps mosquitto homeassistant frigate
+compose up -d --no-deps mosquitto homeassistant frigate orbit
 
 # Homepage (port 3000, "Leroux Family") — append House tiles if the file exists.
 for candidate in \
@@ -41,4 +41,4 @@ echo "Home Assistant: http://100.116.48.120:8123"
 echo "Frigate:        https://100.116.48.120:8971"
 echo "Cellar house:   http://100.116.48.120:8088/house"
 echo "YoLink bridge:  ./scripts/install-yolink-bridge.sh  (after the YoLink integration is added)"
-echo "Homarr:         http://100.116.48.120:7575  (add the same two app tiles if the board is empty)"
+echo "Orbit:          http://100.116.48.120:7575  (CPU, RAM, Docker, files, library)"

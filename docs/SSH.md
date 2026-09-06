@@ -18,6 +18,7 @@ Then open:
 - your existing Mealie URL
 - http://100.116.48.120:5678 — n8n
 - http://100.116.48.120:3001 — Metabase
+- http://100.116.48.120:7575 — Orbit (CPU, RAM, Docker, files, library)
 
 ## Existing Gmail invoices were not moved
 
