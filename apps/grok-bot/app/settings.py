@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     telegram_bot_token: str = ""
     telegram_allowed_chat_ids: str = ""
     telegram_poll_seconds: int = 30
+    # Only change this to run against a self-hosted Bot API server.
+    telegram_api_base: str = "https://api.telegram.org"
 
     # resto-core, for the restaurant half of the answers.
     resto_url: str = "http://resto-core:8080"

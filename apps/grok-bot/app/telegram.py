@@ -36,7 +36,7 @@ class TelegramChannel:
         return bool(self._thread and self._thread.is_alive())
 
     def _url(self, method: str) -> str:
-        return f"https://api.telegram.org/bot{settings.telegram_bot_token}/{method}"
+        return f"{settings.telegram_api_base.rstrip('/')}/bot{settings.telegram_bot_token}/{method}"
 
     def call(self, method: str, payload: dict, timeout: float = 20.0) -> dict:
         with httpx.Client(timeout=timeout) as client:

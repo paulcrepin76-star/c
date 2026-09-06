@@ -6,7 +6,7 @@ from app.settings import settings
 STATUS = {
     "sales": {"today": 1240.5, "month_to_date": 28400.0, "tickets_today": 63, "avg_ticket_today": 19.7},
     "month": {"food_cost_pct": 31.4, "wine_cost_pct": 26.1, "operating_profit": 4200.0},
-    "fridges": {"alerts": 1, "online": 6, "total": 7, "out_of_range": [{"name": "Prep fridge", "temp_f": 46.2, "status": "alert"}]},
+    "fridges": {"alerts": 1, "online": 7, "total": 7, "out_of_range": [{"name": "Prep fridge", "temp_f": 46.2, "status": "alert"}]},
     "wine_below_par": ["Sancerre"],
     "needs_you": ["3 bills need a category"],
 }
@@ -36,7 +36,7 @@ def test_a_restart_waits_for_yes(monkeypatch):
 
     done = brain.answer("yes", chat="test")
     assert calls == ["n8n"]
-    assert "Restarted n8n" in done
+    assert "Restarted n8n. It is running." in done
 
 
 def test_no_means_nothing_runs(monkeypatch):
@@ -76,7 +76,7 @@ def test_confirm_can_be_switched_off(monkeypatch):
     monkeypatch.setattr(settings, "require_confirm", False)
     monkeypatch.setitem(tools.HANDLERS, "restart_app", lambda app: {"ok": True, "app": app, "action": "restart", "state": "running", "status": "Up"})
     reply = brain.answer("restart n8n", chat="test")
-    assert "Restarted n8n" in reply
+    assert "Restarted n8n. It is running." in reply
 
 
 def test_help_lists_what_it_understands():

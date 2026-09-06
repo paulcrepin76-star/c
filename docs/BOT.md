@@ -107,7 +107,7 @@ Text `apps` for the list it knows: ntfy, uptime-kuma, dozzle, homepage, ollama, 
 
 - **Only your chat ids get answers.** Everyone else gets one sentence and nothing else. Leave `TELEGRAM_ALLOWED_CHAT_IDS` empty and the bot refuses to do anything at all — it only tells you your id.
 - **Nothing changes without a yes.** Restart, stop, start, install, remove, update: each one comes back as *"I am about to X. Reply yes to run it."* The pending action expires after ten minutes. Set `BOT_REQUIRE_CONFIRM=false` if you ever want it to stop asking.
-- **Every change is written down.** `/mnt/user/appdata/resto/grok-bot/actions.log` gets one JSON line per action with the chat it came from. `curl -H "X-API-Key: $RESTO_API_KEY" http://100.116.48.120:8090/actions` shows the last twenty.
+- **Everything it does is written down.** `/mnt/user/appdata/resto/grok-bot/actions.log` gets one JSON line per tool it ran, with the chat it came from. `curl -H "X-API-Key: $RESTO_API_KEY" http://100.116.48.120:8090/actions` shows the last twenty.
 - **The bot holds the docker socket.** That is what lets it restart and install things, and it is real power. It is why the allowlist and the confirmation exist. Do not publish port 8090 outside Tailscale.
 - **Installs stay declarative.** A new app is written into `compose.extra.yml` next to `compose.yml`, so `docker compose up -d` keeps it running later. That file is not in git — it is the state of your server. Delete a block and run compose again to remove an app by hand.
 

@@ -56,13 +56,14 @@ def clear_pending(chat: str) -> None:
 
 
 def audit(chat: str, tool: str, args: dict, result: dict) -> None:
+    error = result.get("error", "") if isinstance(result, dict) else ""
     entry = {
         "at": time.strftime("%Y-%m-%dT%H:%M:%S"),
         "chat": chat,
         "tool": tool,
         "args": args,
-        "ok": bool(result.get("ok")) if isinstance(result, dict) else False,
-        "error": (result or {}).get("error", "") if isinstance(result, dict) else "",
+        "ok": not error,
+        "error": error,
     }
     path = Path(settings.data_dir) / "actions.log"
     try:

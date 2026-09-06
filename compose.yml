@@ -302,9 +302,11 @@ services:
     environment:
       TZ: ${TZ}
       XAI_API_KEY: ${XAI_API_KEY:-}
+      XAI_BASE_URL: ${XAI_BASE_URL:-https://api.x.ai/v1}
       GROK_MODEL: ${GROK_MODEL:-grok-4.6}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_ALLOWED_CHAT_IDS: ${TELEGRAM_ALLOWED_CHAT_IDS:-}
+      TELEGRAM_API_BASE: ${TELEGRAM_API_BASE:-https://api.telegram.org}
       RESTO_URL: http://resto-core:8080
       RESTO_API_KEY: ${RESTO_API_KEY}
       PUBLIC_URL: ${RESTO_URL:-http://100.116.48.120:8088}

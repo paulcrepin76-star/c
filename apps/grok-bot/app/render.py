@@ -52,11 +52,17 @@ def restaurant(result: dict) -> str:
         f"Operating profit this month {money(month.get('operating_profit'))}.",
     ]
     alerts = fridges.get("alerts") or 0
+    online = fridges.get("online") or 0
+    total = fridges.get("total") or 0
     if alerts:
         names = ", ".join(f"{row['name']} {row.get('temp_f')}F" for row in (fridges.get("out_of_range") or [])[:4])
         lines.append(f"Fridges: {alerts} out of range — {names}.")
+    elif not online:
+        lines.append(f"Fridges: none of the {total} are reporting a temperature.")
+    elif online < total:
+        lines.append(f"Fridges: {online} of {total} reporting, all in range.")
     else:
-        lines.append(f"Fridges: all {fridges.get('total', 0)} in range.")
+        lines.append(f"Fridges: all {total} in range.")
     below = result.get("wine_below_par") or []
     if below:
         lines.append(f"Wine under par: {', '.join(below[:5])}.")
@@ -105,10 +111,17 @@ def catalog(result: dict) -> str:
     return "\n".join(lines)
 
 
+VERBS = {"restart": "Restarted", "stop": "Stopped", "start": "Started"}
+
+
 def lifecycle(result: dict) -> str:
     if result.get("error"):
         return result["error"]
-    return f"{result['action'].title()}ed {result['app']}. Now {result.get('status') or result.get('state')}."
+    verb = VERBS.get(result.get("action", ""), "Changed")
+    state = result.get("state", "")
+    if state == "running":
+        return f"{verb} {result['app']}. It is running."
+    return f"{verb} {result['app']}. It is now {state or 'in an unknown state'}."
 
 
 def installed(result: dict) -> str:
