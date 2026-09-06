@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#07080c">
+  <title>Orbit</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Outfit:wght@380;460;560&family=Syne:wght@620;760&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <div class="grain" aria-hidden="true"></div>
+  <svg class="sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <symbol id="i-orbit" viewBox="0 0 24 24"><ellipse cx="12" cy="12" rx="9" ry="4.2" transform="rotate(-24 12 12)" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="12" r="2.2" fill="currentColor"/><circle cx="19.2" cy="8.4" r="1.35" fill="currentColor"/></symbol>
+    <symbol id="i-cpu" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10 3.5v3M14 3.5v3M10 17.5v3M14 17.5v3M3.5 10h3M3.5 14h3M17.5 10h3M17.5 14h3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+    <symbol id="i-ram" viewBox="0 0 24 24"><rect x="3.5" y="7" width="17" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M7 17.5v2.2M11 17.5v2.2M15 17.5v2.2M8 10h3M13 10h3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+    <symbol id="i-disk" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="12" r="2.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12 4v3.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+    <symbol id="i-uptime" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12 8v4.4l2.8 1.8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+    <symbol id="i-wine" viewBox="0 0 24 24"><path d="M8 4h8l-1.1 7.2a3.9 3.9 0 0 1-7.8 0L8 4zM12 15.2V20M9 20h6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
+    <symbol id="i-docs" viewBox="0 0 24 24"><path d="M7 4.5h7l3.5 3.5V19.5H7z" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M14 4.5v3.6h3.5M9.5 12h5M9.5 15h4" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
+    <symbol id="i-fork" viewBox="0 0 24 24"><path d="M8 4v7.2c0 2 1.6 3.3 4 3.3s4-1.3 4-3.3V4M8 8h8M12 14.5V20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+    <symbol id="i-flow" viewBox="0 0 24 24"><circle cx="6" cy="7" r="2.1" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="18" cy="7" r="2.1" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="17" r="2.1" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8.1 7h7.8M6 9.2v3.2c0 1.4 1 2.4 2.4 2.4H12M18 9.2v3.2c0 1.4-1 2.4-2.4 2.4H12" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
+    <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4.5 19.5h15M7 16v-5M12 16V7M17 16v-8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+    <symbol id="i-db" viewBox="0 0 24 24"><ellipse cx="12" cy="7" rx="6.5" ry="2.4" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M5.5 7v10c0 1.3 2.9 2.4 6.5 2.4s6.5-1.1 6.5-2.4V7" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M5.5 12c0 1.3 2.9 2.4 6.5 2.4s6.5-1.1 6.5-2.4" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
+    <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 3.5 6.8 13h5.1L11 20.5 17.4 11h-5z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="M4.5 11.2 12 5l7.5 6.2V20h-5.2v-5.2H9.7V20H4.5z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
+    <symbol id="i-cam" viewBox="0 0 24 24"><rect x="3.5" y="7" width="12.5" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M16 10.2 20.5 8v8L16 13.8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
+    <symbol id="i-radio" viewBox="0 0 24 24"><path d="M5 16.5c2.4-3 5.2-4.5 7-4.5s4.6 1.5 7 4.5M8.2 13.2C9.6 11.4 10.9 10.5 12 10.5s2.4.9 3.8 2.7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="12" cy="18" r="1.4" fill="currentColor"/></symbol>
+    <symbol id="i-scan" viewBox="0 0 24 24"><path d="M7 5H5v3M17 5h2v3M7 19H5v-3M17 19h2v-3M4.5 12h15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+    <symbol id="i-series" viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 10h3M8 13h8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+    <symbol id="i-film" viewBox="0 0 24 24"><rect x="4.5" y="5" width="15" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 5v14M16 5v14M4.5 9.5h3M4.5 14.5h3M16.5 9.5h3M16.5 14.5h3" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
+    <symbol id="i-radar" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12 12 17 8.2M12 4.8v2.4M12 16.8v2.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="12" cy="12" r="1.3" fill="currentColor"/></symbol>
+    <symbol id="i-grab" viewBox="0 0 24 24"><path d="M12 4.5v10M8.4 10.4 12 14.2l3.6-3.8M5 18.2h14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-screen" viewBox="0 0 24 24"><rect x="3.5" y="5.5" width="17" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M9 19.2h6M12 16.5v2.7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+    <symbol id="i-print" viewBox="0 0 24 24"><path d="M7 8V4.8h10V8M6 14.8h12V19H6zM5 8h14v7.2H5z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
+    <symbol id="i-box" viewBox="0 0 24 24"><path d="M4.5 8 12 4.5 19.5 8v8L12 19.5 4.5 16zM4.5 8 12 11.6 19.5 8M12 11.6V19.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M4 8.2h6.2l1.6 1.7H20V18H4z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M15.8 15.8 20 20" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 6v12M6 12h12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+    <symbol id="i-up" viewBox="0 0 24 24"><path d="M12 16V7M8 10.4 12 6.8l4 3.6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+    <symbol id="i-video" viewBox="0 0 24 24"><rect x="3.8" y="6.5" width="12.4" height="11" rx="1.8" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M16.2 10.2 20.2 8v8l-4-2.2" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24"><rect x="4" y="5.5" width="16" height="13" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="9" cy="10" r="1.4" fill="currentColor"/><path d="M4.8 16.2 9.2 12l4 3.2 2.2-1.8 3.8 2.8" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
+    <symbol id="i-audio" viewBox="0 0 24 24"><path d="M9 16.5a2.4 2.4 0 1 0 0 0V8.2L19 6.5v8.4" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="16.6" cy="15.2" r="2.4" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
+    <symbol id="i-archive" viewBox="0 0 24 24"><path d="M4.5 6.2h15v3.2h-15zM6 9.4h12V18H6zM10 13h4" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M7 4.5h7l3.5 3.5V19.5H7z" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M14 4.5v3.6h3.5" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
+  </svg>
+
+  <aside class="rail">
+    <a class="mark" href="#vitals" aria-label="Orbit">
+      <svg><use href="#i-orbit"/></svg>
+    </a>
+    <nav>
+      <a href="#vitals" data-nav="vitals" class="on"><svg><use href="#i-cpu"/></svg><span>Vitals</span></a>
+      <a href="#fleet" data-nav="fleet"><svg><use href="#i-box"/></svg><span>Fleet</span></a>
+      <a href="#library" data-nav="library"><svg><use href="#i-film"/></svg><span>Library</span></a>
+      <a href="#files" data-nav="files"><svg><use href="#i-folder"/></svg><span>Files</span></a>
+    </nav>
+    <p class="rail-foot">Orbit</p>
+  </aside>
+
+  <main>
+    <header class="top">
+      <div>
+        <p class="eyebrow" id="greet">Command page</p>
+        <h1>Everything in one place.</h1>
+      </div>
+      <div class="top-tools">
+        <label class="search">
+          <svg><use href="#i-search"/></svg>
+          <input id="q" type="search" placeholder="Filter apps, films, folders" autocomplete="off">
+        </label>
+        <div class="clock-wrap">
+          <time id="clock">00:00:00</time>
+          <span id="host-label">{{ host }}</span>
+        </div>
+      </div>
+    </header>
+
+    <section id="vitals" class="block">
+      <div class="block-head">
+        <h2>Vitals</h2>
+        <p>Live load on this box — CPU, memory, disks, and how long it has been up.</p>
+      </div>
+      <div class="vitals-grid" id="vitals-grid">
+        <article class="glass vital">
+          <svg class="ring" viewBox="0 0 120 120" data-ring="cpu">
+            <circle class="track" cx="60" cy="60" r="46"/>
+            <circle class="tick" cx="60" cy="60" r="46"/>
+          </svg>
+          <div class="vital-copy">
+            <span>CPU</span>
+            <strong id="cpu-read">{{ system.cpu.percent }}%</strong>
+            <em id="cpu-meta">{{ system.cpu.cores }} cores · load {{ system.cpu.load[0] }}</em>
+          </div>
+        </article>
+        <article class="glass vital">
+          <svg class="ring mem" viewBox="0 0 120 120" data-ring="memory">
+            <circle class="track" cx="60" cy="60" r="46"/>
+            <circle class="tick" cx="60" cy="60" r="46"/>
+          </svg>
+          <div class="vital-copy">
+            <span>Memory</span>
+            <strong id="mem-read">{{ system.memory.percent }}%</strong>
+            <em id="mem-meta">used of host RAM</em>
+          </div>
+        </article>
+        <article class="glass vital">
+          <svg class="ring disk" viewBox="0 0 120 120" data-ring="disk">
+            <circle class="track" cx="60" cy="60" r="46"/>
+            <circle class="tick" cx="60" cy="60" r="46"/>
+          </svg>
+          <div class="vital-copy">
+            <span>Storage</span>
+            <strong id="disk-read">{{ (system.disks[0].percent if system.disks else 0) }}%</strong>
+            <em id="disk-meta">primary volume</em>
+          </div>
+        </article>
+        <article class="glass vital uptime">
+          <div class="vital-icon"><svg><use href="#i-uptime"/></svg></div>
+          <div class="vital-copy">
+            <span>Uptime</span>
+            <strong id="up-read">—</strong>
+            <em id="up-meta">{{ system.host }}</em>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section id="fleet" class="block">
+      <div class="block-head">
+        <h2>Fleet</h2>
+        <p id="fleet-meta">Every container, with its own icon. Kitchen, house, library, system.</p>
+      </div>
+      <div id="fleet-board"></div>
+    </section>
+
+    <section id="library" class="block">
+      <div class="block-head">
+        <h2>Library</h2>
+        <p>Films, series, grabs, and the screen — Sonarr and Radarr live here without calling it “media.”</p>
+      </div>
+      <div class="library-grid" id="library-grid"></div>
+      <div class="glass recent-card">
+        <div class="recent-head">
+          <h3>Latest in</h3>
+          <p>Newest files from the library and grab folders.</p>
+        </div>
+        <ul id="recent-list" class="recent-list"></ul>
+      </div>
+    </section>
+
+    <section id="files" class="block">
+      <div class="block-head">
+        <h2>Files</h2>
+        <p>All the folders you mounted. Browse, upload, make a folder, take a file down.</p>
+      </div>
+      <div class="glass files-card">
+        <div class="files-toolbar">
+          <div class="root-chips" id="root-chips"></div>
+          <div class="file-actions">
+            <input id="mkdir-name" class="mkdir-input" type="text" placeholder="New folder name" autocomplete="off">
+            <button type="button" class="ghost" id="mkdir-btn"><svg><use href="#i-plus"/></svg> Folder</button>
+            <label class="ghost file-upload">
+              <svg><use href="#i-up"/></svg> Upload
+              <input type="file" id="upload-input">
+            </label>
+          </div>
+        </div>
+        <nav class="crumbs" id="crumbs"></nav>
+        <div id="file-list" class="file-list"></div>
+      </div>
+    </section>
+  </main>
+
+  <script type="application/json" id="boot">{{ {"system": system, "fleet": fleet, "library": library, "roots": roots} | tojson }}</script>
+  <script src="/static/app.js"></script>
+</body>
+</html>

@@ -2,6 +2,7 @@
 
 test:
 	cd apps/resto-core && pip install -q -r requirements.txt pytest && pytest -q
+	cd apps/orbit && pip install -q -r requirements.txt pytest && pytest -q
 
 setup:
 	chmod +x scripts/*.sh

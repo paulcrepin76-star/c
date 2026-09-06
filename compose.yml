@@ -15,6 +15,7 @@
 #   5433  postgres     optional, for a GUI client
 #   8123  homeassistant  fridge sensors
 #   8971  frigate        cameras
+#   7575  orbit          personal command page
 #
 # Internal-only: redis, tika, gotenberg.
 
@@ -337,6 +338,59 @@ services:
       - homepage.icon=frigate.png
       - homepage.href=https://100.116.48.120:8971
       - homepage.description=Cameras
+    networks: [resto]
+
+  orbit:
+    build:
+      context: ./apps/orbit
+    image: resto-orbit:local
+    container_name: resto-orbit
+    restart: unless-stopped
+    ports:
+      - "7575:7575"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - ${ORBIT_SHARES:-/mnt/user}:/shares
+      - ${APPDATA:-./appdata}/orbit:/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      TZ: ${TZ}
+      HOST_NAME: ${ORBIT_HOST:-Unraid}
+      PUBLIC_URL: ${ORBIT_URL:-http://100.116.48.120:7575}
+      HOST_PROC: /host/proc
+      HOST_SYS: /host/sys
+      SHARES: /shares
+      DATA_DIR: /data
+      ROOTS: ${ORBIT_ROOTS:-}
+      CELLAR_URL: ${RESTO_URL:-http://100.116.48.120:8088}
+      PAPERLESS_URL: ${PAPERLESS_URL:-http://100.116.48.120:8011}
+      MEALIE_URL: ${MEALIE_URL:-http://100.116.48.120:9925}
+      N8N_URL: ${N8N_URL:-http://100.116.48.120:5678}
+      METABASE_URL: ${METABASE_URL:-http://100.116.48.120:3001}
+      HOMEASSISTANT_URL: ${HOMEASSISTANT_URL:-http://100.116.48.120:8123}
+      FRIGATE_URL: ${FRIGATE_URL:-https://100.116.48.120:8971}
+      SONARR_URL: ${SONARR_URL:-}
+      SONARR_API_KEY: ${SONARR_API_KEY:-}
+      RADARR_URL: ${RADARR_URL:-}
+      RADARR_API_KEY: ${RADARR_API_KEY:-}
+      QBIT_URL: ${QBIT_URL:-}
+      JELLYFIN_URL: ${JELLYFIN_URL:-}
+      PROWLARR_URL: ${PROWLARR_URL:-}
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:7575/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 8
+      start_period: 10s
+    labels:
+      - homepage.group=House
+      - homepage.name=Orbit
+      - homepage.icon=mdi-orbit-variant
+      - homepage.href=http://100.116.48.120:7575
+      - homepage.description=Personal command page
     networks: [resto]
 
 networks:
