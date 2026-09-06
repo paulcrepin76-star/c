@@ -8,7 +8,7 @@ def test_library_is_not_named_media():
     data = snapshot()
     labels = {data["films"]["label"], data["series"]["label"], data["grabs"]["label"], data["screen"]["label"]}
     assert labels == {"Films", "Series", "Grabs", "Screen"}
-    assert data["films"]["files"] >= 1 or data["films"]["exists"]
+    assert data["films"]["videos"] >= 1 or data["films"]["files"] >= 1
     ids = {app["id"] for app in data["apps"]}
     assert {"radarr", "sonarr", "qbittorrent", "jellyfin"} <= ids
     for app in data["apps"]:

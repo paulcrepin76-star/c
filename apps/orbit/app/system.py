@@ -126,12 +126,13 @@ def snapshot() -> dict:
     percent = round(100.0 * used / total, 1)
     swap = psutil.swap_memory()
     hostname = settings.host_name
-    try:
-        host_name = (_proc().parent / "etc/hostname").read_text().strip()
-        if host_name:
-            hostname = host_name
-    except OSError:
-        hostname = settings.host_name or socket.gethostname()
+    if hostname in {"", "Unraid"}:
+        try:
+            host_name = (_proc().parent / "etc/hostname").read_text().strip()
+            if host_name:
+                hostname = host_name
+        except OSError:
+            hostname = socket.gethostname()
     cpu_count = os.cpu_count() or psutil.cpu_count() or 1
     try:
         host_cpu = (_proc() / "cpuinfo").read_text()

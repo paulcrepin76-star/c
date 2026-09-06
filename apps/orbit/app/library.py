@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import httpx
 
 from app.catalog import library_apps
@@ -24,22 +26,42 @@ def _probe(url: str) -> str:
         return "down"
 
 
+def _count_path(label: str, path: Path) -> dict:
+    videos = 0
+    files = 0
+    if path.exists():
+        try:
+            for child in _walk_limited(path, max_depth=4, max_files=800):
+                files += 1
+                if child.suffix.lower() in {".mp4", ".mkv", ".avi", ".mov", ".m4v"}:
+                    videos += 1
+        except OSError:
+            pass
+    return {"root": label, "path": str(path), "files": files, "videos": videos, "exists": path.exists()}
+
+
 def _folder_stats(needles: tuple[str, ...]) -> dict:
     mapping = settings.root_map()
+    specific = [n for n in needles if n not in {"library", "media"}]
+    generic = [n for n in needles if n in {"library", "media"}]
+    if specific:
+        for label, path in mapping.items():
+            if not path.exists():
+                continue
+            try:
+                for child in path.iterdir():
+                    if child.is_dir() and any(n in child.name.lower() for n in specific):
+                        return _count_path(label, child)
+            except OSError:
+                continue
+        for label, path in mapping.items():
+            hay = f"{label} {path}".lower()
+            if any(n in hay for n in specific):
+                return _count_path(label, path)
     for label, path in mapping.items():
         hay = f"{label} {path}".lower()
-        if any(needle in hay for needle in needles):
-            videos = 0
-            files = 0
-            if path.exists():
-                try:
-                    for child in _walk_limited(path, max_depth=4, max_files=800):
-                        files += 1
-                        if child.suffix.lower() in {".mp4", ".mkv", ".avi", ".mov", ".m4v"}:
-                            videos += 1
-                except OSError:
-                    pass
-            return {"root": label, "path": str(path), "files": files, "videos": videos, "exists": path.exists()}
+        if any(n in hay for n in generic):
+            return _count_path(label, path)
     return {"root": "", "path": "", "files": 0, "videos": 0, "exists": False}
 
 
