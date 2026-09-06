@@ -71,6 +71,7 @@ One Compose stack, one Postgres, these containers:
 | mealie | 9925 | Recipes |
 | n8n | 5678 | Square / mail / rare portal jobs |
 | metabase | 3001 | Dashboards |
+| grok-bot | 8090 | Grok assistant you text from your phone |
 | postgres | 5433 | Shared database server |
 
 On Unraid (`ssh root@100.116.48.120`) Paperless and Mealie are already running. Install only the missing pieces:
@@ -90,3 +91,30 @@ Open `http://100.116.48.120:8088` for the cellar. This will not start a second P
 5. Drop any PDF you still download by hand into `/mnt/user/documents/invoices-inbox`.
 
 You do **not** put tokens into n8n. n8n only runs the nightly sync after you have connected on that page.
+
+## Text the server from your phone
+
+`grok-bot` puts Grok on the stack and Telegram on your phone. You text it, it answers.
+
+> **How are things?**
+>
+> Today $1,240 on 63 tickets. Month to date $28,400, food 31.4%, wine 26.1%. The prep fridge has been at 46F for two hours — everything else is in range. Three bills still need a category.
+
+> **Install ntfy**
+>
+> I am about to install ntfy. Reply yes to run it, no to drop it.
+
+It reads sales and fridges from resto-core, reads containers and disk from Docker, and installs, restarts, or updates anything on the stack — but only after you reply **yes**, and only for the chat ids you listed.
+
+Two keys and one restart:
+
+```bash
+XAI_API_KEY=xai-...            # console.x.ai
+TELEGRAM_BOT_TOKEN=8123...     # @BotFather in Telegram
+```
+
+```bash
+docker compose up -d --build grok-bot
+```
+
+Telegram polls outbound, so nothing has to be open to the internet. The same assistant is at `http://100.116.48.120:8088/assistant` in a browser. Setup, safety rules, and the full command list: [docs/BOT.md](docs/BOT.md).

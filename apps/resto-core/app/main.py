@@ -9,6 +9,7 @@ from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.api import router as api_router
+from app.assistant import router as assistant_router
 from app.config import settings
 from app.connect_routes import router as connect_router
 from app.db import Base, SessionLocal, engine
@@ -87,6 +88,7 @@ def create_app() -> FastAPI:
     app.state.templates = templates
     app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")
     app.include_router(connect_router)
+    app.include_router(assistant_router)
     app.include_router(web_router)
     app.include_router(api_router)
 

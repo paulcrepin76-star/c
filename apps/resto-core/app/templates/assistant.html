@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Assistant{% endblock %}
+{% block content %}
+<p class="eyebrow">Survey Cafe</p>
+<h1>Assistant</h1>
+<p class="lede">The same assistant you text on Telegram. Ask how the restaurant is doing, ask about the server, or tell it to install an app or update the stack. Anything that changes the server waits for you to reply <b>yes</b>.</p>
+
+{% if not health.online %}
+<div class="flash err">The assistant container is not answering ({{ health.reason }}). Start it with <code>docker compose up -d grok-bot</code>.</div>
+{% elif not health.grok %}
+<div class="flash err">No xAI key yet, so it only answers plain commands. Put <code>XAI_API_KEY</code> in <code>.env</code> and restart <code>grok-bot</code>.</div>
+{% endif %}
+
+<section class="kpis">
+  <article>
+    <span>Assistant</span>
+    <strong>{% if health.online %}Running{% else %}Offline{% endif %}</strong>
+    <em>{{ health.model or 'plain commands only' }}</em>
+  </article>
+  <article>
+    <span>Telegram</span>
+    <strong>
+      {%- if health.telegram and health.telegram.running %}Listening
+      {%- elif health.telegram and health.telegram.enabled %}Starting
+      {%- else %}Not set up{% endif -%}
+    </strong>
+    <em>{{ (health.telegram.paired_chats if health.telegram else 0) }} phone(s) paired</em>
+  </article>
+  <article>
+    <span>Server control</span>
+    <strong>{% if health.docker %}Connected{% else %}No socket{% endif %}</strong>
+    <em>{% if health.confirm_before_changes %}Asks before every change{% else %}Runs changes straight away{% endif %}</em>
+  </article>
+</section>
+
+<div class="card">
+  <div class="chat-log" id="chat-log" aria-live="polite">
+    <p class="chat-msg bot">Ask me how things are, or tell me what to do on the server.</p>
+  </div>
+  <form class="chat-form" id="chat-form" autocomplete="off">
+    <input type="text" id="chat-input" name="message" placeholder="How are things today?" required>
+    <button type="submit" class="btn" id="chat-send">Ask</button>
+  </form>
+  <p class="chat-examples">
+    {% for example in examples %}<button type="button" class="chip" data-ask="{{ example }}">{{ example }}</button>{% endfor %}
+  </p>
+</div>
+
+<div class="card">
+  <h2>Text it from your phone</h2>
+  <ol class="plain">
+    <li>Open Telegram, message <b>@BotFather</b>, send <code>/newbot</code>, and copy the token.</li>
+    <li>Put <code>TELEGRAM_BOT_TOKEN</code> in <code>.env</code> on Unraid, then <code>docker compose up -d grok-bot</code>.</li>
+    <li>Text your new bot. It answers with your chat id. Put that id in <code>TELEGRAM_ALLOWED_CHAT_IDS</code> and restart it once more.</li>
+  </ol>
+  <p class="muted">The server polls Telegram outbound, so nothing has to be open to the internet. Full notes in <code>docs/BOT.md</code>.</p>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="/static/assistant.js?v=1"></script>
+{% endblock %}

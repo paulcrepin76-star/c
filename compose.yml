@@ -13,6 +13,7 @@
 #   3001  metabase     dashboards
 #   5678  n8n          Square / Mealie / email glue
 #   5433  postgres     optional, for a GUI client
+#   8090  grok-bot     Telegram assistant that answers about the server
 #   8123  homeassistant  fridge sensors
 #   8971  frigate        cameras
 #
@@ -240,6 +241,7 @@ services:
       USDA_MMN_API_KEY: ${USDA_MMN_API_KEY:-}
       COLLECTOR_URL: http://price-collector:8099
       COLLECTOR_VNC_URL: ${COLLECTOR_VNC_URL:-http://100.116.48.120:7900}
+      BOT_URL: http://grok-bot:8090
       FRIGATE_PUBLIC_URL: ${FRIGATE_URL:-https://100.116.48.120:8971}
       FRIGATE_INTERNAL_URL: ${FRIGATE_INTERNAL_URL:-http://resto-frigate:5000}
     healthcheck:
@@ -279,6 +281,45 @@ services:
       timeout: 5s
       retries: 8
       start_period: 40s
+    networks: [resto]
+
+  grok-bot:
+    build:
+      context: ./apps/grok-bot
+    image: resto-grok-bot:local
+    container_name: resto-grok-bot
+    restart: unless-stopped
+    ports:
+      - "8090:8090"
+    volumes:
+      - ${APPDATA:-./appdata}/grok-bot:/data
+      # The bot restarts, installs, and updates containers for you.
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Same path inside and out, so compose resolves ./apps and ./house the same way.
+      - ${REPO_DIR:-/mnt/user/appdata/resto}:${REPO_DIR:-/mnt/user/appdata/resto}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      TZ: ${TZ}
+      XAI_API_KEY: ${XAI_API_KEY:-}
+      GROK_MODEL: ${GROK_MODEL:-grok-4.6}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_ALLOWED_CHAT_IDS: ${TELEGRAM_ALLOWED_CHAT_IDS:-}
+      RESTO_URL: http://resto-core:8080
+      RESTO_API_KEY: ${RESTO_API_KEY}
+      PUBLIC_URL: ${RESTO_URL:-http://100.116.48.120:8088}
+      REPO_DIR: ${REPO_DIR:-/mnt/user/appdata/resto}
+      APPDATA_DIR: ${APPDATA:-/mnt/user/appdata/resto}
+      COMPOSE_PROJECT: resto
+      DATA_DIR: /data
+      REQUIRE_CONFIRM: ${BOT_REQUIRE_CONFIRM:-true}
+      ALLOW_CUSTOM_IMAGES: ${BOT_ALLOW_CUSTOM_IMAGES:-true}
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8090/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
     networks: [resto]
 
   mosquitto:

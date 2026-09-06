@@ -1,5 +1,6 @@
 .env
 .bin/
+compose.extra.yml
 .venv/
 venv/
 __pycache__/

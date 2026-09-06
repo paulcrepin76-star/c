@@ -12,13 +12,19 @@ if [ -f "$ROOT/.env" ]; then
   set +a
 fi
 
+# Apps the assistant installed live in compose.extra.yml. Keep them in the project.
+FILES=(-f compose.yml)
+if [ -f "$ROOT/compose.extra.yml" ]; then
+  FILES+=(-f compose.extra.yml)
+fi
+
 compose() {
   if docker compose version >/dev/null 2>&1; then
-    docker compose "$@"
+    docker compose "${FILES[@]}" "$@"
     return
   fi
   if command -v docker-compose >/dev/null 2>&1; then
-    docker-compose "$@"
+    docker-compose "${FILES[@]}" "$@"
     return
   fi
 
@@ -29,7 +35,7 @@ compose() {
     curl -fsSL -o "$BIN" "https://github.com/docker/compose/releases/download/v2.32.4/docker-compose-linux-x86_64"
     chmod +x "$BIN"
   fi
-  "$BIN" "$@"
+  "$BIN" "${FILES[@]}" "$@"
 }
 
 compose up -d --build

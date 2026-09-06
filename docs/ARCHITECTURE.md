@@ -13,6 +13,7 @@ Each tool does one job. Nothing scrapes a website unless email and APIs have fai
 | resto-core | Products, wine, inventory, costing, supplier price comparison | Document vault |
 | Postgres | Source of truth for numbers | PDFs |
 | Metabase | Charts on a screen | Data entry |
+| grok-bot | Answering the owner's texts and running server jobs he asks for | Deciding anything on its own |
 
 ## Why not one Invoice Fetcher that logs into everything
 
@@ -77,8 +78,22 @@ The current supplier is the one you bought the most volume from recently, not th
 
 Promo emails and ntfy alerts come after this history exists. Website catalog scraping is last: logins, CAPTCHA and 2FA break it.
 
+## The assistant
+
+`grok-bot` is the only container that holds the Docker socket, because it is the only one that installs, restarts, and updates things. It reads restaurant numbers through the same `X-API-Key` API n8n uses (`GET /api/status`), so it has no database access of its own.
+
+Three gates sit in front of that power, in this order:
+
+1. **Who** — Telegram chat id must be in `TELEGRAM_ALLOWED_CHAT_IDS`. An empty list means the bot answers nobody.
+2. **What** — Grok can only call the tools in `apps/grok-bot/app/tools.py`. There is no shell tool and no arbitrary SQL.
+3. **Yes** — every tool that changes the server stops and waits for the owner to reply. Grok never gets to run one directly.
+
+Installed apps are written to `compose.extra.yml`, not created with `docker run`, so the server stays a compose file you can read.
+
+Details and the phone setup: [BOT.md](BOT.md).
+
 ## Secrets
 
-`.env` on the Unraid share holds Postgres, Paperless, n8n and resto-core keys.
+`.env` on the Unraid share holds Postgres, Paperless, n8n and resto-core keys, plus `XAI_API_KEY` and `TELEGRAM_BOT_TOKEN` for the assistant.
 
 Square / mailbox / portal passwords stay in n8n credentials or in `.env` on the server. They are not in this repository and they should not be pasted into a chat.
