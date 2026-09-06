@@ -5,16 +5,17 @@
 It uses **Grok** (xAI) to understand what you wrote, and **Telegram** to carry the message. Telegram is the important half: the server polls out to `api.telegram.org`, so Unraid needs no open port, no public URL, and no reverse proxy. Nothing on the internet can reach the server through this.
 
 ```text
-   your phone                  the internet                 Unraid
-  ┌──────────┐   message   ┌──────────────────┐  outbound  ┌───────────────┐
-  │ Telegram │ ──────────► │ api.telegram.org │ ◄───────── │   grok-bot    │
-  └──────────┘             └──────────────────┘  long poll │  (port 8090)  │
-                                                            │      │        │
-                                    ┌───────────────────────┘      │        │
-                              api.x.ai (Grok decides what to do)    │        │
-                                                                    ▼        │
-                                             docker.sock · compose · resto-core
-                                                            └───────────────┘
+  your phone, Telegram app
+        │  message
+        ▼
+  api.telegram.org                the only piece on the internet
+        ▲
+        │  long poll, outbound only — nothing is open on Unraid
+        │
+  grok-bot, port 8090, on the stack
+        ├──► api.x.ai         Grok reads the message and picks a tool
+        ├──► resto-core       sales, food and wine cost, fridges
+        └──► docker.sock      containers: state, logs, restart, install, update
 ```
 
 ## Set it up once
@@ -28,7 +29,17 @@ XAI_API_KEY=xai-...
 GROK_MODEL=grok-4.6
 ```
 
-Without a key the bot still works, but only with the plain commands at the bottom of this page. With a key you can write it like a person: *"is anything broken tonight?"*, *"why did n8n stop?"*, *"mets à jour tout"*.
+Without a key the bot still works, but only with the commands listed at the bottom of this page. With a key you can write it like a person: *"is anything broken tonight?"*, *"why did n8n stop?"*, *"mets à jour tout"*.
+
+Any OpenAI-compatible endpoint works, so you can also run this with no cloud at all. Text `install ollama`, pull a model, and point the bot at it:
+
+```bash
+XAI_BASE_URL=http://ollama:11434/v1
+XAI_API_KEY=ollama
+GROK_MODEL=qwen2.5:7b
+```
+
+A small local model is slower and less reliable at picking the right tool than Grok. The short commands below do not go through a model at all, so they behave the same either way.
 
 ### 2. A Telegram bot
 
