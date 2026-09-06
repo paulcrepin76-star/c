@@ -255,14 +255,27 @@ function bind() {
       loadFiles(state.files.root, open.dataset.open);
     }
   });
-  $("mkdir-btn").addEventListener("click", () => {
-    const name = prompt("Folder name");
-    if (!name) return;
+  async function makeFolder() {
+    const name = $("mkdir-name").value.trim();
+    if (!name || !state.files.root) return;
     const body = new FormData();
     body.set("root", state.files.root);
     body.set("path", state.files.path || "");
     body.set("name", name);
-    fetch("/api/files/mkdir", { method: "POST", body }).then((r) => r.json()).then(renderFiles);
+    const res = await fetch("/api/files/mkdir", { method: "POST", body });
+    if (!res.ok) {
+      $("file-list").innerHTML = `<p class="empty">Could not create that folder.</p>`;
+      return;
+    }
+    $("mkdir-name").value = "";
+    renderFiles(await res.json());
+  }
+  $("mkdir-btn").addEventListener("click", makeFolder);
+  $("mkdir-name").addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      makeFolder();
+    }
   });
   $("upload-input").addEventListener("change", (event) => {
     const file = event.target.files[0];

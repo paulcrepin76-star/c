@@ -366,6 +366,17 @@ h1 {
   align-items: center;
   gap: 6px;
 }
+.mkdir-input {
+  width: 160px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+}
+.mkdir-input:focus { outline: 0; border-color: rgba(212, 255, 74, 0.4); }
 .ghost svg { width: 16px; height: 16px; }
 .file-upload input { display: none; }
 .crumbs { padding: 12px 4px; color: var(--muted); flex-wrap: wrap; }

@@ -15,6 +15,7 @@ def test_home_is_one_page_for_vitals_fleet_library_and_files():
         assert 'id="files"' in text
         assert "CPU" in text
         assert "Memory" in text
+        assert 'id="mkdir-name"' in text
         assert "Films" in text
         assert "Series" in text
         assert "Grabs" in text
