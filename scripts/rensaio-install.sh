@@ -55,15 +55,25 @@ for _ in $(seq 1 90); do
 done
 echo "rensaio_http=$code"
 if [ "$code" = "200" ] && command -v jq >/dev/null 2>&1; then
-  curl -sS --max-time 20 -X POST http://127.0.0.1:9833/api/setup/install-extensions >/dev/null || true
   raw="$(mktemp)"
   out="$(mktemp)"
   trap 'rm -f "$raw" "$out"' RETURN
   curl -sS --max-time 20 http://127.0.0.1:9833/api/settings > "$raw"
-  jq '.preferredLanguages = ["en","fr"] | .nsfwVisibility = "Show"' "$raw" > "$out"
+  # Skip the import wizard so it cannot rewrite Kavita folders. Search/subscribe instead.
+  jq '.preferredLanguages = ["en","fr"] | .nsfwVisibility = "Show" | .isWizardSetupComplete = true' "$raw" > "$out"
   curl -sS --max-time 20 -X PUT -H "Content-Type: application/json" --data-binary @"$out" \
     http://127.0.0.1:9833/api/settings >/dev/null || true
-  echo "preferred_languages=en,fr nsfw=Show"
+  echo "preferred_languages=en,fr nsfw=Show wizard=complete"
+  # Wizard "install-extensions" only covers already-imported series. Install search sources.
+  for pkg in \
+    eu.kanade.tachiyomi.extension.all.mangadex \
+    eu.kanade.tachiyomi.extension.all.mangafire \
+    eu.kanade.tachiyomi.extension.all.mangaplus \
+    eu.kanade.tachiyomi.extension.en.weebcentral
+  do
+    curl -sS --max-time 180 -o /dev/null -w "install_${pkg##*.}=%{http_code}\n" \
+      -X POST "http://127.0.0.1:9833/api/provider/install/${pkg}" || true
+  done
 fi
 echo "UI: http://100.116.48.120:9833"
 echo "Series path: $MANGA -> /series"

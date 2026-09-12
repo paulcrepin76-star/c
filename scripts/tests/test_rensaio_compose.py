@@ -23,5 +23,18 @@ class RensaioComposeTests(unittest.TestCase):
         self.assertNotIn("/comics", self.text)
 
 
+class RensaioInstallScriptTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.text = (Path(__file__).resolve().parents[1] / "rensaio-install.sh").read_text(
+            encoding="utf-8"
+        )
+
+    def test_installs_search_sources_and_skips_wizard_import(self) -> None:
+        self.assertIn("eu.kanade.tachiyomi.extension.all.mangadex", self.text)
+        self.assertIn("eu.kanade.tachiyomi.extension.all.mangafire", self.text)
+        self.assertIn("isWizardSetupComplete = true", self.text)
+        self.assertIn("nsfwVisibility = \"Show\"", self.text)
+
+
 if __name__ == "__main__":
     unittest.main()
