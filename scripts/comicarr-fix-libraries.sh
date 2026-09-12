@@ -5,6 +5,8 @@
 set -euo pipefail
 
 CFG_HOST=/mnt/user/appdata/comicarr/config/comicarr/config.ini
+HERE="$(cd "$(dirname "$0")" && pwd)"
+INDEXER="$HERE/comicarr_index.py"
 
 if [ ! -d /mnt/user ]; then
   echo "Run this on Unraid (root@lerouxfamily), not on the Mac."
@@ -14,81 +16,21 @@ if ! docker inspect comicarr >/dev/null 2>&1; then
   echo "comicarr container is not installed."
   exit 1
 fi
+if [ ! -f "$INDEXER" ]; then
+  echo "Missing $INDEXER"
+  exit 1
+fi
 
 docker start comicarr >/dev/null 2>&1 || true
 sleep 2
 
-docker exec -i comicarr python3 - << 'PY'
-from pathlib import Path
-import os
-
-EXTS = {".cbz", ".cbr", ".cb7", ".cbt", ".zip", ".rar", ".7z", ".epub", ".pdf"}
-
-
-def kids(path: Path):
-    dirs, files = [], []
-    try:
-        entries = list(path.iterdir())
-    except OSError:
-        return dirs, files
-    for item in entries:
-        if item.name.startswith("."):
-            continue
-        if item.is_dir() and not item.is_symlink():
-            dirs.append(item)
-        elif item.is_file() and item.suffix.lower() in EXTS:
-            files.append(item)
-    return dirs, files
-
-
-def collect(path: Path, acc: list) -> None:
-    dirs, files = kids(path)
-    if files and len(dirs) <= 1:
-        acc.append(path)
-        return
-    if files and len(dirs) >= 2:
-        for child in dirs:
-            collect(child, acc)
-        return
-    if not dirs:
-        return
-    if len(dirs) == 1:
-        collect(dirs[0], acc)
-        return
-    for child in dirs:
-        collect(child, acc)
-
-
-def index_root(root: Path, scan: Path) -> list:
-    if scan.exists():
-        for old in scan.iterdir():
-            old.unlink()
-    scan.mkdir(parents=True, exist_ok=True)
-    series: list[Path] = []
-    collect(root, series)
-    series = [path for path in series if scan not in path.parents and path != scan]
-    created = []
-    for src in series:
-        label = " - ".join(src.relative_to(root).parts)[:180]
-        dest = scan / label
-        n = 2
-        while dest.exists():
-            dest = scan / f"{label} ({n})"
-            n += 1
-        dest.symlink_to(Path(os.path.relpath(src, dest.parent)))
-        created.append(label)
-    return created
-
-
-comics = index_root(Path("/comics"), Path("/comics/.comicarr-scan"))
-manga = index_root(Path("/manga"), Path("/manga/.comicarr-scan"))
-print(f"COMICS {len(comics)}")
-print(f"MANGA {len(manga)}")
-PY
+docker cp "$INDEXER" comicarr:/tmp/comicarr_index.py
+docker exec comicarr /opt/comicarr/.venv/bin/python /tmp/comicarr_index.py \
+  --comics /comics --manga /manga
 
 chown -R 99:100 /mnt/user/media/book/comics/.comicarr-scan /mnt/user/media/book/manga/.comicarr-scan 2>/dev/null || true
-COMIC_COUNT="$(find /mnt/user/media/book/comics/.comicarr-scan -mindepth 1 -maxdepth 1 | wc -l | tr -d ' ')"
-MANGA_COUNT="$(find /mnt/user/media/book/manga/.comicarr-scan -mindepth 1 -maxdepth 1 | wc -l | tr -d ' ')"
+COMIC_COUNT="$(find /mnt/user/media/book/comics/.comicarr-scan -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')"
+MANGA_COUNT="$(find /mnt/user/media/book/manga/.comicarr-scan -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')"
 
 if [ ! -f "$CFG_HOST" ]; then
   echo "config.ini not found at $CFG_HOST"
@@ -96,7 +38,7 @@ if [ ! -f "$CFG_HOST" ]; then
 fi
 cp -a "$CFG_HOST" "$CFG_HOST.bak.$(date +%F-%H%M%S)"
 
-docker exec -i comicarr python3 - << 'PY'
+docker exec comicarr /opt/comicarr/.venv/bin/python - << 'PY'
 from configparser import ConfigParser
 from pathlib import Path
 
@@ -133,9 +75,13 @@ PY
 
 mkdir -p /mnt/user/downloads/inbox /mnt/user/downloads/complete
 chown -R 99:100 /mnt/user/downloads/inbox /mnt/user/downloads/complete
-cd /mnt/user/appdata/comicarr
-docker compose up -d
-docker compose restart
+if [ -f /mnt/user/appdata/comicarr/compose.yml ]; then
+  cd /mnt/user/appdata/comicarr
+  docker compose up -d
+  docker compose restart
+else
+  docker restart comicarr
+fi
 sleep 3
 echo
 echo "Comic series indexed: $COMIC_COUNT"
