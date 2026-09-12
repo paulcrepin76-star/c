@@ -52,6 +52,16 @@ class MangaSearchHelperTests(unittest.TestCase):
         self.assertEqual(manga.parse_chapter_number("001"), 1.0)
         self.assertIsNone(manga.parse_chapter_number(""))
 
+    def test_erotica_rating_is_added_once(self) -> None:
+        self.assertEqual(
+            manga.with_erotica_rating("safe,suggestive"),
+            "safe,suggestive,erotica",
+        )
+        self.assertEqual(
+            manga.with_erotica_rating("safe,suggestive,erotica"),
+            "safe,suggestive,erotica",
+        )
+
     def test_merge_feed_keeps_earliest_date_and_first_volume(self) -> None:
         store: dict[float, dict] = {}
         manga.merge_feed_chapter(store, {"chapter": "1", "publishAt": "1999-09-21", "volume": "1"})

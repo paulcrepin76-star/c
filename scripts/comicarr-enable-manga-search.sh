@@ -21,7 +21,26 @@ fi
 mkdir -p "/mnt/user/media/book/manga/Naruto (1999)"
 docker start comicarr >/dev/null 2>&1 || true
 docker cp "$SCRIPT" comicarr:/tmp/comicarr_enable_manga_search.py
-docker exec comicarr /opt/comicarr/.venv/bin/python /tmp/comicarr_enable_manga_search.py "$@"
+
+verify_args=(--verify-only)
+if [[ " $* " == *" --interactive "* ]]; then
+  verify_args+=(--interactive)
+fi
+
+if [[ " $* " == *" --verify-only "* ]]; then
+  docker exec comicarr /opt/comicarr/.venv/bin/python /tmp/comicarr_enable_manga_search.py "${verify_args[@]}"
+else
+  docker exec comicarr /opt/comicarr/.venv/bin/python /tmp/comicarr_enable_manga_search.py --apply-only
+  docker restart comicarr >/dev/null
+  for _ in $(seq 1 40); do
+    code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 2 http://127.0.0.1:8090/ || true)"
+    if [ "$code" = "200" ]; then
+      break
+    fi
+    sleep 1
+  done
+  docker exec comicarr /opt/comicarr/.venv/bin/python /tmp/comicarr_enable_manga_search.py "${verify_args[@]}"
+fi
 docker exec comicarr rm -f /tmp/comicarr_enable_manga_search.py
 
 if [ ! -f "$PROWLARR_CFG" ]; then

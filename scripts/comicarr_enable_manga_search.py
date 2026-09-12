@@ -40,7 +40,7 @@ SERIES = (
     },
     {
         "short_name": "MPD Psycho",
-        "queries": ("MPD Psycho", "Otsuka Eiji"),
+        "queries": ("MPD Psycho",),
         "comic_id": "md-239a9b85-10d8-4d54-8b76-9a679a1ec6d9",
         "mangadex_id": "239a9b85-10d8-4d54-8b76-9a679a1ec6d9",
         "folder": "/manga/MPD Psycho",
@@ -79,7 +79,6 @@ DB = Path("/config/comicarr/comicarr.db")
 MANGADEX = "https://api.mangadex.org"
 USER_AGENT = "ComicarrHomelab/1.0 (manga-search)"
 CONTENT_RATINGS = ("safe", "suggestive", "erotica", "pornographic")
-LANGUAGES = ("en", "fr")
 
 
 def parse_chapter_number(raw) -> float | None:
@@ -110,6 +109,33 @@ def fallback_series_date(year) -> str:
     if parsed < 1950 or parsed > datetime.now().year:
         parsed = 2000
     return f"{parsed}-01-01"
+
+
+def with_erotica_rating(current: str | None) -> str:
+    """MPD Psycho is erotica on MangaDex; safe+suggestive search cannot see it."""
+
+    seen = {part.strip().lower() for part in str(current or "safe,suggestive").split(",") if part.strip()}
+    seen.add("erotica")
+    order = ("safe", "suggestive", "erotica", "pornographic")
+    return ",".join([name for name in order if name in seen] + sorted(seen.difference(order)))
+
+
+def enable_erotica_rating(config_path: Path) -> bool:
+    from configparser import ConfigParser
+
+    cfg = ConfigParser()
+    cfg.optionxform = str
+    cfg.read(config_path)
+    if not cfg.has_section("MangaDex"):
+        cfg.add_section("MangaDex")
+    current = cfg.get("MangaDex", "mangadex_content_rating", fallback="safe,suggestive")
+    updated = with_erotica_rating(current)
+    if updated == current:
+        return False
+    cfg.set("MangaDex", "mangadex_content_rating", updated)
+    with config_path.open("w") as fh:
+        cfg.write(fh)
+    return True
 
 
 def priority_alternate_search(existing: str | None, short_name: str) -> str:
@@ -196,15 +222,13 @@ def fetch_mangadex_chapters(manga_id: str) -> dict[float, dict]:
     offset = 0
     limit = 100
     while True:
+        # includeFuturePublishAt=1 makes MangaDex return total=0.
         params = [
             ("limit", str(limit)),
             ("offset", str(offset)),
-            ("includeFuturePublishAt", "1"),
             ("includeEmptyPages", "0"),
             ("order[chapter]", "asc"),
         ]
-        for lang in LANGUAGES:
-            params.append(("translatedLanguage[]", lang))
         for rating in CONTENT_RATINGS:
             params.append(("contentRating[]", rating))
         url = f"{MANGADEX}/manga/{manga_id}/feed?" + urllib.parse.urlencode(params)
@@ -365,7 +389,8 @@ def print_report(applied: list[dict], searches: list[dict], interactive: list[di
             f"volumes={row['volumed']} feed={row['feed']} have={row['have']}/{row['total']} "
             f"folder_created={row['folder_created']}"
         )
-    print("mangadex_search")
+    if searches:
+        print("mangadex_search")
     for row in searches:
         for hit in row["hits"]:
             if hit.get("ok"):
@@ -387,12 +412,16 @@ def print_report(applied: list[dict], searches: list[dict], interactive: list[di
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--db", default=str(DB))
+    parser.add_argument("--config", default="/config/comicarr/config.ini")
     parser.add_argument("--verify-only", action="store_true")
+    parser.add_argument("--apply-only", action="store_true")
     parser.add_argument("--interactive", action="store_true")
     parser.add_argument("--interactive-timeout", type=int, default=240)
     args = parser.parse_args()
 
     if not args.verify_only:
+        if enable_erotica_rating(Path(args.config)):
+            print("config mangadex_content_rating now includes erotica")
         con = sqlite3.connect(args.db)
         con.row_factory = sqlite3.Row
         applied = []
@@ -433,6 +462,9 @@ def main() -> int:
         finally:
             con.close()
 
+    if args.apply_only:
+        print_report(applied, [], None)
+        return 0
     searches = [verify_metadata_search(series) for series in SERIES]
     interactive = None
     if args.interactive:
