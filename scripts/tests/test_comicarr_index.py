@@ -60,6 +60,11 @@ class ComicarrIndexTests(unittest.TestCase):
         self.assertEqual(first, "Batman")
         self.assertEqual(second, "Batman [dc rebirth]")
 
+    def test_manga_labels_drop_trailing_years(self) -> None:
+        used: set[str] = set()
+        label = idx.series_label(Path("/manga/Shueisha/Bleach (2002)"), Path("/manga"), used, strip_year=True)
+        self.assertEqual(label, "Bleach")
+
 
 if __name__ == "__main__":
     unittest.main()

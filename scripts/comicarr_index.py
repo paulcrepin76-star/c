@@ -12,8 +12,11 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import shutil
 from pathlib import Path
+
+YEAR_SUFFIX = re.compile(r"\s*\(\d{4}\)\s*$")
 
 EXTS = {".cbz", ".cbr", ".cb7", ".cbt", ".zip", ".rar", ".7z", ".epub", ".pdf"}
 SOURCE_MARKER = ".source"
@@ -73,9 +76,14 @@ def collect(path: Path, acc: list[Path] | None = None) -> list[Path]:
     return acc
 
 
-def series_label(src: Path, root: Path, used: set[str]) -> str:
+def series_label(src: Path, root: Path, used: set[str], strip_year: bool = False) -> str:
     leaf = src.name.strip() or "series"
-    leaf = leaf.replace("/", "-").replace("\x00", "")[:180]
+    leaf = leaf.replace("/", "-").replace("\x00", "")
+    if strip_year:
+        stripped = YEAR_SUFFIX.sub("", leaf).strip()
+        if stripped:
+            leaf = stripped
+    leaf = leaf[:180]
     label = leaf
     if label in used:
         parent = src.parent.name if src.parent != root else ""
@@ -148,7 +156,7 @@ def clear_scan(scan: Path) -> None:
             shutil.rmtree(old)
 
 
-def index_root(root: Path, scan: Path) -> dict:
+def index_root(root: Path, scan: Path, strip_year: bool = False) -> dict:
     root = root.resolve()
     scan = scan.resolve() if scan.exists() else scan
     series = [
@@ -162,7 +170,7 @@ def index_root(root: Path, scan: Path) -> dict:
     created: list[dict] = []
     files = 0
     for src in series:
-        label = series_label(src, root, used)
+        label = series_label(src, root, used, strip_year=strip_year)
         dest = scan / label
         linked = link_series(src, dest)
         files += linked
@@ -184,7 +192,9 @@ def main(argv: list[str] | None = None) -> int:
     manga_scan = args.manga_scan or (manga_root / SCAN_DIR_NAME)
 
     comics = index_root(comics_root, comics_scan) if comics_root.is_dir() else {"series": 0, "files": 0}
-    manga = index_root(manga_root, manga_scan) if manga_root.is_dir() else {"series": 0, "files": 0}
+    manga = (
+        index_root(manga_root, manga_scan, strip_year=True) if manga_root.is_dir() else {"series": 0, "files": 0}
+    )
     print(f"COMICS {comics['series']} series {comics['files']} files")
     print(f"MANGA {manga['series']} series {manga['files']} files")
     return 0
