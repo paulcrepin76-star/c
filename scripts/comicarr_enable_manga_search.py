@@ -139,20 +139,15 @@ def enable_erotica_rating(config_path: Path) -> bool:
 
 
 def priority_alternate_search(existing: str | None, short_name: str) -> str:
-    """Put ``!!short_name`` first so Prowlarr is queried with the English title."""
+    """Use only the short English title.
 
-    seen: set[str] = set()
-    others: list[str] = []
-    for part in str(existing or "").split("##"):
-        name = part.strip()
-        if name.startswith("!!"):
-            name = name[2:].strip()
-        key = name.casefold()
-        if not name or key in seen or key == short_name.casefold():
-            continue
-        seen.add(key)
-        others.append(name)
-    return "##".join([f"!!{short_name}"] + others)
+    MangaDex fills AlternateSearch with Japanese/Chinese/Russian names.
+    Comicarr then queries every alias on every indexer, so Interactive Search
+    times out before Nyaa can return the English pack.
+    """
+
+    del existing
+    return f"!!{short_name}"
 
 
 def merge_feed_chapter(store: dict[float, dict], attrs: dict) -> None:
@@ -351,6 +346,24 @@ def candidate_title(candidate: dict) -> str:
     return "release"
 
 
+def wait_for_idle_searches(db_path: str, timeout: int = 180) -> None:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        con = sqlite3.connect(db_path)
+        try:
+            running = con.execute(
+                "SELECT COUNT(*) FROM interactive_search_sessions "
+                "WHERE state IN ('queued', 'running')"
+            ).fetchone()[0]
+        except sqlite3.OperationalError:
+            running = 0
+        finally:
+            con.close()
+        if running == 0:
+            return
+        time.sleep(2)
+
+
 def verify_interactive_search(series: dict, timeout: int = 240) -> dict:
     status, started = api(
         "POST",
@@ -377,7 +390,7 @@ def verify_interactive_search(series: dict, timeout: int = 240) -> dict:
     titles = [candidate_title(item) for item in (last.get("candidates") or [])[:8]]
     return {
         "short_name": series["short_name"],
-        "ok": bool(last.get("candidates")) and last.get("state") == "completed",
+        "ok": bool(last.get("candidates")) and last.get("state") in {"complete", "completed"},
         "state": last.get("state"),
         "candidates": last.get("candidate_count") or len(last.get("candidates") or []),
         "titles": titles,
@@ -408,12 +421,15 @@ def print_report(applied: list[dict], searches: list[dict], interactive: list[di
         return
     print("interactive_search")
     for row in interactive:
-        if row.get("ok"):
-            print(f"  {row['short_name']}: {row['candidates']} releases")
-            for title in row.get("titles") or []:
-                print(f"    - {title}")
-        else:
-            print(f"  {row['short_name']}: FAIL {row.get('error') or row.get('state')} candidates={row.get('candidates', 0)}")
+        label = "ok" if row.get("ok") else "FAIL"
+        print(
+            f"  {row['short_name']}: {label} state={row.get('state') or row.get('error')} "
+            f"candidates={row.get('candidates', 0)}"
+        )
+        for title in row.get("titles") or []:
+            print(f"    - {title}")
+        for failure in row.get("failures") or []:
+            print(f"    ! {failure.get('provider')} {failure.get('code')}")
 
 
 def main() -> int:
@@ -424,7 +440,11 @@ def main() -> int:
     parser.add_argument("--apply-only", action="store_true")
     parser.add_argument("--interactive", action="store_true")
     parser.add_argument("--interactive-timeout", type=int, default=240)
+    parser.add_argument("--only", action="append", default=[])
     args = parser.parse_args()
+    selected = [series for series in SERIES if not args.only or series["short_name"] in args.only]
+    if not selected:
+        raise SystemExit("no matching --only series")
 
     if not args.verify_only:
         if enable_erotica_rating(Path(args.config)):
@@ -433,7 +453,7 @@ def main() -> int:
         con.row_factory = sqlite3.Row
         applied = []
         try:
-            for series in SERIES:
+            for series in selected:
                 print(f"mangadex_feed {series['short_name']}", flush=True)
                 feed = fetch_mangadex_chapters(series["mangadex_id"])
                 applied.append(apply_series(con, series, feed))
@@ -445,7 +465,7 @@ def main() -> int:
         con = sqlite3.connect(args.db)
         con.row_factory = sqlite3.Row
         try:
-            for series in SERIES:
+            for series in selected:
                 row = con.execute(
                     "SELECT ComicName, Have, Total FROM comics WHERE ComicID=?",
                     (series["comic_id"],),
@@ -472,10 +492,13 @@ def main() -> int:
     if args.apply_only:
         print_report(applied, [], None)
         return 0
-    searches = [verify_metadata_search(series) for series in SERIES]
+    searches = [verify_metadata_search(series) for series in selected]
     interactive = None
     if args.interactive:
-        interactive = [verify_interactive_search(series, timeout=args.interactive_timeout) for series in SERIES]
+        interactive = []
+        for series in selected:
+            wait_for_idle_searches(args.db)
+            interactive.append(verify_interactive_search(series, timeout=args.interactive_timeout))
     print_report(applied, searches, interactive)
     search_ok = all(any(hit.get("ok") for hit in row["hits"]) for row in searches)
     interactive_ok = interactive is None or all(row.get("ok") for row in interactive)

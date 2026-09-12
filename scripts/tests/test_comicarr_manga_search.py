@@ -11,25 +11,20 @@ import comicarr_enable_manga_search as manga
 
 
 class MangaSearchHelperTests(unittest.TestCase):
-    def test_priority_alias_goes_first_and_dedupes(self) -> None:
+    def test_priority_alias_drops_foreign_titles(self) -> None:
         existing = "ワンピース##One Piece. Большой куш##One Piece"
-        self.assertEqual(
-            manga.priority_alternate_search(existing, "One Piece"),
-            "!!One Piece##ワンピース##One Piece. Большой куш",
-        )
+        self.assertEqual(manga.priority_alternate_search(existing, "One Piece"), "!!One Piece")
 
     def test_priority_alias_replaces_previous_bang_prefix(self) -> None:
         existing = "!!古い名前##Bleach"
-        self.assertEqual(
-            manga.priority_alternate_search(existing, "Bleach"),
-            "!!Bleach##古い名前",
-        )
+        self.assertEqual(manga.priority_alternate_search(existing, "Bleach"), "!!Bleach")
 
     def test_shangri_short_name_is_not_the_japanese_title(self) -> None:
         existing = "シャングリラ・フロンティア～クソゲーハンター、神ゲーに挑まんとす～"
-        result = manga.priority_alternate_search(existing, "Shangri-La Frontier")
-        self.assertTrue(result.startswith("!!Shangri-La Frontier##"))
-        self.assertIn("シャングリラ", result)
+        self.assertEqual(
+            manga.priority_alternate_search(existing, "Shangri-La Frontier"),
+            "!!Shangri-La Frontier",
+        )
 
     def test_chapter_date_prefers_publish_at(self) -> None:
         self.assertEqual(
