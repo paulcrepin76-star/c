@@ -9,6 +9,7 @@ test-comics:
 	python3 scripts/tests/test_comicarr_index.py
 	python3 scripts/tests/test_kavita_libraries.py
 	python3 scripts/tests/test_comicarr_qbit.py
+	python3 scripts/tests/test_manga_parser_titles.py
 
 setup:
 	chmod +x scripts/*.sh
