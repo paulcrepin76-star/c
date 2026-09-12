@@ -37,12 +37,29 @@ bash scripts/comicarr-qbittorrent.sh
 Then open a manga → Interactive Search. Packs need **Allow packs** on that
 series. Do not point Comicarr at the whole Whatbox Downloads folder.
 
+Comicarr will not find Bleach, MPD Psycho, Naruto, One Piece, or
+Shangri-La Frontier until missing chapters are **Wanted** and have a date.
+MangaDex add also leaves Shangri-La Frontier under its full Japanese title,
+which Nyaa does not index. Re-apply search on Unraid with:
+
+```bash
+ssh root@100.116.48.120
+cd /mnt/user/appdata/resto
+bash scripts/comicarr-enable-manga-search.sh --interactive
+```
+
+That backfills MangaDex dates, marks leftover chapters Wanted, turns on
+**Allow packs**, and puts a short English `!!` alias first (`Shangri-La
+Frontier`, `Bleach`, …). Then Add Series search and Interactive Search can
+see all five. Have counts stay low until files exist: Bleach and One Piece
+on disk are volumes, Naruto has no files yet, Shangri-La has v21 only.
+
 MPD Psycho files use titles after the chapter number (`Vol.3 Ch.13 - …`,
 `Chapter 100_ …`). Comicarr’s stock parser stopped at the number, so the
 series showed ~90 of 153 files. The patched parser plus
 `scripts/comicarr_rematch_manga.py` rematch the folder at `/manga/MPD Psycho`.
-MangaDex still lists 156 chapters; 148–156 are skipped because those files
-are not on disk.
+MangaDex still lists 156 chapters; 148–156 stay missing on disk but are
+Wanted so Interactive Search can grab them.
 
 Open Kavita to read the folders that are already on disk. Kapowarr and
 Comicarr are grabbers; they will never list 600 imprint folders the way a
