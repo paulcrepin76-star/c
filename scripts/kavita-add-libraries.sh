@@ -90,6 +90,7 @@ EXCLUDES="$(jq -c '.exclude_patterns' "$CATALOG")"
 METADATA_PROVIDER="$(jq -r '.metadata_provider' "$CATALOG")"
 CREATED=0
 SCAN_IDS=()
+SCAN_NAMES=()
 
 while IFS=$'\t' read -r name folder type; do
   host_folder="${folder/#\/books/$HOST_ROOT}"
@@ -101,7 +102,11 @@ while IFS=$'\t' read -r name folder type; do
   if [ "$exists" != "0" ]; then
     id="$(jq -r --arg n "$name" '.[] | select(.name == $n) | .id' "$LIBS_JSON")"
     echo "exists: $name id=$id"
-    SCAN_IDS+=("$id")
+    last="$(sqlite3 "$DB" "SELECT LastScanned FROM Library WHERE Id=$id;")"
+    if [ "$last" = "0001-01-01 00:00:00" ] || [ -z "$last" ]; then
+      SCAN_IDS+=("$id")
+      SCAN_NAMES+=("$name")
+    fi
     continue
   fi
 
@@ -144,6 +149,7 @@ while IFS=$'\t' read -r name folder type; do
   echo "created: $name id=$id"
   CREATED=$((CREATED + 1))
   SCAN_IDS+=("$id")
+  SCAN_NAMES+=("$name")
 done < <(jq -r '.libraries[] | [.name, .folder, (.type|tostring)] | @tsv' "$CATALOG")
 
 api GET "/api/Library/libraries" > "$LIBS_JSON"
@@ -151,12 +157,28 @@ echo
 echo "Kavita libraries:"
 jq -r '.[] | "  \(.id)\t\(.name)\t\(.type)\t\(.folders | join(", "))"' "$LIBS_JSON"
 
-for id in "${SCAN_IDS[@]+"${SCAN_IDS[@]}"}"; do
-  echo "scan library $id"
+# Kavita drops overlapping scans (or defers them for hours). Wait for each.
+for idx in "${!SCAN_IDS[@]}"; do
+  id="${SCAN_IDS[$idx]}"
+  name="${SCAN_NAMES[$idx]}"
+  echo "scan library $id ($name)"
   api POST "/api/Library/scan?libraryId=${id}&force=true" >/dev/null || true
+  scanned=""
+  for _ in $(seq 1 240); do
+    scanned="$(sqlite3 "$DB" "SELECT LastScanned FROM Library WHERE Id=$id;")"
+    if [ -n "$scanned" ] && [ "$scanned" != "0001-01-01 00:00:00" ]; then
+      series="$(sqlite3 "$DB" "SELECT COUNT(*) FROM Series WHERE LibraryId=$id;")"
+      echo "  finished $name lastScanned=$scanned series=$series"
+      break
+    fi
+    sleep 5
+  done
+  if [ -z "$scanned" ] || [ "$scanned" = "0001-01-01 00:00:00" ]; then
+    echo "  still scanning $name; check Kavita later"
+  fi
 done
 
 echo
-echo "Created $CREATED new libraries. Scans are queued in Kavita."
+echo "Created $CREATED new libraries."
 echo "Open http://100.116.48.120:5001 and read from those tiles."
 echo "Files were not moved. Leave Kapowarr / Comicarr Import and Rename off."
