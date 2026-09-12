@@ -169,13 +169,17 @@ def import_tree(root: Path) -> dict:
             continue
         if not rows:
             continue
+        if rows and not any(isinstance(row, dict) and row.get("cv") for row in rows):
+            print(f"no CV match yet for {folder}, waiting out ComicVine 420", flush=True)
+            time.sleep(20)
+            rows = propose(str(folder), limit=200, only_english=False)
         added = import_matches(rows)
         imported += added
         if added == 0:
             unmatched.append(str(folder))
         else:
             print(f"imported {added} from {folder}", flush=True)
-        time.sleep(0.4)
+        time.sleep(2.5)
     return {
         "root": str(root),
         "series_folders": len(folders),

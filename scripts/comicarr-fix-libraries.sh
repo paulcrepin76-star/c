@@ -67,6 +67,8 @@ put("PostProcess", "enable_check_folder", "True")
 put("PostProcess", "check_folder", "/downloads/complete")
 put("Update", "newcom_dir", "/downloads/complete")
 put("MangaDex", "mangadex_enabled", "True")
+# Seconds between ComicVine calls. The public cap is ~200/hour; 2s burns it.
+put("CV", "cvapi_rate", "18")
 
 with path.open("w") as fh:
     cfg.write(fh)

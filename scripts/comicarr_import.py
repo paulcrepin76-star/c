@@ -194,16 +194,27 @@ def refresh_ids(ids: list[str]) -> None:
             print(payload, flush=True)
 
 
-def import_kind(kind: str) -> dict:
+def start_scan(kind: str) -> dict:
     print(f"=== start {kind} scan ===", flush=True)
     status, payload = api("POST", f"/api/import/{kind}/scan", {})
     print(f"scan start HTTP {status} {payload}", flush=True)
     if status != 200 or not payload.get("success"):
         raise RuntimeError(f"could not start {kind} scan: {payload}")
-    progress = poll_scan(kind)
+    return poll_scan(kind)
+
+
+def import_kind(kind: str) -> dict:
+    progress = start_scan(kind)
     results = progress.get("results") or []
     scan_id = progress.get("scan_id")
     matched = matched_ids(results)
+    if kind == "comic" and results and not matched:
+        print("comic scan matched nothing; waiting for ComicVine and retrying once", flush=True)
+        time.sleep(180)
+        progress = start_scan(kind)
+        results = progress.get("results") or []
+        scan_id = progress.get("scan_id")
+        matched = matched_ids(results)
     unmatched = [row.get("series_name") for row in results if not row.get("matched")]
     print(
         f"{kind} scan_id={scan_id} rows={len(results)} matched={len(matched)} unmatched={len(unmatched)}",
