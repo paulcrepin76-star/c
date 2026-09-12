@@ -1,11 +1,11 @@
-# Comicarr watches the library. Kavita remains the reader.
+# Comicarr manages manga only. Kapowarr manages comics. Kavita is the reader.
 # Do not enable Import move/rename on folders Kavita already reads.
 #
-# On Unraid:
-#   mkdir -p /mnt/user/appdata/comicarr/config
-#   docker compose -f /mnt/user/appdata/resto/docker/comics/compose.comicarr.yml up -d
-#   bash scripts/comicarr-fix-libraries.sh
-#   bash scripts/run-library-imports.sh
+# On Unraid the live compose is /mnt/user/appdata/comicarr/compose.yml.
+# /comics is a dummy folder so Comicarr cannot see the comic library.
+# The Whatbox Downloads mount must use the seedbox path
+# /home/deicide/Downloads so completed torrents resolve inside the container.
+# The patched qBittorrent client treats Whatbox's HTTP 204 login as success.
 
 name: comicarr
 
@@ -15,6 +15,9 @@ services:
     container_name: comicarr
     restart: unless-stopped
     stop_grace_period: 30s
+    networks:
+      - default
+      - media-net
     environment:
       PUID: ${PUID:-99}
       PGID: ${PGID:-100}
@@ -23,6 +26,12 @@ services:
       - "8090:8090"
     volumes:
       - ${COMICARR_CONFIG:-/mnt/user/appdata/comicarr/config}:/config
-      - ${COMICARR_COMICS:-/mnt/user/media/book/comics}:/comics
+      - ${COMICARR_COMICS:-/mnt/user/appdata/comicarr/disabled-comics}:/comics
       - ${COMICARR_MANGA:-/mnt/user/media/book/manga}:/manga
       - ${COMICARR_DOWNLOADS:-/mnt/user/downloads}:/downloads
+      - ${COMICARR_SEEDBOX_DOWNLOADS:-/mnt/remotes/whatbox/Downloads}:/home/deicide/Downloads
+      - ${COMICARR_QBIT_PATCH:-/mnt/user/appdata/comicarr/patches/qbittorrent_client.py}:/opt/comicarr/comicarr/_vendor/qbittorrent/client.py:ro
+
+networks:
+  media-net:
+    external: true

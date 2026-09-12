@@ -7,12 +7,35 @@ so a first-level scan of `/comics` or `/manga` sees publishers, not series.
 
 ## What is on the box
 
+| Role | App | URL |
+| --- | --- | --- |
+| Read | Kavita | `http://100.116.48.120:5001` |
+| Manga grabs | Comicarr | `http://100.116.48.120:8090` |
+| Comic grabs | Kapowarr | `http://100.116.48.120:5656` |
+
 | Host path | Container path | App |
 | --- | --- | --- |
-| `/mnt/user/media/book/comics` | `/comics` | Comicarr, Kapowarr |
-| `/mnt/user/media/book/manga` | `/manga` | Comicarr, Kapowarr, Kavita |
+| `/mnt/user/media/book/comics` | `/comics` | Kapowarr |
+| `/mnt/user/media/book/manga` | `/manga` | Comicarr, Kavita |
 | `/mnt/user/media/book` | `/books` | Kavita |
-| `/mnt/user/omnibus-data` | `/data` on Omnibus | Empty placeholder. Do not use. |
+| `/mnt/remotes/whatbox/Downloads` | `/home/deicide/Downloads` | Comicarr (seedbox qBittorrent) |
+| `/mnt/user/appdata/comicarr/disabled-comics` | `/comics` | Comicarr dummy so it cannot see comics |
+
+Comicarr uses the same Whatbox qBittorrent as Sonarr/Radarr/Prowlarr
+(`https://qbittorrent.niftycurlew.box.ca`, category `manga`). Completed
+files land in `/mnt/remotes/whatbox/Downloads/manga`. Post-process
+**copies** them into `/manga` so the seedbox can keep seeding.
+
+If Comicarr is recreated, copy the qBittorrent profile again with:
+
+```bash
+ssh root@100.116.48.120
+cd /mnt/user/appdata/resto
+bash scripts/comicarr-qbittorrent.sh
+```
+
+Then open a manga → Interactive Search. Packs need **Allow packs** on that
+series. Do not point Comicarr at the whole Whatbox Downloads folder.
 
 Kavita (`http://100.116.48.120:5001`) is the reader. Comicarr is
 `http://100.116.48.120:8090`. Kapowarr is `http://100.116.48.120:5656`.
