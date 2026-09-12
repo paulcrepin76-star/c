@@ -115,11 +115,20 @@ def main() -> int:
                     break
                 time.sleep(2)
         time.sleep(12)
+    print("waiting for queued adds to finish, then rebinding again", flush=True)
+    time.sleep(20)
+    final = 0
+    for comic_id, name in pairs:
+        target = source_dir(name)
+        if target is None:
+            continue
+        rebind(comic_id, target)
+        final += 1
     con = sqlite3.connect(str(DB))
     comics = con.execute("SELECT COUNT(*) FROM comics").fetchone()[0]
     issues = con.execute("SELECT COUNT(*) FROM issues").fetchone()[0]
     con.close()
-    print(f"done added={added} rebound={rebound} comics={comics} issues={issues}", flush=True)
+    print(f"done added={added} rebound={rebound} final_rebind={final} comics={comics} issues={issues}", flush=True)
     return 0
 
 
