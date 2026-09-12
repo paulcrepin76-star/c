@@ -169,9 +169,15 @@ def merge_feed_chapter(store: dict[float, dict], attrs: dict) -> None:
     store[number] = current
 
 
+_SESSION_TOKEN = None
+
+
 def session_token() -> str:
     import jwt
 
+    global _SESSION_TOKEN
+    if _SESSION_TOKEN:
+        return _SESSION_TOKEN
     key = JWT_KEY.read_bytes()
     token = jwt.encode(
         {
@@ -182,7 +188,8 @@ def session_token() -> str:
         key,
         algorithm="HS256",
     )
-    return token.decode() if isinstance(token, bytes) else token
+    _SESSION_TOKEN = token.decode() if isinstance(token, bytes) else token
+    return _SESSION_TOKEN
 
 
 def api(method: str, path: str, body=None, timeout: int = 180):

@@ -52,6 +52,11 @@ class MangaSearchHelperTests(unittest.TestCase):
         self.assertEqual(manga.parse_chapter_number("001"), 1.0)
         self.assertIsNone(manga.parse_chapter_number(""))
 
+    def test_session_token_is_cached(self) -> None:
+        manga._SESSION_TOKEN = "cached-cookie"
+        self.assertEqual(manga.session_token(), "cached-cookie")
+        manga._SESSION_TOKEN = None
+
     def test_erotica_rating_is_added_once(self) -> None:
         self.assertEqual(
             manga.with_erotica_rating("safe,suggestive"),
