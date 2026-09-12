@@ -258,8 +258,8 @@ def diagnose(snapshot: Snapshot) -> Report:
                     title="Omnibus still mounts the old Bleach tree",
                     detail=(
                         f"{mount.container} maps {mount.source} to /manga. "
-                        "Those files were folded into the unified manga folder. Leave this mount and "
-                        "Smart Match / Kapowarr imports keep looking at a leftover path."
+                        "Those files were folded into the unified manga folder. Until you remove this "
+                        "mount, Smart Match keeps looking at a leftover path."
                     ),
                 )
             )
@@ -278,6 +278,20 @@ def diagnose(snapshot: Snapshot) -> Report:
             )
 
     kapowarr_mounts = mounts_for(snapshot, "kapowarr")
+    for mount in kapowarr_mounts:
+        dest = mount.destination.rstrip("/")
+        if dest.startswith("/mnt/"):
+            findings.append(
+                Finding(
+                    code="kapowarr_host_path_in_container",
+                    severity="error",
+                    title="Kapowarr was given a host path inside the container",
+                    detail=(
+                        f"Destination {mount.destination} is an Unraid host path. Inside Docker that folder "
+                        "does not exist. Map the share to /comics and use /comics in Settings → Root Folders."
+                    ),
+                )
+            )
     comics_roots = [
         mount
         for mount in kapowarr_mounts
@@ -332,18 +346,6 @@ def diagnose(snapshot: Snapshot) -> Report:
                         f"That is correct for western comics, but it will never list the {manga.files} manga files. "
                         "Do not add /manga as a Kapowarr root and then Import and Rename — that would move "
                         "Suwayomi / Tranga files out from under Komga."
-                    ),
-                )
-            )
-        if mount.destination.startswith("/mnt/user"):
-            findings.append(
-                Finding(
-                    code="kapowarr_host_path_in_container",
-                    severity="error",
-                    title="Kapowarr was given a host path inside the container",
-                    detail=(
-                        f"Destination {mount.destination} is an Unraid host path. Inside Docker that folder "
-                        "does not exist. Map the share to /comics and use /comics in Settings → Root Folders."
                     ),
                 )
             )
