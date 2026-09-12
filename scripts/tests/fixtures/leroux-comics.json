@@ -1,0 +1,46 @@
+{
+  "containers": [
+    "suwayomi",
+    "tranga-api",
+    "tranga-website",
+    "tranga-pg",
+    "komga",
+    "lazylibrarian",
+    "omnibus",
+    "omnibus-engine",
+    "omnibus-redis"
+  ],
+  "mounts": [
+    {
+      "container": "omnibus",
+      "destination": "/config",
+      "source": "/mnt/user/appdata/omnibus"
+    },
+    {
+      "container": "omnibus",
+      "destination": "/data",
+      "source": "/mnt/user/omnibus-data"
+    },
+    {
+      "container": "omnibus",
+      "destination": "/books",
+      "source": "/mnt/user/media/book"
+    },
+    {
+      "container": "omnibus",
+      "destination": "/manga",
+      "source": "/mnt/user/media/animation serie/Bleach/Bleach/Manga"
+    }
+  ],
+  "trees": [
+    {"path": "/mnt/user/media/book", "files": 442, "exists": true},
+    {"path": "/mnt/user/media/book/manga", "files": 306, "exists": true},
+    {"path": "/mnt/user/media/book/comics", "files": 80, "exists": true},
+    {"path": "/mnt/user/media/book/comics/Omnibus Downloads", "files": 80, "exists": true},
+    {"path": "/mnt/user/omnibus-data", "files": 0, "exists": true},
+    {"path": "/mnt/user/omnibus-data/comics", "files": 0, "exists": true},
+    {"path": "/mnt/user/omnibus-data/manga", "files": 0, "exists": true},
+    {"path": "/mnt/user/omnibus-data/unmatched", "files": 0, "exists": true},
+    {"path": "/mnt/user/media/animation serie/Bleach/Bleach/Manga", "files": 0, "exists": true}
+  ]
+}

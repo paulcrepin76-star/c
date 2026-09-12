@@ -1,7 +1,11 @@
-.PHONY: test up down setup deploy
+.PHONY: test test-comics up down setup deploy
 
 test:
 	cd apps/resto-core && pip install -q -r requirements.txt pytest && pytest -q
+	$(MAKE) test-comics
+
+test-comics:
+	python3 scripts/tests/test_comics_visibility.py
 
 setup:
 	chmod +x scripts/*.sh
