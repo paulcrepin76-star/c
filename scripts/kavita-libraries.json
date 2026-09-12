@@ -4,6 +4,7 @@
   "host_books_root": "/mnt/user/media/book",
   "exclude_patterns": [".comicarr-scan", ".@__thumb"],
   "file_group_types": [1, 3],
+  "metadata_provider": 4,
   "libraries": [
     {
       "name": "Absolute DC",

@@ -87,6 +87,7 @@ api GET "/api/Library/libraries" > "$LIBS_JSON"
 HOST_ROOT="$(jq -r '.host_books_root' "$CATALOG")"
 FILE_TYPES="$(jq -c '.file_group_types' "$CATALOG")"
 EXCLUDES="$(jq -c '.exclude_patterns' "$CATALOG")"
+METADATA_PROVIDER="$(jq -r '.metadata_provider' "$CATALOG")"
 CREATED=0
 SCAN_IDS=()
 
@@ -110,6 +111,7 @@ while IFS=$'\t' read -r name folder type; do
     --argjson type "$type" \
     --argjson fileGroupTypes "$FILE_TYPES" \
     --argjson excludePatterns "$EXCLUDES" \
+    --argjson metadataProvider "$METADATA_PROVIDER" \
     '{
       id: 0,
       name: $name,
@@ -126,6 +128,7 @@ while IFS=$'\t' read -r name folder type; do
       removePrefixForSortName: false,
       inheritWebLinksFromFirstChapter: false,
       defaultLanguage: "",
+      metadataProvider: $metadataProvider,
       fileGroupTypes: $fileGroupTypes,
       excludePatterns: $excludePatterns
     }')"

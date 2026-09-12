@@ -37,6 +37,10 @@ class KavitaLibrariesTests(unittest.TestCase):
     def test_excludes_comicarr_scan_index(self) -> None:
         self.assertIn(".comicarr-scan", self.catalog["exclude_patterns"])
 
+    def test_uses_a_valid_kavita_metadata_provider(self) -> None:
+        # Kavita only accepts Hardcover=2, Mangabaka=3, ComicBookRoundup=4.
+        self.assertIn(self.catalog["metadata_provider"], (2, 3, 4))
+
 
 if __name__ == "__main__":
     unittest.main()
