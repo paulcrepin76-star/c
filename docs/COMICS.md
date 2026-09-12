@@ -17,6 +17,24 @@ so a first-level scan of `/comics` or `/manga` sees publishers, not series.
 Kavita (`http://100.116.48.120:5001`) is the reader. Comicarr is
 `http://100.116.48.120:8090`. Kapowarr is `http://100.116.48.120:5656`.
 
+Open Kavita to read the folders that are already on disk. Kapowarr and
+Comicarr are grabbers; they will never list 600 imprint folders the way a
+reader does.
+
+The Kavita **Manga** library already has MPD Psycho, Bleach, One Piece, and
+Shangri-La Frontier. Add the comic tiles with:
+
+```bash
+ssh root@100.116.48.120
+cd /mnt/user/appdata/resto
+bash scripts/kavita-add-libraries.sh
+```
+
+That creates one Kavita library per tree (Absolute DC, DC New 52, DC Rebirth,
+Marvel, Spider-Man, DC Comics) and queues a scan. Files stay where they are.
+Do not add `/books/comics` as a single root: that would also pick up
+`.comicarr-scan`.
+
 ## Import the existing library
 
 On Unraid, from this repo:

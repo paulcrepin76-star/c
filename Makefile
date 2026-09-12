@@ -6,6 +6,8 @@ test:
 
 test-comics:
 	python3 scripts/tests/test_comics_visibility.py
+	python3 scripts/tests/test_comicarr_index.py
+	python3 scripts/tests/test_kavita_libraries.py
 
 setup:
 	chmod +x scripts/*.sh
