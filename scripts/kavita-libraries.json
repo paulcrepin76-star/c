@@ -1,0 +1,45 @@
+{
+  "kavita_url": "http://127.0.0.1:5001",
+  "books_root": "/books",
+  "host_books_root": "/mnt/user/media/book",
+  "exclude_patterns": [".comicarr-scan", ".@__thumb"],
+  "file_group_types": [1, 3],
+  "libraries": [
+    {
+      "name": "Absolute DC",
+      "folder": "/books/comics/Absolute DC",
+      "type": 1,
+      "why": "Absolute Batman and the rest of the Absolute DC tree"
+    },
+    {
+      "name": "DC New 52",
+      "folder": "/books/comics/DC New 52",
+      "type": 1,
+      "why": "New 52 series folders"
+    },
+    {
+      "name": "DC Rebirth",
+      "folder": "/books/comics/dc rebirth",
+      "type": 1,
+      "why": "Rebirth / Reverse DC tree (folder is lowercase dc rebirth)"
+    },
+    {
+      "name": "Marvel",
+      "folder": "/books/comics/Marvel",
+      "type": 1,
+      "why": "Marvel series plus the large Previews dump"
+    },
+    {
+      "name": "Spider-Man",
+      "folder": "/books/comics/Amazing spiderman",
+      "type": 1,
+      "why": "Amazing Spider-Man collection"
+    },
+    {
+      "name": "DC Comics",
+      "folder": "/books/comics/DC Comics",
+      "type": 1,
+      "why": "The other English DC imprint tree"
+    }
+  ]
+}
