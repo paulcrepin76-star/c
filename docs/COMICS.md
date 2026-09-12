@@ -37,8 +37,12 @@ bash scripts/comicarr-qbittorrent.sh
 Then open a manga → Interactive Search. Packs need **Allow packs** on that
 series. Do not point Comicarr at the whole Whatbox Downloads folder.
 
-Kavita (`http://100.116.48.120:5001`) is the reader. Comicarr is
-`http://100.116.48.120:8090`. Kapowarr is `http://100.116.48.120:5656`.
+MPD Psycho files use titles after the chapter number (`Vol.3 Ch.13 - …`,
+`Chapter 100_ …`). Comicarr’s stock parser stopped at the number, so the
+series showed ~90 of 153 files. The patched parser plus
+`scripts/comicarr_rematch_manga.py` rematch the folder at `/manga/MPD Psycho`.
+MangaDex still lists 156 chapters; 148–156 are skipped because those files
+are not on disk.
 
 Open Kavita to read the folders that are already on disk. Kapowarr and
 Comicarr are grabbers; they will never list 600 imprint folders the way a

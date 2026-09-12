@@ -31,6 +31,7 @@ services:
       - ${COMICARR_DOWNLOADS:-/mnt/user/downloads}:/downloads
       - ${COMICARR_SEEDBOX_DOWNLOADS:-/mnt/remotes/whatbox/Downloads}:/home/deicide/Downloads
       - ${COMICARR_QBIT_PATCH:-/mnt/user/appdata/comicarr/patches/qbittorrent_client.py}:/opt/comicarr/comicarr/_vendor/qbittorrent/client.py:ro
+      - ${COMICARR_MANGA_PARSER_PATCH:-/mnt/user/appdata/comicarr/patches/manga_parser.py}:/opt/comicarr/comicarr/manga_parser.py:ro
 
 networks:
   media-net:
