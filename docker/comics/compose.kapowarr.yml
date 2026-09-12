@@ -1,13 +1,13 @@
 # Optional. Kapowarr is the GetComics grabber, not the reader.
-# Komga stays the library. Do not run Import and Rename on these folders.
+# Kavita stays the library. Do not run Import and Rename on these folders.
 #
 # On Unraid:
-#   mkdir -p /mnt/user/appdata/kapowarr/{db,temp}
+#   mkdir -p /mnt/user/appdata/kapowarr /mnt/user/downloads/kapowarr
 #   docker compose -f /mnt/user/appdata/resto/docker/comics/compose.kapowarr.yml up -d
 #
 # Then in http://100.116.48.120:5656
 #   Settings → ComicVine API key
-#   Settings → Root Folders → add /comics  (container path, not /mnt/user/...)
+#   Settings → Root Folders → add /comics and /manga (container paths)
 #   Volumes → Library Import → Import  (not Import and Rename)
 
 name: kapowarr
@@ -24,6 +24,7 @@ services:
     ports:
       - "5656:5656"
     volumes:
-      - ${KAPOWARR_DB:-/mnt/user/appdata/kapowarr/db}:/app/db
-      - ${KAPOWARR_TEMP:-/mnt/user/appdata/kapowarr/temp}:/app/temp_downloads
+      - ${KAPOWARR_DB:-/mnt/user/appdata/kapowarr}:/app/db
+      - ${KAPOWARR_TEMP:-/mnt/user/downloads/kapowarr}:/app/temp_downloads
       - ${KAPOWARR_COMICS:-/mnt/user/media/book/comics}:/comics
+      - ${KAPOWARR_MANGA:-/mnt/user/media/book/manga}:/manga

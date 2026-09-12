@@ -1,0 +1,28 @@
+# Comicarr watches the library. Kavita remains the reader.
+# Do not enable Import move/rename on folders Kavita already reads.
+#
+# On Unraid:
+#   mkdir -p /mnt/user/appdata/comicarr/config
+#   docker compose -f /mnt/user/appdata/resto/docker/comics/compose.comicarr.yml up -d
+#   bash scripts/comicarr-fix-libraries.sh
+#   bash scripts/run-library-imports.sh
+
+name: comicarr
+
+services:
+  comicarr:
+    image: ghcr.io/frankieramirez/comicarr:latest
+    container_name: comicarr
+    restart: unless-stopped
+    stop_grace_period: 30s
+    environment:
+      PUID: ${PUID:-99}
+      PGID: ${PGID:-100}
+      TZ: ${TZ:-America/New_York}
+    ports:
+      - "8090:8090"
+    volumes:
+      - ${COMICARR_CONFIG:-/mnt/user/appdata/comicarr/config}:/config
+      - ${COMICARR_COMICS:-/mnt/user/media/book/comics}:/comics
+      - ${COMICARR_MANGA:-/mnt/user/media/book/manga}:/manga
+      - ${COMICARR_DOWNLOADS:-/mnt/user/downloads}:/downloads
