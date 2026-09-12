@@ -11,6 +11,7 @@ Does not move or rename library files.
 
 from __future__ import annotations
 
+import argparse
 import json
 import shutil
 import sqlite3
@@ -256,14 +257,21 @@ def db_counts() -> dict:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description="Scan and import Comicarr libraries")
+    parser.add_argument("--only", choices=("all", "comic", "manga"), default="all")
+    args = parser.parse_args()
     status, payload = api("GET", "/api/series")
     if status != 200:
         raise SystemExit(f"auth failed HTTP {status}: {payload}")
     print("auth ok", flush=True)
     before = db_counts()
     print(f"before {before}", flush=True)
-    comics = import_kind("comic")
-    manga = import_kind("manga")
+    comics = None
+    manga = None
+    if args.only in {"all", "comic"}:
+        comics = import_kind("comic")
+    if args.only in {"all", "manga"}:
+        manga = import_kind("manga")
     after = db_counts()
     print(f"after {after}", flush=True)
     summary = {"before": before, "after": after, "comics": comics, "manga": manga}

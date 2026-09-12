@@ -18,10 +18,10 @@ mkdir -p /mnt/user/appdata/comicarr/logs /mnt/user/appdata/kapowarr
 touch /mnt/user/appdata/comicarr/logs/library-import.log
 touch /mnt/user/appdata/kapowarr/library-import.log
 
-echo "Starting Comicarr import..."
-docker exec -d comicarr /opt/comicarr/.venv/bin/python /tmp/comicarr_import.py
-echo "Starting Kapowarr import..."
-docker exec -d kapowarr python3 /tmp/kapowarr_import.py
-echo "Imports are running in the containers."
+echo "Starting Comicarr import (then Kapowarr). Do not run both against ComicVine at once."
+docker exec comicarr /opt/comicarr/.venv/bin/python /tmp/comicarr_import.py
+echo "Comicarr import finished. Starting Kapowarr..."
+docker exec kapowarr python3 /tmp/kapowarr_import.py
+echo "Done."
 echo "  docker exec comicarr cat /tmp/comicarr-import-summary.json"
 echo "  docker exec kapowarr cat /tmp/kapowarr-import-summary.json"
