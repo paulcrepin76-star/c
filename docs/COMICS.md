@@ -41,9 +41,13 @@ not move or rename the archives. Leave **Import** / **move** / **rename** off.
 - Walks Kapowarr Library Import one series folder at a time, **Import** only
 - Adds `/manga` as a Kapowarr root when that mount exists
 
-ComicVine is rate-limited. Hundreds of series take a while. Unmatched rows
-stay unmatched: French/Spanish editions, dump folders, and most manga will
-not become Kapowarr volumes.
+ComicVine is rate-limited (~200 requests/hour). Do not run Comicarr and
+Kapowarr imports at the same time. A 420 (`Slow down cowboy`) means wait
+an hour and run `scripts/comicarr_import.py --only comic` again. Already
+imported series stay; new ComicVine matches get added and rebound.
+
+Unmatched rows stay unmatched: French/Spanish editions, dump folders, and
+most manga will not become Kapowarr volumes. Manga in Comicarr uses MangaDex.
 
 ## Why the library looked empty
 
@@ -65,3 +69,17 @@ bash scripts/comics-visibility.sh
 ```
 
 That replays the last saved snapshot.
+
+## Resume a partial ComicVine pass
+
+The indexer found **563** comic series folders and **5** manga series with
+files. ComicVine will not finish that in one hour. After the cap resets:
+
+```bash
+docker cp scripts/comicarr_import.py comicarr:/tmp/comicarr_import.py
+docker exec comicarr /opt/comicarr/.venv/bin/python /tmp/comicarr_import.py --only comic
+docker exec comicarr /opt/comicarr/.venv/bin/python /tmp/comicarr_import_matches.py
+```
+
+Then import only the newly matched folders into Kapowarr with
+`scripts/kapowarr_import_known.py`. Leave move/rename off.
