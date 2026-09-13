@@ -103,14 +103,18 @@ def apply_safe_defaults(
     set_opt(cfg, "Interface", "http_host", "0.0.0.0")
     set_opt(cfg, "Interface", "http_port", "8090")
     set_opt(cfg, "Perms", "enforce_perms", ini_bool(False))
+    set_opt(cfg, "General", "autowant_upcoming", ini_bool(False))
+    set_opt(cfg, "General", "autowant_all", ini_bool(False))
     set_opt(cfg, "Import", "add_comics", ini_bool(False))
-    set_opt(cfg, "Import", "comic_dir", "None")
+    set_opt(cfg, "Import", "comic_dir", COMIC_LOCATION)
     set_opt(cfg, "Import", "imp_move", ini_bool(False))
     set_opt(cfg, "Import", "imp_rename", ini_bool(False))
-    set_opt(cfg, "Import", "imp_paths", ini_bool(False))
+    set_opt(cfg, "Import", "imp_paths", ini_bool(True))
+    set_opt(cfg, "Import", "imp_metadata", ini_bool(False))
+    set_opt(cfg, "Import", "imp_seriesfolders", ini_bool(True))
     set_opt(cfg, "PostProcess", "enable_check_folder", ini_bool(False))
     set_opt(cfg, "DDL", "ddl_location", DOWNLOADS)
-    set_opt(cfg, "CV", "cvapi_rate", "3")
+    set_opt(cfg, "CV", "cvapi_rate", "18")
     set_opt(cfg, "API", "api_enabled", ini_bool(True))
 
     current_key = get(cfg, "API", "api_key")
@@ -137,6 +141,9 @@ def summary(cfg: configparser.ConfigParser) -> dict:
         "add_comics": get(cfg, "Import", "add_comics") == "True",
         "imp_rename": get(cfg, "Import", "imp_rename") == "True",
         "imp_move": get(cfg, "Import", "imp_move") == "True",
+        "imp_paths": get(cfg, "Import", "imp_paths") == "True",
+        "autowant_upcoming": get(cfg, "General", "autowant_upcoming") == "True",
+        "autowant_all": get(cfg, "General", "autowant_all") == "True",
         "api_enabled": get(cfg, "API", "api_enabled") == "True",
         "has_api_key": not empty(get(cfg, "API", "api_key")),
         "has_comicvine_api": not empty(get(cfg, "CV", "comicvine_api")),
