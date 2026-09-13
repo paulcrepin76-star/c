@@ -1,8 +1,9 @@
 # Comics and manga on Unraid
 
-Kavita reads the folders on disk. Rensaio grabs **manga**. Kapowarr grabs
-**comics**. Do not turn on Rensaio **Rename** or Kapowarr **Import and
-Rename** on a folder Kavita already reads.
+Kavita reads the folders on disk. Rensaio grabs **manga**. Kapowarr and
+Mylar3 grab **comics**. Do not turn on Rensaio **Rename**, Kapowarr
+**Import and Rename**, or Mylar3 **Manage / Import / Rename** on a
+folder Kavita already reads.
 
 ## What is on the box
 
@@ -11,10 +12,11 @@ Rename** on a folder Kavita already reads.
 | Read | Kavita | `http://100.116.48.120:5001` |
 | Manga grabs | Rensaio | `http://100.116.48.120:9833` |
 | Comic grabs | Kapowarr | `http://100.116.48.120:5656` |
+| Comic grabs | Mylar3 | `http://100.116.48.120:8090` |
 
 | Host path | Container path | App |
 | --- | --- | --- |
-| `/mnt/user/media/book/comics` | `/comics` | Kapowarr |
+| `/mnt/user/media/book/comics` | `/comics` | Kapowarr, Mylar3 |
 | `/mnt/user/media/book/manga` | `/series` | Rensaio |
 | `/mnt/user/media/book/manga` | `/manga` | Kavita |
 | `/mnt/user/media/book` | `/books` | Kavita |
@@ -38,7 +40,31 @@ bash scripts/rensaio-search.sh
 
 Comicarr was removed. Its appdata is kept as
 `/mnt/user/appdata/comicarr-backup-*` for rollback. Manga files were not
-deleted.
+deleted. Port `8090` is Mylar3 now.
+
+## Mylar3 comics
+
+Mylar3 sits next to Kapowarr. It does not replace it. Both see
+`/mnt/user/media/book/comics` as `/comics`. Mylar3 has its own download
+folder (`/mnt/user/downloads/mylar3`). It is on `media-net` so it can
+reach Prowlarr later. The install copies Kapowarr's ComicVine key and
+leaves **Rename**, **Enforce Permissions**, and **Import** off. It does
+not scan or import the existing library.
+
+The leftover June appdata at `/mnt/user/appdata/mylar3` is reused (zero
+series). Do not add `/comics/DC New 52` or `/comics/dc rebirth` as extra
+roots.
+
+```bash
+ssh root@100.116.48.120
+cd /mnt/user/appdata/resto
+bash scripts/mylar3-install.sh
+```
+
+ComicVine is still ~200 requests/hour per key. Kapowarr and Mylar3
+share that key, so a 420 (`Slow down cowboy`) still means wait an hour.
+Add series one at a time. Do not run Manage → Import on folders Kavita
+will read.
 
 Open Kavita to read the folders that are already on disk. The Kavita
 **Manga** library already has MPD Psycho, Bleach, One Piece, and
