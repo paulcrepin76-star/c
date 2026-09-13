@@ -102,9 +102,9 @@ docker compose up -d --remove-orphans
 code=000
 for _ in $(seq 1 90); do
   code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 3 "http://127.0.0.1:${UI_PORT}/" || true)"
-  if [ "$code" = "200" ]; then
-    break
-  fi
+  case "$code" in
+    200|301|302|303|307|308) break ;;
+  esac
   sleep 2
 done
 
@@ -118,7 +118,14 @@ echo "Comics path: $COMICS -> /comics"
 echo "Downloads: $DOWNLOADS -> /downloads"
 echo "Kapowarr stays on http://100.116.48.120:5656"
 echo "Do not use Manage / Import / Rename on folders Kavita already reads."
-if [ "$code" != "200" ]; then
-  echo "Mylar3 UI did not answer yet. Check: docker logs mylar3"
-  exit 1
+if [ -d "$COMICS/.zzz_check" ] && [ -z "$(ls -A "$COMICS/.zzz_check" 2>/dev/null || true)" ]; then
+  rmdir "$COMICS/.zzz_check"
+  echo "removed_empty_mylar_write_test=yes"
 fi
+case "$code" in
+  200|301|302|303|307|308) ;;
+  *)
+    echo "Mylar3 UI did not answer yet. Check: docker logs mylar3"
+    exit 1
+    ;;
+esac

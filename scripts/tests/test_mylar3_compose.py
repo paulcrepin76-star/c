@@ -47,6 +47,8 @@ class Mylar3InstallScriptTests(unittest.TestCase):
         self.assertIn("mylar3_config.py", self.text)
         self.assertIn("comicvine_api_key", self.text)
         self.assertIn("Do not use Manage / Import / Rename", self.text)
+        self.assertIn("200|301|302|303|307|308", self.text)
+        self.assertIn(".zzz_check", self.text)
         self.assertNotIn("libraryScan", self.text)
         self.assertNotIn("addComic", self.text)
 
