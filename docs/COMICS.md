@@ -59,14 +59,20 @@ ssh root@100.116.48.120
 cd /mnt/user/appdata/resto
 bash scripts/mylar3-install.sh
 bash scripts/mylar3-import.sh
+# If a massimport is already running, resume it. Do not scan again.
+bash scripts/mylar3-import.sh resume
+bash scripts/mylar3-import-watch.sh
 ```
 
 The import script scans `/comics` in place (`imp_paths=1`), stamps
 Kapowarr ComicVine IDs onto folders that have exactly one volume, then
-mass-imports. It does not touch manga. Do not send `imp_move=0` to
-Mylar — CherryPy treats that string as true and will rename files.
-ComicVine is still ~200 requests/hour per key, so a 420 means wait an
-hour and run the import again.
+mass-imports. After that queue is empty it can seed leftover English
+series folders (one group per folder) and import those too. It skips
+manga, foreign reprint trees, the ASM 700 dump, and Marvel NOW
+previews. It does not touch manga. Do not send `imp_move=0` to Mylar —
+CherryPy treats that string as true and will rename files. ComicVine is
+still ~200 requests/hour per key, so a 420 means wait an hour and run
+`mylar3-import.sh resume`.
 
 Do not turn on Mylar3 **Move Files** or **Rename Files**.
 
