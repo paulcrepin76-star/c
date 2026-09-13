@@ -28,6 +28,14 @@ class FolderTests(unittest.TestCase):
             "/comics/dc rebirth/Suicide Squad (1987)",
         )
 
+    def test_year_named_folder_keeps_imprint_parent(self) -> None:
+        self.assertTrue(kf.folder_missing_year("/comics/DC New 52/Action Comics", 2011))
+        self.assertFalse(kf.folder_missing_year("/comics/DC New 52/Action Comics (2011)", 2011))
+        self.assertEqual(
+            kf.year_named_folder("/comics/DC New 52/Action Comics", "Action Comics", 2011),
+            "/comics/DC New 52/Action Comics (2011)",
+        )
+
 
 class LooseFileTests(unittest.TestCase):
     FILES = [

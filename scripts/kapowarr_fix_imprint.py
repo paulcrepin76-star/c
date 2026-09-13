@@ -52,6 +52,24 @@ def sanitize_folder_name(name: str) -> str:
     return text
 
 
+ACTION_COMICS_2011_ID = 314
+
+
+def year_named_folder(current_folder: str, title: str, year: int | None) -> str:
+    """Keep the imprint parent; add ``(year)`` when the folder name lacks it."""
+    parent = str(Path(kc.folder_key(current_folder)).parent)
+    label = sanitize_folder_name(title)
+    if year:
+        label = f"{label} ({int(year)})"
+    return f"{parent}/{label}"
+
+
+def folder_missing_year(folder: str, year: int | None) -> bool:
+    if not year:
+        return False
+    return str(int(year)) not in Path(kc.folder_key(folder)).name
+
+
 def target_volume_folder(title: str, year: int | None, current_folder: str) -> str:
     """Return a container path that is unique to this series, not the imprint."""
     parent = kc.folder_key(current_folder)
@@ -260,6 +278,38 @@ def apply_plan_on_host(plan: list[dict[str, Any]], *, dry_run: bool) -> None:
     ssh("sqlite3 /mnt/user/appdata/kapowarr/Kapowarr.db < /tmp/kapowarr-fix-imprint.sql")
 
 
+def retarget_existing_folder(volume_id: int, from_folder: str, to_folder: str) -> str:
+    """Rename a series folder on disk and point the volume at it. No file deletes."""
+    if kc.folder_key(from_folder) == kc.folder_key(to_folder):
+        return "SAME"
+    src = container_to_host(from_folder)
+    dst = container_to_host(to_folder)
+    outcome = ssh(
+        f"if [ -e {json.dumps(dst)} ]; then echo EXISTS; "
+        f"elif [ -d {json.dumps(src)} ]; then mv {json.dumps(src)} {json.dumps(dst)} && echo MOVED; "
+        f"else echo MISSING; fi"
+    ).strip()
+    if outcome not in {"MOVED", "EXISTS"}:
+        return outcome
+    old = from_folder.replace("'", "''")
+    new = to_folder.replace("'", "''")
+    sql = (
+        "BEGIN;\n"
+        f"UPDATE volumes SET folder='{new}', custom_folder=1 WHERE id={int(volume_id)};\n"
+        f"UPDATE files SET filepath = replace(filepath, '{old}', '{new}') "
+        f"WHERE filepath LIKE '{old}/%';\n"
+        "COMMIT;\n"
+    )
+    subprocess.run(
+        ["sudo", "tailscale", "ssh", "root@lerouxfamily", "cat > /tmp/kapowarr-year-folder.sql"],
+        input=sql,
+        text=True,
+        check=True,
+    )
+    ssh("sqlite3 /mnt/user/appdata/kapowarr/Kapowarr.db < /tmp/kapowarr-year-folder.sql")
+    return outcome
+
+
 def list_loose_files() -> dict[str, list[str]]:
     raw = ssh(
         "find '/mnt/user/media/book/comics/DC New 52' '/mnt/user/media/book/comics/dc rebirth' "
@@ -301,8 +351,18 @@ def cmd_run(client: kc.Kapowarr, dry_run: bool, out: str | None) -> int:
                 scan_volume(client, int(item["id"]))
             except Exception as exc:
                 print(f"scan {item['id']} {exc}", flush=True)
+        volumes = client.volumes()
+        action = next((v for v in volumes if v.get("id") == ACTION_COMICS_2011_ID), None)
+        if action and folder_missing_year(str(action.get("folder") or ""), action.get("year")):
+            dest = year_named_folder(
+                str(action.get("folder") or ""),
+                str(action.get("title") or "Action Comics"),
+                action.get("year"),
+            )
+            outcome = retarget_existing_folder(ACTION_COMICS_2011_ID, str(action["folder"]), dest)
+            print(f"year-folder {ACTION_COMICS_2011_ID} {outcome} {action.get('folder')} -> {dest}", flush=True)
         try:
-            scan_volume(client, 314)
+            scan_volume(client, ACTION_COMICS_2011_ID)
         except Exception as exc:
             print(f"scan Action Comics 2011 {exc}", flush=True)
         volumes = client.volumes()
