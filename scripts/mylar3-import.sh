@@ -8,7 +8,13 @@
 #   bash scripts/mylar3-import.sh status
 #
 # Do not send imp_move=0. Mylar does bool("0") which is True and will rename.
+# Mylar3 was removed. Do not reinstall unless asked.
 set -euo pipefail
+
+if [ "${MYLAR3_REINSTALL:-}" != "1" ]; then
+  echo "Mylar3 was removed. Do not reinstall unless asked." >&2
+  exit 1
+fi
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 HELPER="$HERE/mylar3_import.py"

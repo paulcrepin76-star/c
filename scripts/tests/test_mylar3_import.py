@@ -182,6 +182,7 @@ class InstallScriptTests(unittest.TestCase):
         text = (Path(__file__).resolve().parents[1] / "mylar3-import.sh").read_text(
             encoding="utf-8"
         )
+        self.assertIn("Mylar3 was removed. Do not reinstall unless asked.", text)
         self.assertIn("Do not send imp_move=0", text)
         self.assertIn("imp_paths=1", text)
         self.assertIn("imp_move is on. Refusing to import.", text)
@@ -196,6 +197,7 @@ class InstallScriptTests(unittest.TestCase):
         text = (Path(__file__).resolve().parents[1] / "mylar3-import-watch.sh").read_text(
             encoding="utf-8"
         )
+        self.assertIn("Mylar3 was removed. Do not reinstall unless asked.", text)
         self.assertIn("action=massimport", text)
         self.assertIn("Does not send imp_move", text)
         self.assertIn("Does not touch manga", text)
