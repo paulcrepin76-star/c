@@ -1,0 +1,38 @@
+# Mylar3 grabs comics next to Kapowarr. Kavita stays the reader.
+# Do not run Manage / Import that moves or renames folders Kavita will read.
+#
+# On Unraid the live compose is /mnt/user/appdata/mylar3/compose.yml.
+#
+#   bash scripts/mylar3-install.sh
+#
+# Then open http://100.116.48.120:8090
+#   Comic Location is /comics (container path)
+#   Enforce Permissions is off
+#   Rename Files is off
+# Kapowarr stays on :5656. Comicarr stays stopped.
+
+name: mylar3
+
+services:
+  mylar3:
+    image: lscr.io/linuxserver/mylar3:latest
+    container_name: mylar3
+    restart: unless-stopped
+    networks:
+      - default
+      - media-net
+    environment:
+      PUID: ${PUID:-99}
+      PGID: ${PGID:-100}
+      TZ: ${TZ:-America/New_York}
+      UMASK: "022"
+    ports:
+      - "8090:8090"
+    volumes:
+      - ${MYLAR3_CONFIG:-/mnt/user/appdata/mylar3}:/config
+      - ${MYLAR3_COMICS:-/mnt/user/media/book/comics}:/comics
+      - ${MYLAR3_DOWNLOADS:-/mnt/user/downloads/mylar3}:/downloads
+
+networks:
+  media-net:
+    external: true
