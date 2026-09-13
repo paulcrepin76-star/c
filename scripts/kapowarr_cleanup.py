@@ -314,6 +314,22 @@ class Kapowarr:
         result = self.get("/volumes/stats")
         return result if isinstance(result, dict) else {}
 
+    def settings(self) -> dict:
+        result = self.get("/settings")
+        return result if isinstance(result, dict) else {}
+
+    def add_volume(self, comicvine_id: int, volume_folder: str, *, auto_search: bool = False) -> tuple[int, dict]:
+        body = {
+            "comicvine_id": int(comicvine_id),
+            "root_folder_id": 1,
+            "monitor": True,
+            "monitoring_scheme": "all",
+            "monitor_new_issues": True,
+            "volume_folder": volume_folder,
+            "auto_search": auto_search,
+        }
+        return self.request("POST", "/volumes", body=body, timeout=180)
+
     def delete_file(self, file_id: int) -> int:
         status, payload = self.request("DELETE", f"/files/{file_id}")
         if status >= 400:
@@ -529,6 +545,9 @@ def build_parser() -> argparse.ArgumentParser:
     add_shared(run)
     run.add_argument("--dry-run", action="store_true")
     run.add_argument("--search-all", action="store_true")
+    import kapowarr_unmatched as ku
+
+    ku.add_unmatched_parser(sub)
     return parser
 
 
@@ -539,6 +558,10 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_inventory(client, args)
     if args.command == "run":
         return cmd_run(client, args)
+    if args.command == "unmatched":
+        import kapowarr_unmatched as ku
+
+        return ku.cmd_import_unmatched(client, args)
     raise SystemExit(f"unknown command {args.command}")
 
 

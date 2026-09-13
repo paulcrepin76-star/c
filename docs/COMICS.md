@@ -95,7 +95,19 @@ indexer proxy on that same URL, tagged on indexers that use Cloudflare
 A first-time import of folders that have no volume yet still uses
 Library Import. Prefer **Import** so files stay where Kavita reads
 them. Use **Import and Rename** only for a small, verified batch that
-is in the wrong series folder.
+is in the wrong series folder. Kapowarr's own volume search returns
+nothing, so missing folders are matched through ComicVine (`name:`
+filter only; the search endpoint 420s) and imported in place:
+
+```bash
+# From the Cloud Agent, after listing unmatched /comics folders
+bash scripts/kapowarr-cleanup.sh unmatched \
+  --folders-file /tmp/unmatched-folders.txt \
+  --out /tmp/kapowarr-unmatched.json
+```
+
+That skips manga, the Marvel NOW preview dump, and foreign reprint
+trees (ECC, Novaro, Panini, Urban, …). It does not rename files.
 
 ```bash
 ssh root@100.116.48.120
