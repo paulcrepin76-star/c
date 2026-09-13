@@ -199,6 +199,27 @@ class ImportTargetTests(unittest.TestCase):
         self.assertEqual(kc.empty_duplicate_volume_ids(volumes), [])
         self.assertEqual(kc.empty_duplicate_volume_ids(volumes, ignore_year=True), [226])
 
+    def test_ignore_year_keeps_later_run_with_many_issues(self) -> None:
+        volumes = [
+            {
+                "id": 213,
+                "title": "Batman Beyond",
+                "year": 2012,
+                "folder": "/comics/DC Comics/Batman Beyond (2012)",
+                "issues_downloaded": 29,
+                "issue_count": 29,
+            },
+            {
+                "id": 127,
+                "title": "Batman Beyond",
+                "year": 2016,
+                "folder": "/comics/DC Comics/Batman Beyond (2012)",
+                "issues_downloaded": 0,
+                "issue_count": 50,
+            },
+        ]
+        self.assertEqual(kc.empty_duplicate_volume_ids(volumes, ignore_year=True), [])
+
     def test_manga_is_ignored(self) -> None:
         cv_id, _rename = kc.target_for_unmatched_file(
             "/manga/Bleach/Bleach 001.cbz",

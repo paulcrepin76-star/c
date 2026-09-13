@@ -71,10 +71,14 @@ bash scripts/kapowarr-cleanup.sh run --search-all --out /tmp/kapowarr-cleanup.js
 
 That script never deletes a volume folder. It only deletes comic
 archives that are empty or under 1 KB, and Kapowarr volume rows that
-are empty twins of a populated title/year/folder. It renames a file
-only when it is a Rebirth-numbered issue sitting in a golden-age
-folder (Action Comics #957+ in the 1938 folder). Manga paths are
-ignored.
+are empty one-shot twins of a populated title in the same folder. A
+later run that still has many undownloaded issues (Batman Beyond 2016
+next to 2012) is kept. It renames a file only when it is a
+Rebirth-numbered issue sitting in a golden-age folder (Action Comics
+#957+ in the 1938 folder). Manga paths are ignored.
+
+Search All only uses GetComics. If FlareSolverr is not running, many
+results land on the blocklist and the missing count will not hit zero.
 
 A first-time import of folders that have no volume yet still uses
 Library Import. Prefer **Import** so files stay where Kavita reads

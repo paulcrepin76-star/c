@@ -128,7 +128,12 @@ def empty_duplicate_volume_ids(volumes: list[dict], *, ignore_year: bool = False
         populated = [item for item in group if (item.get("issues_downloaded") or 0) > 0]
         empty = [item for item in group if not (item.get("issues_downloaded") or 0)]
         if populated and empty:
-            delete.extend(int(item["id"]) for item in empty)
+            for item in empty:
+                # A later run in the same folder (Batman Beyond 2016 next
+                # to 2012) is not a duplicate just because it is still empty.
+                if ignore_year and (item.get("issue_count") or 0) > 1:
+                    continue
+                delete.append(int(item["id"]))
     return sorted(set(delete))
 
 
