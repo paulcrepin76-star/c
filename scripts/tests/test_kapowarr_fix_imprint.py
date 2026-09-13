@@ -36,6 +36,20 @@ class FolderTests(unittest.TestCase):
             "/comics/DC New 52/Action Comics (2011)",
         )
 
+    def test_old_omnibus_leftover_is_empty_2016_hardcover(self) -> None:
+        leftover = {
+            "id": 37,
+            "title": "DC Rebirth Omnibus",
+            "year": 2016,
+            "issues_downloaded": 0,
+            "folder": "/comics/dc rebirth/DC Rebirth Omnibus (2016)",
+        }
+        self.assertTrue(kf.is_old_omnibus_leftover(leftover))
+        self.assertTrue(kf.should_drop_old_omnibus(leftover, 0))
+        self.assertFalse(kf.should_drop_old_omnibus(leftover, 1))
+        leftover["issues_downloaded"] = 1
+        self.assertFalse(kf.is_old_omnibus_leftover(leftover))
+
     def test_leading_issue_ignores_chapter_subtitle(self) -> None:
         self.assertEqual(
             kf.leading_issue_number("Action Comics 031- Infected Chapter 1.cbz", "Action Comics"),
@@ -120,6 +134,20 @@ class LooseFileTests(unittest.TestCase):
         self.assertTrue(oneshot["move_from"].endswith("Batgirl - Endgame.cbz"))
         self.assertIsNone(squad["move_from"])
         self.assertEqual(squad["to_folder"], "/comics/dc rebirth/Suicide Squad (1987)")
+        leftover_plan = kf.plan_imprint_fix(
+            [
+                {
+                    "id": 37,
+                    "title": "DC Rebirth Omnibus",
+                    "year": 2016,
+                    "folder": "/comics/dc rebirth",
+                    "issue_count": 1,
+                    "issues_downloaded": 0,
+                }
+            ],
+            {"/comics/dc rebirth": []},
+        )
+        self.assertEqual(leftover_plan, [])
 
 
 if __name__ == "__main__":

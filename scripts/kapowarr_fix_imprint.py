@@ -44,6 +44,19 @@ def is_imprint_root_folder(folder: str) -> bool:
     return kc.folder_key(folder).lower() in IMPRINT_ROOTS
 
 
+def is_old_omnibus_leftover(volume: dict) -> bool:
+    """True for the empty DC Rebirth Omnibus row the old Omnibus app left behind."""
+    return (
+        kc.series_key(str(volume.get("title") or "")) == "dc rebirth omnibus"
+        and int(volume.get("year") or 0) == 2016
+        and (volume.get("issues_downloaded") or 0) == 0
+    )
+
+
+def should_drop_old_omnibus(volume: dict, archive_count: int) -> bool:
+    return is_old_omnibus_leftover(volume) and archive_count == 0
+
+
 def sanitize_folder_name(name: str) -> str:
     text = (name or "").strip()
     text = text.replace("/", "-").replace(":", " -")
@@ -165,6 +178,8 @@ def plan_imprint_fix(
         if not is_imprint_root_folder(folder):
             continue
         if kc.is_manga_path(folder):
+            continue
+        if is_old_omnibus_leftover(volume):
             continue
         root = kc.folder_key(folder)
         target = target_volume_folder(str(volume.get("title") or ""), volume.get("year"), folder)
@@ -419,6 +434,38 @@ def retarget_existing_folder(volume_id: int, from_folder: str, to_folder: str) -
     return outcome
 
 
+def folder_archive_count(container_folder: str) -> int:
+    host = container_to_host(container_folder)
+    raw = ssh(
+        "find "
+        f"{json.dumps(host)} -maxdepth 1 -type f "
+        "\\( -iname '*.cbr' -o -iname '*.cbz' -o -iname '*.cb7' \\) 2>/dev/null | wc -l"
+    )
+    try:
+        return int(raw.strip() or 0)
+    except ValueError:
+        return 0
+
+
+def drop_old_omnibus_leftovers(client: kc.Kapowarr, volumes: list[dict], *, dry_run: bool) -> list[dict]:
+    """Delete the empty Omnibus-app volume. Never deletes archives."""
+    dropped: list[dict] = []
+    for volume in volumes:
+        folder = str(volume.get("folder") or "")
+        count = 0 if dry_run else folder_archive_count(folder)
+        if not should_drop_old_omnibus(volume, count):
+            continue
+        item = {"id": int(volume["id"]), "title": volume.get("title"), "folder": folder}
+        dropped.append(item)
+        print(f"drop old omnibus leftover vol {item['id']} {item['title']} {folder}", flush=True)
+        if dry_run:
+            continue
+        client.delete_volume(int(volume["id"]))
+        if folder and not is_imprint_root_folder(folder):
+            ssh(f"rmdir {json.dumps(container_to_host(folder))} 2>/dev/null || true")
+    return dropped
+
+
 def list_loose_files() -> dict[str, list[str]]:
     raw = ssh(
         "find '/mnt/user/media/book/comics/DC New 52' '/mnt/user/media/book/comics/dc rebirth' "
@@ -439,9 +486,14 @@ def cmd_run(client: kc.Kapowarr, dry_run: bool, out: str | None) -> int:
     volumes = client.volumes()
     loose = list_loose_files()
     plan = plan_imprint_fix(volumes, loose)
+    omnibus_leftovers = [v for v in volumes if is_old_omnibus_leftover(v)]
     report = {
         "before": client.stats(),
         "plan": plan,
+        "omnibus_leftovers": [
+            {"id": v["id"], "title": v.get("title"), "folder": v.get("folder")}
+            for v in omnibus_leftovers
+        ],
         "naming": KAVITA_NAMING,
     }
     print(json.dumps({"planned": len(plan), "moves": sum(1 for i in plan if i.get("move_from"))}, indent=2), flush=True)
@@ -453,6 +505,7 @@ def cmd_run(client: kc.Kapowarr, dry_run: bool, out: str | None) -> int:
             flush=True,
         )
     if not dry_run:
+        report["dropped_omnibus"] = drop_old_omnibus_leftovers(client, volumes, dry_run=False)
         apply_naming(client)
         apply_plan_on_host(plan, dry_run=False)
         for item in plan:

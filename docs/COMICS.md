@@ -123,6 +123,14 @@ python3 scripts/kapowarr_fix_imprint.py --out /tmp/kapowarr-imprint-fix.json
 
 Do not run unmatched import until imprint-root volumes are gone.
 
+The empty **DC Rebirth Omnibus (2016)** row was leftover from the old
+Omnibus container (`omnibus` / `omnibus-engine` / `omnibus-redis` on
+`/mnt/user/omnibus-data`). That share is gone, Kapowarr now reads
+`/mnt/user/media/book/comics`, and there is no hardcover archive on
+disk. The imprint fix deletes that volume record (`delete_folder=false`)
+and removes only the empty folder it created. Add the book again if the
+file shows up later.
+
 Action Comics 2011 is the prove case: the folder must be
 `Action Comics (2011)` or Kapowarr will not match year-less New 52
 filenames. Files titled `Chapter 1` are force-matched to the leading

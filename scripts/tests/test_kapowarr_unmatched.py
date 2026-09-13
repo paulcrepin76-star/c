@@ -51,6 +51,10 @@ class SkipTests(unittest.TestCase):
             ku.should_skip_folder("/comics/Pika Édition/MPD-Psycho (2004)"),
             "skip-list",
         )
+        self.assertEqual(
+            ku.should_skip_folder("/comics/dc rebirth/DC Rebirth Omnibus (2016)"),
+            "skip-list",
+        )
 
     def test_skips_foreign_unless_requested(self) -> None:
         path = "/comics/ECC Ediciones/Aquaman (2012)"

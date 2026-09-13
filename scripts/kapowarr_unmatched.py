@@ -59,6 +59,7 @@ SKIP_FOLDER_MARKERS = (
     "marvel integrale",
     "mpd-psycho",
     "mpd psycho",
+    "dc rebirth omnibus",
 )
 PREFIX_WORDS = (
     "future state",
