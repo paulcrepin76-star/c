@@ -360,16 +360,27 @@ class Kapowarr:
     def import_files(self, rows: list[dict], rename_files: bool) -> int:
         if not rows:
             return 0
-        status, payload = self.request(
-            "POST",
-            "/libraryimport",
-            query={"rename_files": "true" if rename_files else "false"},
-            body=rows,
-            timeout=1800,
-        )
-        if status >= 400 or (isinstance(payload, dict) and payload.get("error")):
-            raise RuntimeError(f"POST /libraryimport HTTP {status}: {payload}")
-        return len(rows)
+        wait = 90
+        for attempt in range(6):
+            status, payload = self.request(
+                "POST",
+                "/libraryimport",
+                query={"rename_files": "true" if rename_files else "false"},
+                body=rows,
+                timeout=1800,
+            )
+            rate_limited = status == 509 or (
+                isinstance(payload, dict) and payload.get("error") == "CVRateLimitReached"
+            )
+            if rate_limited:
+                print(f"Kapowarr ComicVine 509, waiting {wait}s", flush=True)
+                time.sleep(wait)
+                wait = min(1800, wait * 2)
+                continue
+            if status >= 400 or (isinstance(payload, dict) and payload.get("error")):
+                raise RuntimeError(f"POST /libraryimport HTTP {status}: {payload}")
+            return len(rows)
+        raise RuntimeError(f"POST /libraryimport still rate-limited after retries: {payload}")
 
     def search_all(self) -> dict:
         status, payload = self.request("POST", "/system/tasks", body={"cmd": "search_all"})
