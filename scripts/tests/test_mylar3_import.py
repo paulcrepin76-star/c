@@ -199,6 +199,8 @@ class InstallScriptTests(unittest.TestCase):
         self.assertIn("action=massimport", text)
         self.assertIn("Does not send imp_move", text)
         self.assertIn("Does not touch manga", text)
+        self.assertIn("slow down cowboy", text)
+        self.assertNotIn("|420|", text)
         self.assertNotIn("imp_move=0", text)
         self.assertNotIn("comicScan", text)
         self.assertNotIn("docker start comicarr", text)

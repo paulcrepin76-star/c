@@ -74,7 +74,26 @@ CherryPy treats that string as true and will rename files. ComicVine is
 still ~200 requests/hour per key, so a 420 means wait an hour and run
 `mylar3-import.sh resume`.
 
-Do not turn on Mylar3 **Move Files** or **Rename Files**.
+Do not turn on Mylar3 **Rename Files**. Incoming grabs may **Move** from
+the download folder into the existing series folder. Import of the
+library already on disk stays in place (`imp_move` off).
+
+ComicVine is the **catalog** (titles, issue lists, covers). It does not
+download files. JDownloader is only a hoster client for Mega/Mediafire
+when native GetComics DDL cannot. This box already has GetComics DDL
+(same source as Kapowarr), SABnzbd, Whatbox qBittorrent, Prowlarr, and
+pyLoad. Leave JDownloader off.
+
+```bash
+ssh root@100.116.48.120
+cd /mnt/user/appdata/resto
+bash scripts/mylar3-downloads.sh
+```
+
+That wires GetComics + FlareSolverr, SABnzbd category `comics`, and the
+Sonarr Whatbox qBittorrent profile with label `comics`. Auto-want stays
+off so the import does not hunt every missing issue. Search one series
+to test. Do not Search + Want All.
 
 Open Kavita to read the folders that are already on disk. The Kavita
 **Manga** library already has MPD Psycho, Bleach, One Piece, and

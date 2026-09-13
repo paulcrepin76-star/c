@@ -22,6 +22,8 @@ class Mylar3ComposeTests(unittest.TestCase):
         self.assertIn("/mnt/user/media/book/comics}:/comics", self.text)
         self.assertIn("/mnt/user/downloads/mylar3}:/downloads", self.text)
         self.assertIn("/mnt/user/appdata/mylar3}:/config", self.text)
+        self.assertIn("/mnt/user/downloads}:/data/downloads", self.text)
+        self.assertIn("/mnt/remotes/whatbox/Downloads}:/home/deicide/Downloads", self.text)
 
     def test_joins_media_net_and_skips_manga(self) -> None:
         self.assertIn("media-net", self.text)
