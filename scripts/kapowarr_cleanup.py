@@ -367,7 +367,7 @@ class Kapowarr:
             body=rows,
             timeout=1800,
         )
-        if status >= 400:
+        if status >= 400 or (isinstance(payload, dict) and payload.get("error")):
             raise RuntimeError(f"POST /libraryimport HTTP {status}: {payload}")
         return len(rows)
 

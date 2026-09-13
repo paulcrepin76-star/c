@@ -209,7 +209,6 @@ def existing_volume_for_folder(volumes: list[dict], path: str) -> dict | None:
         for item in volumes
         if kc.series_key(str(item.get("title") or "")) == key
         and (year is None or item.get("year") == year)
-        and not kc.is_imprint_root(str(item.get("folder") or ""))
     ]
     if year is not None:
         yeared = [item for item in matches if item.get("year") == year]
@@ -354,7 +353,8 @@ def cmd_import_unmatched(client: kc.Kapowarr, args: argparse.Namespace) -> int:
         "matched": [],
     }
 
-    by_query: dict[str, list[str]] = defaultdict(list)
+    pending: list[str] = []
+    existing_first: list[tuple[str, dict]] = []
     for folder in folders:
         reason = should_skip_folder(folder, include_foreign=args.include_foreign)
         if reason:
@@ -363,14 +363,65 @@ def cmd_import_unmatched(client: kc.Kapowarr, args: argparse.Namespace) -> int:
         if folder.lower() in volume_folders:
             summary["skipped"]["already-volume"].append(folder)
             continue
-        title, _year, _tree = folder_meta(folder)
-        by_query[search_query(title)].append(folder)
+        existing = existing_volume_for_folder(volumes, folder)
+        if existing and existing.get("comicvine_id"):
+            existing_first.append((folder, existing))
+        else:
+            pending.append(folder)
 
     print(
-        f"import unmatched queued={sum(len(v) for v in by_query.values())} "
-        f"queries={len(by_query)} skipped={ {k: len(v) for k, v in summary['skipped'].items()} }",
+        f"import unmatched existing={len(existing_first)} need-cv={len(pending)} "
+        f"skipped={ {k: len(v) for k, v in summary['skipped'].items()} }",
         flush=True,
     )
+
+    def import_folder(folder: str, picked: dict) -> None:
+        files = list_folder_files(client, folder)
+        rows = import_rows_for_folder(files, int(picked["id"]))
+        if not rows:
+            summary["skipped"]["no-files"].append(folder)
+            print(f"skip no-files {folder}", flush=True)
+            return
+        print(
+            f"import {folder} files={len(rows)} cv={picked['id']} "
+            f"{picked.get('name')} ({picked.get('start_year')}) via {picked['source']}",
+            flush=True,
+        )
+        if args.dry_run:
+            summary["imported_folders"] += 1
+            summary["imported_files"] += len(rows)
+            summary["matched"].append({"folder": folder, **picked, "files": len(rows)})
+            return
+        try:
+            client.import_files(rows, rename_files=False)
+        except Exception as exc:
+            summary["failed"].append({"folder": folder, "error": str(exc)})
+            print(f"import fail {folder}: {exc}", flush=True)
+            return
+        summary["imported_folders"] += 1
+        summary["imported_files"] += len(rows)
+        summary["matched"].append({"folder": folder, **picked, "files": len(rows)})
+        time.sleep(0.4)
+
+    for folder, existing in existing_first:
+        import_folder(
+            folder,
+            {
+                "id": int(existing["comicvine_id"]),
+                "name": existing.get("title"),
+                "start_year": existing.get("year"),
+                "source": "existing-volume",
+            },
+        )
+
+    if args.existing_only:
+        summary["skipped"]["need-cv"] = pending
+        pending = []
+
+    by_query: dict[str, list[str]] = defaultdict(list)
+    for folder in pending:
+        title, _year, _tree = folder_meta(folder)
+        by_query[search_query(title)].append(folder)
 
     for query, group in by_query.items():
         try:
@@ -384,54 +435,20 @@ def cmd_import_unmatched(client: kc.Kapowarr, args: argparse.Namespace) -> int:
         time.sleep(8)
         for folder in group:
             title, year, tree = folder_meta(folder)
-            existing = existing_volume_for_folder(volumes, folder)
-            picked = None
-            if existing and existing.get("comicvine_id"):
-                picked = {
-                    "id": int(existing["comicvine_id"]),
-                    "name": existing.get("title"),
-                    "start_year": existing.get("year"),
-                    "source": "existing-volume",
-                }
-            if picked is None:
-                match = pick_comicvine_volume(candidates, title, year, tree)
-                if match:
-                    picked = {
-                        "id": int(match["id"]),
-                        "name": match.get("name"),
-                        "start_year": match.get("start_year"),
-                        "source": "comicvine",
-                    }
-            if picked is None:
+            match = pick_comicvine_volume(candidates, title, year, tree)
+            if not match:
                 summary["skipped"]["no-cv-match"].append(folder)
                 print(f"skip no-cv {folder}", flush=True)
                 continue
-            files = list_folder_files(client, folder)
-            rows = import_rows_for_folder(files, int(picked["id"]))
-            if not rows:
-                summary["skipped"]["no-files"].append(folder)
-                print(f"skip no-files {folder}", flush=True)
-                continue
-            print(
-                f"import {folder} files={len(rows)} cv={picked['id']} "
-                f"{picked.get('name')} ({picked.get('start_year')}) via {picked['source']}",
-                flush=True,
+            import_folder(
+                folder,
+                {
+                    "id": int(match["id"]),
+                    "name": match.get("name"),
+                    "start_year": match.get("start_year"),
+                    "source": "comicvine",
+                },
             )
-            if args.dry_run:
-                summary["imported_folders"] += 1
-                summary["imported_files"] += len(rows)
-                summary["matched"].append({"folder": folder, **picked, "files": len(rows)})
-                continue
-            try:
-                client.import_files(rows, rename_files=False)
-            except Exception as exc:
-                summary["failed"].append({"folder": folder, "error": str(exc)})
-                print(f"import fail {folder}: {exc}", flush=True)
-                continue
-            summary["imported_folders"] += 1
-            summary["imported_files"] += len(rows)
-            summary["matched"].append({"folder": folder, **picked, "files": len(rows)})
-            time.sleep(3)
 
     volumes = client.volumes()
     summary["after"] = {
@@ -461,4 +478,9 @@ def add_unmatched_parser(sub: argparse._SubParsersAction) -> None:
         "--include-foreign",
         action="store_true",
         help="Also import ECC/Panini/Novaro/Urban reprint trees",
+    )
+    parser.add_argument(
+        "--existing-only",
+        action="store_true",
+        help="Only attach files to volumes Kapowarr already has (no ComicVine)",
     )

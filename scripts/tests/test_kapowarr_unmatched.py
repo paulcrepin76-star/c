@@ -140,6 +140,22 @@ class ExistingVolumeTests(unittest.TestCase):
         found = ku.existing_volume_for_folder(volumes, "/comics/DC New 52/All-Star Western")
         self.assertEqual(found["comicvine_id"], 43019)
 
+    def test_uses_imprint_root_volume(self) -> None:
+        volumes = [
+            {
+                "id": 55,
+                "comicvine_id": 94661,
+                "title": "Shade, The Changing Girl",
+                "year": 2016,
+                "folder": "/comics/dc rebirth",
+                "issues_downloaded": 3,
+            }
+        ]
+        found = ku.existing_volume_for_folder(
+            volumes, "/comics/dc rebirth/Shade, the Changing Girl"
+        )
+        self.assertEqual(found["comicvine_id"], 94661)
+
 
 if __name__ == "__main__":
     unittest.main()
