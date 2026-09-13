@@ -77,8 +77,20 @@ next to 2012) is kept. It renames a file only when it is a
 Rebirth-numbered issue sitting in a golden-age folder (Action Comics
 #957+ in the 1938 folder). Manga paths are ignored.
 
-Search All only uses GetComics. If FlareSolverr is not running, many
-results land on the blocklist and the missing count will not hit zero.
+Search All only uses GetComics. FlareSolverr is already installed
+(`ghcr.io/flaresolverr/flaresolverr:latest`, no host port). It starts
+on `manga-net` only, so Kapowarr and Prowlarr cannot see it until it
+is also attached to `kapowarr_default` and `media-net`:
+
+```bash
+ssh root@100.116.48.120
+bash /mnt/user/appdata/resto/scripts/flaresolverr-attach.sh
+```
+
+Kapowarr Settings → FlareSolverr Base URL should be
+`http://flaresolverr:8191` (no `/v1`). Prowlarr needs a FlareSolverr
+indexer proxy on that same URL, tagged on indexers that use Cloudflare
+(Torrent9).
 
 A first-time import of folders that have no volume yet still uses
 Library Import. Prefer **Import** so files stay where Kavita reads
