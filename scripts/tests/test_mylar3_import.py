@@ -93,6 +93,7 @@ class InstallScriptTests(unittest.TestCase):
         self.assertIn("imp_rename=0", text)
         self.assertIn("imp_move=0", text)
         self.assertIn("imp_paths=1", text)
+        self.assertIn("DELETE FROM importresults WHERE ComicID IS NULL", text)
         self.assertIn("Does not touch manga", text)
         self.assertNotIn("docker start comicarr", text)
         self.assertNotIn("/manga", text)

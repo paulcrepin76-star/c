@@ -97,25 +97,26 @@ done
 stamped="$(docker compose run --rm --no-deps --entrypoint python3 mylar3 \
   /config/mylar3_import.py stamp --db /config/mylar/mylar.db --volumes-json /config/kapowarr-volumes.json)"
 echo "stamped=$stamped"
+# Filename-only parse groups would become thousands of fake series. Keep
+# rows that already have a ComicVine ID (Kapowarr stamp or zip metadata).
+sqlite3 "$MYLAR_DB" "DELETE FROM importresults WHERE ComicID IS NULL OR ComicID='' OR ComicID='None';"
+echo "import_series=$(sqlite3 "$MYLAR_DB" "SELECT COUNT(DISTINCT ComicID) FROM importresults;")"
 
 curl -sS -o /tmp/mylar3-massimport.out -w "massimport_http=%{http_code}\n" --max-time 60 \
   --get --data-urlencode "action=massimport" \
   "http://127.0.0.1:${UI_PORT}/markImports" || true
 
 for _ in $(seq 1 720); do
-  counts="$(sqlite3 "$MYLAR_DB" "SELECT Status||'='||COUNT(*) FROM importresults GROUP BY Status;" | tr '\n' ' ')"
-  comics="$(sqlite3 "$MYLAR_DB" "SELECT COUNT(*) FROM comics;")"
+  counts="$(sqlite3 "$MYLAR_DB" "SELECT Status||'='||COUNT(*) FROM importresults GROUP BY Status;" 2>/dev/null | tr '\n' ' ' || true)"
+  comics="$(sqlite3 "$MYLAR_DB" "SELECT COUNT(*) FROM comics;" 2>/dev/null || echo lock)"
   echo "import_progress comics=$comics $counts"
-  if echo "$counts" | grep -q "Not Imported=" && ! echo "$counts" | grep -q "Not Imported=0"; then
-    if docker logs mylar3 2>&1 | tail -20 | grep -qi "api limit"; then
-      echo "comicvine_rate_limited=yes"
-      break
-    fi
-  fi
-  if ! echo "$counts" | grep -q "Not Imported="; then
+  if echo "$counts" | grep -q "Imported=" && ! echo "$counts" | grep -q "Not Imported="; then
     break
   fi
-  # Still importing if Not Imported remains and lock is held.
+  if docker logs mylar3 2>&1 | tail -30 | grep -qi "api limit"; then
+    echo "comicvine_rate_limited=yes"
+    break
+  fi
   sleep 15
 done
 
