@@ -84,17 +84,23 @@ def loose_file_score(title: str, filename: str) -> int:
     leftover = re.sub(r"\s+", " ", leftover).strip()
     if leftover.isdigit():
         return 0
+    wanted_tokens, have_tokens = set(wanted.split()), set(have.split())
+    extra_words = bool(leftover)
+    # Short titles like "Teen Titans" must not steal "Teen Titans Futures End".
+    if extra_words and (len(wanted_tokens) < 3 or not wanted_tokens <= have_tokens):
+        return 0
     if wanted == have or wanted.replace(" ", "") == have.replace(" ", ""):
         return 100
-    if wanted in have or have in wanted:
+    if wanted_tokens <= have_tokens and (not leftover or len(wanted_tokens) >= 3):
+        return 90
+    if not leftover and (wanted in have or have in wanted):
         return 85
-    wt, ht = set(wanted.split()), set(have.split())
-    if not wt or not ht:
+    if extra_words:
         return 0
-    overlap = len(wt & ht)
+    overlap = len(wanted_tokens & have_tokens)
     if overlap < 2:
         return 0
-    return int(100 * overlap / len(wt | ht))
+    return int(100 * overlap / len(wanted_tokens | have_tokens))
 
 
 def pick_loose_file(title: str, filenames: list[str]) -> str | None:
@@ -163,14 +169,16 @@ def apply_naming(client: kc.Kapowarr) -> dict:
     return payload.get("result") or payload
 
 
-def refresh_volume(client: kc.Kapowarr, volume_id: int) -> dict:
+def scan_volume(client: kc.Kapowarr, volume_id: int) -> dict:
+    """Rematch files in a volume folder without calling ComicVine."""
     status, payload = client.request(
-        "POST",
-        "/system/tasks",
-        body={"cmd": "refresh_and_scan", "volume_id": int(volume_id)},
+        "PUT",
+        f"/volumes/{int(volume_id)}/manualmatch",
+        body=[],
+        timeout=180,
     )
     if status >= 400:
-        raise RuntimeError(f"refresh_and_scan {volume_id} HTTP {status}: {payload}")
+        raise RuntimeError(f"scan volume {volume_id} HTTP {status}: {payload}")
     return payload.get("result") or payload
 
 
@@ -184,7 +192,7 @@ def ssh(command: str) -> str:
     return result.stdout
 
 
-def apply_plan_on_host(plan: list[dict[str, Any]], *, dry_run: bool) -> None:
+def sql_for_plan(plan: list[dict[str, Any]], *, update_paths: bool) -> str:
     sql_lines = ["BEGIN;"]
     for item in plan:
         vid = int(item["id"])
@@ -196,17 +204,52 @@ def apply_plan_on_host(plan: list[dict[str, Any]], *, dry_run: bool) -> None:
         sql_lines.append(
             f"UPDATE volumes SET folder='{folder}', custom_folder=1 WHERE id={vid};"
         )
-        if item.get("move_from") and item.get("move_to"):
+        if update_paths and item.get("move_from") and item.get("move_to"):
             old = str(item["move_from"]).replace("'", "''")
             new = str(item["move_to"]).replace("'", "''")
             sql_lines.append(
                 f"UPDATE files SET filepath='{new}' WHERE filepath='{old}';"
             )
     sql_lines.append("COMMIT;")
-    sql = "\n".join(sql_lines)
+    return "\n".join(sql_lines)
+
+
+def move_loose_file(src: str, dst: str) -> str:
+    """Move a loose archive if the destination is free. Returns MOVED/ALREADY/SKIP."""
+    dst_dir = str(Path(dst).parent)
+    return ssh(
+        f"mkdir -p {json.dumps(dst_dir)}; "
+        f"if [ -e {json.dumps(dst)} ] && [ ! -e {json.dumps(src)} ]; then echo ALREADY; "
+        f"elif [ -e {json.dumps(dst)} ]; then echo SKIP; "
+        f"elif [ -e {json.dumps(src)} ]; then mv {json.dumps(src)} {json.dumps(dst)} && echo MOVED; "
+        f"else echo MISSING; fi"
+    ).strip()
+
+
+def apply_plan_on_host(plan: list[dict[str, Any]], *, dry_run: bool) -> None:
+    sql = sql_for_plan(plan, update_paths=True)
     if dry_run:
         print(sql, flush=True)
         return
+    ssh(
+        "sqlite3 /mnt/user/appdata/kapowarr/Kapowarr.db "
+        "\".backup '/mnt/user/appdata/kapowarr/Kapowarr.db.bak-imprint'\""
+    )
+    moved_plan: list[dict[str, Any]] = []
+    for item in plan:
+        ssh(f"mkdir -p {json.dumps(container_to_host(str(item['to_folder'])))}")
+        if not item.get("move_from") or not item.get("move_to"):
+            moved_plan.append({**item, "move_from": None, "move_to": None})
+            continue
+        src = container_to_host(str(item["move_from"]))
+        dst = container_to_host(str(item["move_to"]))
+        outcome = move_loose_file(src, dst)
+        print(f"move {item['id']} {outcome} {Path(src).name}", flush=True)
+        if outcome in {"MOVED", "ALREADY"}:
+            moved_plan.append(item)
+        else:
+            moved_plan.append({**item, "move_from": None, "move_to": None})
+    sql = sql_for_plan(moved_plan, update_paths=True)
     Path("/tmp/kapowarr-fix-imprint.sql").write_text(sql + "\n", encoding="utf-8")
     subprocess.run(
         ["sudo", "tailscale", "ssh", "root@lerouxfamily", "cat > /tmp/kapowarr-fix-imprint.sql"],
@@ -215,13 +258,6 @@ def apply_plan_on_host(plan: list[dict[str, Any]], *, dry_run: bool) -> None:
         check=True,
     )
     ssh("sqlite3 /mnt/user/appdata/kapowarr/Kapowarr.db < /tmp/kapowarr-fix-imprint.sql")
-    for item in plan:
-        if not item.get("move_from") or not item.get("move_to"):
-            continue
-        src = container_to_host(str(item["move_from"]))
-        dst_dir = container_to_host(str(Path(item["move_to"]).parent))
-        dst = container_to_host(str(item["move_to"]))
-        ssh(f"mkdir -p {json.dumps(dst_dir)} && mv -n {json.dumps(src)} {json.dumps(dst)}")
 
 
 def list_loose_files() -> dict[str, list[str]]:
@@ -262,11 +298,11 @@ def cmd_run(client: kc.Kapowarr, dry_run: bool, out: str | None) -> int:
         apply_plan_on_host(plan, dry_run=False)
         for item in plan:
             try:
-                refresh_volume(client, int(item["id"]))
+                scan_volume(client, int(item["id"]))
             except Exception as exc:
                 print(f"scan {item['id']} {exc}", flush=True)
         try:
-            refresh_volume(client, 314)
+            scan_volume(client, 314)
         except Exception as exc:
             print(f"scan Action Comics 2011 {exc}", flush=True)
         volumes = client.volumes()

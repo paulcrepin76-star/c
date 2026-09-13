@@ -54,6 +54,26 @@ class LooseFileTests(unittest.TestCase):
             "/comics/DC New 52/Harley Quinn Annual.cbz",
         )
         self.assertIsNone(kf.pick_loose_file("Action Comics", self.FILES))
+        self.assertIsNone(
+            kf.pick_loose_file(
+                "Teen Titans",
+                ["/comics/DC New 52/Teen Titans (2014) Futures End.cbz"],
+            )
+        )
+        self.assertEqual(
+            kf.loose_file_score(
+                "Teen Titans",
+                "Teen Titans (2014) Futures End.cbz",
+            ),
+            0,
+        )
+        self.assertGreaterEqual(
+            kf.loose_file_score(
+                "Trinity of Sin: The Phantom Stranger: Futures End",
+                "Trinity of Sin Phantom Stranger Futures End.cbz",
+            ),
+            80,
+        )
         self.assertIsNone(kf.pick_loose_file("Batgirl: Endgame", [
             "/comics/DC New 52/Action Comics/Action Comics 001.cbz"
         ]))

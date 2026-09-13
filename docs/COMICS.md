@@ -112,11 +112,16 @@ trees (ECC, Novaro, Panini, Urban, …). It does not rename files.
 Kapowarr naming is set for Kavita later: series folder
 `{series_name} ({year})`, files `{series_name} ({year}) #{issue_number}`.
 Volumes must not share an imprint root (`/comics/DC New 52`,
-`/comics/dc rebirth`). Fix stolen matches with:
+`/comics/dc rebirth`). The imprint fix unlinks stolen matches, moves
+only a clearly matching loose one-shot, and rematches files in the new
+folder (no ComicVine call). Short titles do not steal leftovers
+(`Teen Titans` will not take `Teen Titans (2014) Futures End`).
 
 ```bash
 python3 scripts/kapowarr_fix_imprint.py --out /tmp/kapowarr-imprint-fix.json
 ```
+
+Do not run unmatched import until imprint-root volumes are gone.
 
 ```bash
 ssh root@100.116.48.120
