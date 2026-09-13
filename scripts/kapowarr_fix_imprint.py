@@ -53,6 +53,12 @@ def sanitize_folder_name(name: str) -> str:
 
 
 ACTION_COMICS_2011_ID = 314
+SHADE_2016_ID = 55
+SHADE_SOURCE_FOLDERS = (
+    "/comics/dc rebirth/Shade - the Changing Girl",
+    "/comics/dc rebirth/Shade, the Changing Girl",
+)
+ARCHIVE_SUFFIXES = {".cbr", ".cbz", ".cb7", ".cbt"}
 
 
 def year_named_folder(current_folder: str, title: str, year: int | None) -> str:
@@ -198,6 +204,109 @@ def scan_volume(client: kc.Kapowarr, volume_id: int) -> dict:
     if status >= 400:
         raise RuntimeError(f"scan volume {volume_id} HTTP {status}: {payload}")
     return payload.get("result") or payload
+
+
+def volume_folder_files(client: kc.Kapowarr, volume_id: int) -> list[dict]:
+    status, payload = client.request("GET", f"/volumes/{int(volume_id)}/manualmatch")
+    if status >= 400:
+        raise RuntimeError(f"GET /volumes/{volume_id}/manualmatch HTTP {status}: {payload}")
+    result = payload.get("result") if isinstance(payload, dict) else payload
+    return result if isinstance(result, list) else []
+
+
+def leading_issue_number(filename: str, prefix: str) -> float | None:
+    match = re.match(re.escape(prefix) + r"\s+(\d+(?:\.\d+)?)", Path(filename).name, re.I)
+    return float(match.group(1)) if match else None
+
+
+def force_match_oneshot(client: kc.Kapowarr, volume_id: int) -> str:
+    """Attach the single archive in a one-shot folder to its only issue."""
+    detail = client.volume(volume_id)
+    issues = detail.get("issues") or []
+    if len(issues) != 1:
+        return "SKIP_NOT_ONESHOT"
+    if detail.get("issues_downloaded"):
+        return "ALREADY"
+    archives = [
+        row
+        for row in volume_folder_files(client, volume_id)
+        if Path(str(row.get("filepath") or "")).suffix.lower() in ARCHIVE_SUFFIXES
+    ]
+    if len(archives) != 1:
+        return f"SKIP_FILES_{len(archives)}"
+    status, payload = client.request(
+        "PUT",
+        f"/volumes/{int(volume_id)}/manualmatch",
+        body=[
+            {
+                "filepath": archives[0]["filepath"],
+                "issue_ids": [int(issues[0]["id"])],
+                "general_file": False,
+                "forced_match": True,
+            }
+        ],
+    )
+    if status >= 400:
+        raise RuntimeError(f"oneshot match {volume_id} HTTP {status}: {payload}")
+    return "MATCHED"
+
+
+def force_match_leading_issues(client: kc.Kapowarr, volume_id: int, prefix: str) -> int:
+    """Fix files Kapowarr matched to 'Chapter 1' instead of the leading number."""
+    detail = client.volume(volume_id)
+    num_to_id = {
+        float(issue["calculated_issue_number"]): int(issue["id"])
+        for issue in (detail.get("issues") or [])
+    }
+    id_to_num = {issue_id: number for number, issue_id in num_to_id.items()}
+    fixes: list[dict[str, Any]] = []
+    for row in volume_folder_files(client, volume_id):
+        want = leading_issue_number(str(row.get("filepath") or ""), prefix)
+        issue_id = num_to_id.get(want) if want is not None else None
+        if issue_id is None:
+            continue
+        got = {id_to_num.get(int(item)) for item in (row.get("issue_ids") or [])}
+        if want in got:
+            continue
+        fixes.append(
+            {
+                "filepath": row["filepath"],
+                "issue_ids": [issue_id],
+                "general_file": False,
+                "forced_match": True,
+            }
+        )
+    if not fixes:
+        return 0
+    status, payload = client.request(
+        "PUT",
+        f"/volumes/{int(volume_id)}/manualmatch",
+        body=fixes,
+        timeout=180,
+    )
+    if status >= 400:
+        raise RuntimeError(f"leading-issue match {volume_id} HTTP {status}: {payload}")
+    return len(fixes)
+
+
+def merge_source_archives(dest_folder: str, source_folders: tuple[str, ...]) -> int:
+    dest_host = container_to_host(dest_folder)
+    ssh(f"mkdir -p {json.dumps(dest_host)}")
+    moved = 0
+    for source in source_folders:
+        raw = ssh(
+            "find "
+            f"{json.dumps(container_to_host(source))} -maxdepth 1 -type f "
+            "\\( -iname '*.cbr' -o -iname '*.cbz' -o -iname '*.cb7' \\)"
+        )
+        for line in raw.splitlines():
+            src = line.strip()
+            if not src:
+                continue
+            outcome = move_loose_file(src, str(Path(dest_host) / Path(src).name))
+            if outcome in {"MOVED", "ALREADY"}:
+                moved += 1
+    return moved
 
 
 def ssh(command: str) -> str:
@@ -365,6 +474,28 @@ def cmd_run(client: kc.Kapowarr, dry_run: bool, out: str | None) -> int:
             scan_volume(client, ACTION_COMICS_2011_ID)
         except Exception as exc:
             print(f"scan Action Comics 2011 {exc}", flush=True)
+        fixed = force_match_leading_issues(client, ACTION_COMICS_2011_ID, "Action Comics")
+        if fixed:
+            print(f"action-2011 forced {fixed} leading-issue files", flush=True)
+        shade = next((v for v in volumes if v.get("id") == SHADE_2016_ID), None)
+        if shade:
+            dest = str(shade.get("folder") or "")
+            moved = merge_source_archives(dest, SHADE_SOURCE_FOLDERS)
+            print(f"shade merge {moved} archives -> {dest}", flush=True)
+            try:
+                scan_volume(client, SHADE_2016_ID)
+            except Exception as exc:
+                print(f"scan Shade {exc}", flush=True)
+        for item in plan:
+            if (item.get("issue_count") or 0) > 1:
+                continue
+            try:
+                outcome = force_match_oneshot(client, int(item["id"]))
+            except Exception as exc:
+                print(f"oneshot {item['id']} {exc}", flush=True)
+                continue
+            if outcome == "MATCHED":
+                print(f"oneshot {item['id']} {item['title']} matched", flush=True)
         volumes = client.volumes()
         report["after"] = {
             "stats": client.stats(),

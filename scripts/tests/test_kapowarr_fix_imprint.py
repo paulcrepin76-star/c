@@ -36,6 +36,16 @@ class FolderTests(unittest.TestCase):
             "/comics/DC New 52/Action Comics (2011)",
         )
 
+    def test_leading_issue_ignores_chapter_subtitle(self) -> None:
+        self.assertEqual(
+            kf.leading_issue_number("Action Comics 031- Infected Chapter 1.cbz", "Action Comics"),
+            31.0,
+        )
+        self.assertEqual(
+            kf.leading_issue_number("Action Comics 023.1 - Born in Flames.cbz", "Action Comics"),
+            23.1,
+        )
+
 
 class LooseFileTests(unittest.TestCase):
     FILES = [

@@ -123,6 +123,11 @@ python3 scripts/kapowarr_fix_imprint.py --out /tmp/kapowarr-imprint-fix.json
 
 Do not run unmatched import until imprint-root volumes are gone.
 
+Action Comics 2011 is the prove case: the folder must be
+`Action Comics (2011)` or Kapowarr will not match year-less New 52
+filenames. Files titled `Chapter 1` are force-matched to the leading
+issue number (31–34), not issue 1.
+
 ```bash
 ssh root@100.116.48.120
 cd /mnt/user/appdata/resto
