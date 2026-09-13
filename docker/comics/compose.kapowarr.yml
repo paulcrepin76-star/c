@@ -7,8 +7,12 @@
 #
 # Then in http://100.116.48.120:5656
 #   Settings → ComicVine API key
+#   Settings → FlareSolverr Base URL → http://flaresolverr:8191
 #   Settings → Root Folders → add /comics and /manga (container paths)
 #   Volumes → Library Import → Import  (not Import and Rename)
+#
+# FlareSolverr lives in its own container on manga-net. After recreate:
+#   bash scripts/flaresolverr-attach.sh
 
 name: kapowarr
 
