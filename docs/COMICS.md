@@ -61,11 +61,12 @@ bash scripts/mylar3-install.sh
 bash scripts/mylar3-import.sh
 ```
 
-The import script scans `/comics` in place (`imp_paths=1`, move and
-rename off), stamps Kapowarr ComicVine IDs onto folders that have
-exactly one volume, then mass-imports. It does not touch manga. Files
-stay where they are. ComicVine is still ~200 requests/hour per key, so
-a 420 means wait an hour and run the import again.
+The import script scans `/comics` in place (`imp_paths=1`), stamps
+Kapowarr ComicVine IDs onto folders that have exactly one volume, then
+mass-imports. It does not touch manga. Do not send `imp_move=0` to
+Mylar — CherryPy treats that string as true and will rename files.
+ComicVine is still ~200 requests/hour per key, so a 420 means wait an
+hour and run the import again.
 
 Do not turn on Mylar3 **Move Files** or **Rename Files**.
 
