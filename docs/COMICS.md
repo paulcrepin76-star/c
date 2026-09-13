@@ -58,7 +58,28 @@ Do not add `/books/comics` as a single root.
 
 Kapowarr only imports files in a **subfolder** of a root. ComicVine is
 rate-limited (~200 requests/hour). A 420 (`Slow down cowboy`) means wait
-an hour. Use **Import**. Do not use **Import and Rename**.
+an hour.
+
+For a full cleanup (empty archives, empty duplicate volume *records*,
+then import unmatched files into the volume they already belong to):
+
+```bash
+# From the Cloud Agent, Kapowarr is proxied at http://127.0.0.1:5656
+bash scripts/kapowarr-cleanup.sh inventory --out /tmp/kapowarr-inventory.json
+bash scripts/kapowarr-cleanup.sh run --search-all --out /tmp/kapowarr-cleanup.json
+```
+
+That script never deletes a volume folder. It only deletes comic
+archives that are empty or under 1 KB, and Kapowarr volume rows that
+are empty twins of a populated title/year/folder. It renames a file
+only when it is a Rebirth-numbered issue sitting in a golden-age
+folder (Action Comics #957+ in the 1938 folder). Manga paths are
+ignored.
+
+A first-time import of folders that have no volume yet still uses
+Library Import. Prefer **Import** so files stay where Kavita reads
+them. Use **Import and Rename** only for a small, verified batch that
+is in the wrong series folder.
 
 ```bash
 ssh root@100.116.48.120
