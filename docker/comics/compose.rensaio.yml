@@ -1,0 +1,32 @@
+# Rensaio grabs manga via Mihon extensions. Kapowarr grabs comics.
+# Kavita is the reader. Do not turn on Rensaio Rename — that would move
+# archives Kavita already reads.
+#
+# On Unraid the live compose is /mnt/user/appdata/rensaio/compose.yml.
+
+name: rensaio
+
+services:
+  rensaio:
+    image: maxpiva/rensaio:latest
+    container_name: rensaio
+    restart: unless-stopped
+    stop_grace_period: 30s
+    networks:
+      - default
+      - media-net
+    environment:
+      PUID: ${PUID:-99}
+      PGID: ${PGID:-100}
+      UID: ${PUID:-99}
+      UMASK: "022"
+      TZ: ${TZ:-America/New_York}
+    ports:
+      - "9833:9833"
+    volumes:
+      - ${RENSAIO_CONFIG:-/mnt/user/appdata/rensaio/config}:/config
+      - ${RENSAIO_SERIES:-/mnt/user/media/book/manga}:/series
+
+networks:
+  media-net:
+    external: true

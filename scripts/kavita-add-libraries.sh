@@ -181,4 +181,4 @@ done
 echo
 echo "Created $CREATED new libraries."
 echo "Open http://100.116.48.120:5001 and read from those tiles."
-echo "Files were not moved. Leave Kapowarr / Comicarr Import and Rename off."
+echo "Files were not moved. Leave Kapowarr Import and Rename off. Do not use Rensaio Rename."

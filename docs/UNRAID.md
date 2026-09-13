@@ -84,7 +84,7 @@ Back up `/mnt/user/appdata/resto` and the Paperless media folder with your usual
 docker exec resto-postgres pg_dump -U resto resto > /mnt/user/backups/resto-$(date +%F).sql
 ```
 
-Comics and manga (Comicarr / Kapowarr / Kavita) are on this same Unraid box but are not part of the resto Compose file. See [COMICS.md](COMICS.md).
+Comics and manga (Rensaio / Kapowarr / Kavita) are on this same Unraid box but are not part of the resto Compose file. See [COMICS.md](COMICS.md).
 
 ## What not to do
 
