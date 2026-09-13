@@ -71,18 +71,34 @@ scan_qs="$(docker compose run --rm --no-deps --entrypoint python3 mylar3 \
 echo "scan_query=$scan_qs"
 
 # CherryPy wants query args. Keep move/rename off and paths on.
+# Do not send imp_move=0. Mylar does bool("0") which is True and will rename.
 curl -sS -o /tmp/mylar3-scan.out -w "scan_http=%{http_code}\n" --max-time 3600 \
   --get \
   --data-urlencode "path=${SCAN_PATH}" \
   --data-urlencode "scan=1" \
-  --data-urlencode "autoadd=0" \
-  --data-urlencode "imp_move=0" \
   --data-urlencode "imp_paths=1" \
-  --data-urlencode "imp_rename=0" \
-  --data-urlencode "imp_metadata=0" \
-  --data-urlencode "imp_seriesfolders=1" \
   --data-urlencode "forcescan=1" \
   "http://127.0.0.1:${UI_PORT}/comicScan" || true
+
+docker compose stop mylar3
+docker compose run --rm --no-deps --entrypoint python3 mylar3 \
+  /config/mylar3_config.py apply --config /config/mylar/config.ini --api-key-out /config/.api-key
+if grep -q '^imp_move = True' "$MYLAR/mylar/config.ini"; then
+  echo "imp_move is on. Refusing to import."
+  exit 1
+fi
+if grep -q '^imp_rename = True' "$MYLAR/mylar/config.ini"; then
+  echo "imp_rename is on. Refusing to import."
+  exit 1
+fi
+docker compose up -d --remove-orphans
+for _ in $(seq 1 60); do
+  code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 3 "http://127.0.0.1:${UI_PORT}/" || true)"
+  case "$code" in
+    200|301|302|303|307|308) break ;;
+  esac
+  sleep 2
+done
 
 status=""
 for _ in $(seq 1 180); do

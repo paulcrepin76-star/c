@@ -16,11 +16,10 @@ class ScanQueryTests(unittest.TestCase):
     def test_scan_stays_in_place(self) -> None:
         query = mi.scan_query("/comics/DC New 52/Action Comics (2011)")
         self.assertEqual(query["path"], "/comics/DC New 52/Action Comics (2011)")
-        self.assertEqual(query["imp_move"], "0")
-        self.assertEqual(query["imp_rename"], "0")
         self.assertEqual(query["imp_paths"], "1")
-        self.assertEqual(query["imp_metadata"], "0")
-        self.assertEqual(query["autoadd"], "0")
+        self.assertNotIn("imp_move", query)
+        self.assertNotIn("imp_rename", query)
+        self.assertNotIn("imp_metadata", query)
 
     def test_refuses_manga_and_paths_outside_comics(self) -> None:
         with self.assertRaises(ValueError):
@@ -90,9 +89,9 @@ class InstallScriptTests(unittest.TestCase):
         text = (Path(__file__).resolve().parents[1] / "mylar3-import.sh").read_text(
             encoding="utf-8"
         )
-        self.assertIn("imp_rename=0", text)
-        self.assertIn("imp_move=0", text)
+        self.assertIn("Do not send imp_move=0", text)
         self.assertIn("imp_paths=1", text)
+        self.assertIn("imp_move is on. Refusing to import.", text)
         self.assertIn("DELETE FROM importresults WHERE ComicID IS NULL", text)
         self.assertIn("Does not touch manga", text)
         self.assertNotIn("docker start comicarr", text)

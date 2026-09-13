@@ -53,16 +53,12 @@ def scan_query(path: str) -> dict[str, str]:
         raise ValueError("refusing to scan a manga path")
     if not folder_key(path).startswith(COMIC_ROOT):
         raise ValueError("scan path must stay under /comics")
+    # CherryPy does bool(imp_move). bool("0") is True, so never send
+    # imp_move=0 / imp_rename=0 / imp_metadata=0 as query strings.
     return {
         "path": path,
         "scan": "1",
-        "libraryscan": "0",
-        "autoadd": "0",
-        "imp_move": "0",
         "imp_paths": "1",
-        "imp_rename": "0",
-        "imp_metadata": "0",
-        "imp_seriesfolders": "1",
         "forcescan": "1",
     }
 
