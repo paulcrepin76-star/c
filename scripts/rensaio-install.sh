@@ -64,12 +64,19 @@ if [ "$code" = "200" ] && command -v jq >/dev/null 2>&1; then
   curl -sS --max-time 20 -X PUT -H "Content-Type: application/json" --data-binary @"$out" \
     http://127.0.0.1:9833/api/settings >/dev/null || true
   echo "preferred_languages=en,fr nsfw=Show wizard=complete"
-  # Wizard "install-extensions" only covers already-imported series. Install search sources.
+  # Wizard "install-extensions" only covers already-imported series. Install
+  # the usual community indexes plus official English publishers.
   for pkg in \
     eu.kanade.tachiyomi.extension.all.mangadex \
     eu.kanade.tachiyomi.extension.all.mangafire \
     eu.kanade.tachiyomi.extension.all.mangaplus \
-    eu.kanade.tachiyomi.extension.en.weebcentral
+    eu.kanade.tachiyomi.extension.en.weebcentral \
+    eu.kanade.tachiyomi.extension.en.vizshonenjump \
+    eu.kanade.tachiyomi.extension.all.webtoons \
+    eu.kanade.tachiyomi.extension.en.kodansha \
+    eu.kanade.tachiyomi.extension.all.mangaup \
+    eu.kanade.tachiyomi.extension.en.inkr \
+    eu.kanade.tachiyomi.extension.en.tapastic
   do
     curl -sS --max-time 180 -o /dev/null -w "install_${pkg##*.}=%{http_code}\n" \
       -X POST "http://127.0.0.1:9833/api/provider/install/${pkg}" || true

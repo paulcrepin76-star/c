@@ -22,8 +22,10 @@ Rename** on a folder Kavita already reads.
 Rensaio uses Mihon extensions (not Prowlarr / qBittorrent). The install
 script turns on English/French search, shows NSFW so MPD Psycho is visible,
 skips the import wizard (that can rewrite Kavita folders), and installs
-MangaDex, MangaFire, MANGA Plus, and Weeb Central. Search those five titles
-in the UI and subscribe. New chapters land under `/mnt/user/media/book/manga`.
+MangaDex, MangaFire, MANGA Plus, Weeb Central, plus official English
+publishers (VIZ, Webtoons, Kodansha, Manga UP!, INKR, Tapas). Search those
+five titles in the UI and subscribe. New chapters land under
+`/mnt/user/media/book/manga`.
 
 If Rensaio is recreated:
 

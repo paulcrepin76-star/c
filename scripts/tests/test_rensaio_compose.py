@@ -32,6 +32,8 @@ class RensaioInstallScriptTests(unittest.TestCase):
     def test_installs_search_sources_and_skips_wizard_import(self) -> None:
         self.assertIn("eu.kanade.tachiyomi.extension.all.mangadex", self.text)
         self.assertIn("eu.kanade.tachiyomi.extension.all.mangafire", self.text)
+        self.assertIn("eu.kanade.tachiyomi.extension.en.vizshonenjump", self.text)
+        self.assertIn("eu.kanade.tachiyomi.extension.en.kodansha", self.text)
         self.assertIn("isWizardSetupComplete = true", self.text)
         self.assertIn("nsfwVisibility = \"Show\"", self.text)
 
