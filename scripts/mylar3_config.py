@@ -94,7 +94,13 @@ def apply_safe_defaults(
     set_opt(cfg, "General", "destination_dir", COMIC_LOCATION)
     set_opt(cfg, "General", "multiple_dest_dirs", "None")
     set_opt(cfg, "General", "rename_files", ini_bool(False))
-    set_opt(cfg, "General", "move_files", ini_bool(False))
+    downloads_on = get(cfg, "DDL", "enable_ddl") == "True" or (
+        not empty(get(cfg, "SABnzbd", "sab_host")) and get(cfg, "SABnzbd", "sab_host") != "None"
+    )
+    if downloads_on and get(cfg, "General", "move_files") == "True":
+        set_opt(cfg, "General", "move_files", ini_bool(True))
+    else:
+        set_opt(cfg, "General", "move_files", ini_bool(False))
     set_opt(cfg, "General", "create_folders", ini_bool(True))
     set_opt(cfg, "General", "folder_format", FOLDER_FORMAT)
     set_opt(cfg, "General", "file_format", FILE_FORMAT)
@@ -148,6 +154,18 @@ def summary(cfg: configparser.ConfigParser) -> dict:
         "has_api_key": not empty(get(cfg, "API", "api_key")),
         "has_comicvine_api": not empty(get(cfg, "CV", "comicvine_api")),
         "multiple_dest_dirs": get(cfg, "General", "multiple_dest_dirs"),
+        "enable_ddl": get(cfg, "DDL", "enable_ddl") == "True",
+        "enable_getcomics": get(cfg, "DDL", "enable_getcomics") == "True",
+        "jd2_enable": get(cfg, "DDL", "jd2_enable") == "True",
+        "enable_flaresolverr": get(cfg, "DDL", "enable_flaresolverr") == "True",
+        "has_sab_host": not empty(get(cfg, "SABnzbd", "sab_host")) and get(cfg, "SABnzbd", "sab_host") != "None",
+        "has_qbit_host": not empty(get(cfg, "qBittorrent", "qbittorrent_host"))
+        and get(cfg, "qBittorrent", "qbittorrent_host") != "None",
+        "nzb_downloader": get(cfg, "Client", "nzb_downloader"),
+        "torrent_downloader": get(cfg, "Client", "torrent_downloader"),
+        "newznab": get(cfg, "Newznab", "newznab") == "True",
+        "enable_torznab": get(cfg, "Torznab", "enable_torznab") == "True",
+        "enable_torrents": get(cfg, "Torrents", "enable_torrents") == "True",
     }
 
 

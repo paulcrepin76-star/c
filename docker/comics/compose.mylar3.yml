@@ -32,6 +32,8 @@ services:
       - ${MYLAR3_CONFIG:-/mnt/user/appdata/mylar3}:/config
       - ${MYLAR3_COMICS:-/mnt/user/media/book/comics}:/comics
       - ${MYLAR3_DOWNLOADS:-/mnt/user/downloads/mylar3}:/downloads
+      - ${MYLAR3_SAB_DOWNLOADS:-/mnt/user/downloads}:/data/downloads
+      - ${MYLAR3_WHATBOX:-/mnt/remotes/whatbox/Downloads}:/home/deicide/Downloads
 
 networks:
   media-net:

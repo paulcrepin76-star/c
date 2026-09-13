@@ -79,6 +79,16 @@ class Mylar3ConfigTests(unittest.TestCase):
         self.assertEqual(cfg.get("General", "folder_format"), "$Series ($Year)")
         self.assertEqual(cfg.get("General", "file_format"), "$Series ($Year) #$Issue")
 
+    def test_preserves_move_files_when_downloads_already_enabled(self) -> None:
+        cfg = mc.load_ini(Path("/tmp/does-not-exist.ini"))
+        mc.apply_safe_defaults(cfg)
+        mc.set_opt(cfg, "DDL", "enable_ddl", mc.ini_bool(True))
+        mc.set_opt(cfg, "General", "move_files", mc.ini_bool(True))
+        mc.apply_safe_defaults(cfg)
+        self.assertEqual(cfg.get("General", "move_files"), "True")
+        self.assertEqual(cfg.get("General", "rename_files"), "False")
+        self.assertEqual(cfg.get("Import", "imp_move"), "False")
+
     def test_summary_omits_secret_values(self) -> None:
         cfg = mc.load_ini(Path("/tmp/does-not-exist.ini"))
         mc.apply_safe_defaults(cfg, comicvine="super-secret-cv", api_key="super-secret-api")
