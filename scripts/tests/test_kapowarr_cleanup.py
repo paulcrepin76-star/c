@@ -14,6 +14,10 @@ class ParseTests(unittest.TestCase):
     def test_issue_from_padded_name(self) -> None:
         self.assertEqual(kc.parse_issue_number("Action Comics 0957.cbr"), 957.0)
 
+    def test_issue_from_two_digits_and_vo_tag(self) -> None:
+        self.assertEqual(kc.parse_issue_number("Black Canary 05.cbz"), 5.0)
+        self.assertEqual(kc.parse_issue_number("Batman Beyond 030 (VO).cbr"), 30.0)
+
     def test_issue_from_kapowarr_name(self) -> None:
         self.assertEqual(
             kc.parse_issue_number("Action Comics (2016) Volume 03 Issue 957.cbr"),
@@ -139,13 +143,61 @@ class ImportTargetTests(unittest.TestCase):
         self.assertEqual(cv_id, 76720)
         self.assertFalse(rename)
 
-    def test_shared_folder_is_not_guessed(self) -> None:
+    def test_shared_folder_is_not_guessed_when_several_are_incomplete(self) -> None:
         cv_id, rename = kc.target_for_unmatched_file(
             "/comics/DC Comics/Batgirl (2025)/Batgirl 001.cbr",
             self.volumes,
         )
         self.assertIsNone(cv_id)
         self.assertFalse(rename)
+
+    def test_shared_folder_uses_empty_volume_after_complete_run(self) -> None:
+        volumes = self.volumes + [
+            {
+                "id": 213,
+                "comicvine_id": 45872,
+                "title": "Batman Beyond",
+                "year": 2012,
+                "folder": "/comics/DC Comics/Batman Beyond (2012)",
+                "issues_downloaded": 29,
+                "issue_count": 29,
+            },
+            {
+                "id": 127,
+                "comicvine_id": 95201,
+                "title": "Batman Beyond",
+                "year": 2016,
+                "folder": "/comics/DC Comics/Batman Beyond (2012)",
+                "issues_downloaded": 0,
+                "issue_count": 50,
+            },
+        ]
+        cv_id, rename = kc.target_for_unmatched_file(
+            "/comics/DC Comics/Batman Beyond (2012)/Batman Beyond 030 (VO).cbr",
+            volumes,
+        )
+        self.assertEqual(cv_id, 95201)
+        self.assertFalse(rename)
+
+    def test_empty_same_folder_different_year_is_a_duplicate(self) -> None:
+        volumes = [
+            {
+                "id": 203,
+                "title": "Far Sector",
+                "year": 2019,
+                "folder": "/comics/DC Comics/Far Sector (2021)",
+                "issues_downloaded": 12,
+            },
+            {
+                "id": 226,
+                "title": "Far Sector",
+                "year": 2021,
+                "folder": "/comics/DC Comics/Far Sector (2021)",
+                "issues_downloaded": 0,
+            },
+        ]
+        self.assertEqual(kc.empty_duplicate_volume_ids(volumes), [])
+        self.assertEqual(kc.empty_duplicate_volume_ids(volumes, ignore_year=True), [226])
 
     def test_manga_is_ignored(self) -> None:
         cv_id, _rename = kc.target_for_unmatched_file(

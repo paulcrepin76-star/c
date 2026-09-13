@@ -63,10 +63,8 @@ def parse_issue_number(filename: str) -> float | None:
     match = re.search(r"(?i)(?:issue|no\.?|#)\s*(\d+(?:\.\d+)?)", stem)
     if match:
         return float(match.group(1))
-    match = re.search(r"(?<!\d)(\d{3,4})(?:\s*$|(?=\s))", stem)
-    if match:
-        return float(match.group(1))
-    match = re.search(r"(?<!\d)(\d{3,4})$", stem)
+    stripped = re.sub(r"\s*\([^)]*\)\s*", " ", stem).strip()
+    match = re.search(r"(?<!\d)(\d{1,4})(?:\.\d+)?$", stripped)
     if match:
         return float(match.group(1))
     return None
@@ -112,13 +110,13 @@ def is_imprint_root(folder: str) -> bool:
     return folder_key(folder).lower() in IMPRINT_ROOTS
 
 
-def empty_duplicate_volume_ids(volumes: list[dict]) -> list[int]:
-    """Empty volume records that share title+year+folder with a populated one."""
+def empty_duplicate_volume_ids(volumes: list[dict], *, ignore_year: bool = False) -> list[int]:
+    """Empty volume records that share a title and folder with a populated one."""
     groups: dict[tuple, list[dict]] = defaultdict(list)
     for volume in volumes:
         key = (
             series_key(str(volume.get("title") or "")),
-            volume.get("year"),
+            None if ignore_year else volume.get("year"),
             folder_key(str(volume.get("folder") or "")),
         )
         groups[key].append(volume)
@@ -132,6 +130,36 @@ def empty_duplicate_volume_ids(volumes: list[dict]) -> list[int]:
         if populated and empty:
             delete.extend(int(item["id"]) for item in empty)
     return sorted(set(delete))
+
+
+def shared_folder_volume(owners: list[dict], issue: float | None) -> dict | None:
+    """Pick a volume when more than one series shares a folder."""
+    if issue is None or len(owners) < 2:
+        return None
+    complete = [
+        item
+        for item in owners
+        if (item.get("issue_count") or 0) > 0
+        and (item.get("issues_downloaded") or 0) >= (item.get("issue_count") or 0)
+    ]
+    incomplete = [
+        item
+        for item in owners
+        if (item.get("issues_downloaded") or 0) < (item.get("issue_count") or 1)
+    ]
+    if len(complete) == 1 and len(incomplete) == 1:
+        complete_count = float(complete[0].get("issue_count") or 0)
+        if issue > complete_count:
+            return incomplete[0]
+    if all(not (item.get("issues_downloaded") or 0) for item in owners):
+        fitting = [item for item in owners if (item.get("issue_count") or 0) >= issue]
+        if not fitting:
+            return None
+        fitting.sort(key=lambda item: item.get("issue_count") or 0)
+        unique_count = {item.get("issue_count") for item in fitting}
+        if len(fitting) == 1 or len(unique_count) == len(fitting):
+            return fitting[0]
+    return None
 
 
 def volumes_in_folder(volumes: list[dict], folder: str) -> list[dict]:
@@ -190,6 +218,9 @@ def target_for_unmatched_file(
     owners = [item for item in owners if not is_imprint_root(str(item.get("folder") or ""))]
     if len(owners) == 1:
         return int(owners[0]["comicvine_id"]), False
+    shared = shared_folder_volume(owners, issue)
+    if shared:
+        return int(shared["comicvine_id"]), False
     return None, False
 
 
@@ -428,13 +459,6 @@ def cmd_run(client: Kapowarr, args: argparse.Namespace) -> int:
         summary["deleted_files"].append({"id": file_id, "filepath": item.get("filepath"), "size": item.get("size")})
 
     volumes = client.volumes()
-    for volume_id in empty_duplicate_volume_ids(volumes):
-        print(f"delete empty duplicate volume {volume_id} (keep folder)", flush=True)
-        if not args.dry_run:
-            client.delete_volume(volume_id)
-        summary["deleted_volumes"].append(volume_id)
-
-    volumes = client.volumes()
     import_rows = client.library_import(limit=args.limit)
     keep, move, skipped = group_import_rows(import_rows, volumes)
     print(
@@ -455,6 +479,13 @@ def cmd_run(client: Kapowarr, args: argparse.Namespace) -> int:
         time.sleep(1)
     summary["import_skipped"] = len(skipped)
     summary["import_skipped_sample"] = skipped[:40]
+
+    volumes = client.volumes()
+    for volume_id in empty_duplicate_volume_ids(volumes, ignore_year=True):
+        print(f"delete empty duplicate volume {volume_id} (keep folder)", flush=True)
+        if not args.dry_run:
+            client.delete_volume(volume_id)
+        summary["deleted_volumes"].append(volume_id)
 
     if args.search_all:
         print("queue Search All", flush=True)
@@ -480,12 +511,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--url", default=os.environ.get("KAPOWARR_URL", "http://127.0.0.1:5656/api"))
     parser.add_argument("--api-key-file", default=os.environ.get("KAPOWARR_API_KEY_FILE"))
-    parser.add_argument("--limit", type=int, default=80, help="Library Import folder limit")
-    parser.add_argument("--batch", type=int, default=20)
-    parser.add_argument("--out", help="Write JSON report to this path")
     sub = parser.add_subparsers(dest="command", required=True)
-    sub.add_parser("inventory", help="Read-only snapshot")
+
+    def add_shared(target: argparse.ArgumentParser) -> None:
+        target.add_argument("--limit", type=int, default=80, help="Library Import folder limit")
+        target.add_argument("--batch", type=int, default=20)
+        target.add_argument("--out", help="Write JSON report to this path")
+
+    inventory = sub.add_parser("inventory", help="Read-only snapshot")
+    add_shared(inventory)
     run = sub.add_parser("run", help="Delete empties, import matches, optional Search All")
+    add_shared(run)
     run.add_argument("--dry-run", action="store_true")
     run.add_argument("--search-all", action="store_true")
     return parser
