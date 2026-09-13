@@ -109,6 +109,15 @@ bash scripts/kapowarr-cleanup.sh unmatched \
 That skips manga, the Marvel NOW preview dump, and foreign reprint
 trees (ECC, Novaro, Panini, Urban, …). It does not rename files.
 
+Kapowarr naming is set for Kavita later: series folder
+`{series_name} ({year})`, files `{series_name} ({year}) #{issue_number}`.
+Volumes must not share an imprint root (`/comics/DC New 52`,
+`/comics/dc rebirth`). Fix stolen matches with:
+
+```bash
+python3 scripts/kapowarr_fix_imprint.py --out /tmp/kapowarr-imprint-fix.json
+```
+
 ```bash
 ssh root@100.116.48.120
 cd /mnt/user/appdata/resto
