@@ -2,7 +2,13 @@
 # Run on Unraid as root. Wires Mylar3 grab clients from the house stack.
 # Does not enable JDownloader. Does not start Comicarr. Does not touch manga.
 # Does not send imp_move. Does not autowant the whole library.
+# Mylar3 was removed. Do not reinstall unless asked.
 set -euo pipefail
+
+if [ "${MYLAR3_REINSTALL:-}" != "1" ]; then
+  echo "Mylar3 was removed. Do not reinstall unless asked." >&2
+  exit 1
+fi
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 COMPOSE_SRC="$HERE/../docker/comics/compose.mylar3.yml"

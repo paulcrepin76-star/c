@@ -2,7 +2,13 @@
 # Run on Unraid as root. Resumes the in-place Mylar3 import until the
 # watchlist has the existing /comics library. Does not scan.
 # Does not send imp_move. Does not touch manga. Does not start Comicarr.
+# Mylar3 was removed. Do not reinstall unless asked.
 set -euo pipefail
+
+if [ "${MYLAR3_REINSTALL:-}" != "1" ]; then
+  echo "Mylar3 was removed. Do not reinstall unless asked." >&2
+  exit 1
+fi
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 IMPORT="$HERE/mylar3-import.sh"

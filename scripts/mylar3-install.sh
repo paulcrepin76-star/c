@@ -2,7 +2,13 @@
 # Run on Unraid as root. Starts Mylar3 next to Kapowarr.
 # Does not move, rename, or import the comic library Kavita will read.
 # Does not start Comicarr. Does not stop Kapowarr or Rensaio.
+# Mylar3 was removed. Do not reinstall unless asked.
 set -euo pipefail
+
+if [ "${MYLAR3_REINSTALL:-}" != "1" ]; then
+  echo "Mylar3 was removed. Do not reinstall unless asked." >&2
+  exit 1
+fi
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 COMPOSE_SRC="$HERE/../docker/comics/compose.mylar3.yml"

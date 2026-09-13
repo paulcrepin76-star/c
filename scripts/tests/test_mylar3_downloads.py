@@ -85,6 +85,7 @@ class DownloadScriptTests(unittest.TestCase):
         text = (Path(__file__).resolve().parents[1] / "mylar3-downloads.sh").read_text(
             encoding="utf-8"
         )
+        self.assertIn("Mylar3 was removed. Do not reinstall unless asked.", text)
         self.assertIn("Does not enable JDownloader", text)
         self.assertIn("Does not start Comicarr", text)
         self.assertIn("Does not send imp_move", text)
