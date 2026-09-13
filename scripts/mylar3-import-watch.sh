@@ -64,7 +64,7 @@ import_busy() {
 }
 
 rate_limited() {
-  docker logs --since 5m mylar3 2>&1 | grep -Eqi 'api limit|rate.?limit|420|slow down cowboy'
+  docker logs --since 5m mylar3 2>&1 | grep -Eqi 'api limit|rate limit exceeded|slow down cowboy'
 }
 
 resume_import() {
