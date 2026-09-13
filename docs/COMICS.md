@@ -51,20 +51,30 @@ reach Prowlarr later. The install copies Kapowarr's ComicVine key and
 leaves **Rename**, **Enforce Permissions**, and **Import** off. It does
 not scan or import the existing library.
 
-The leftover June appdata at `/mnt/user/appdata/mylar3` is reused (zero
-series). Do not add `/comics/DC New 52` or `/comics/dc rebirth` as extra
-roots.
+The leftover June appdata at `/mnt/user/appdata/mylar3` is reused. Do
+not add `/comics/DC New 52` or `/comics/dc rebirth` as extra roots.
 
 ```bash
 ssh root@100.116.48.120
 cd /mnt/user/appdata/resto
 bash scripts/mylar3-install.sh
+bash scripts/mylar3-import.sh
+# If a massimport is already running, resume it. Do not scan again.
+bash scripts/mylar3-import.sh resume
+bash scripts/mylar3-import-watch.sh
 ```
 
-ComicVine is still ~200 requests/hour per key. Kapowarr and Mylar3
-share that key, so a 420 (`Slow down cowboy`) still means wait an hour.
-Add series one at a time. Do not run Manage → Import on folders Kavita
-will read.
+The import script scans `/comics` in place (`imp_paths=1`), stamps
+Kapowarr ComicVine IDs onto folders that have exactly one volume, then
+mass-imports. After that queue is empty it can seed leftover English
+series folders (one group per folder) and import those too. It skips
+manga, foreign reprint trees, the ASM 700 dump, and Marvel NOW
+previews. It does not touch manga. Do not send `imp_move=0` to Mylar —
+CherryPy treats that string as true and will rename files. ComicVine is
+still ~200 requests/hour per key, so a 420 means wait an hour and run
+`mylar3-import.sh resume`.
+
+Do not turn on Mylar3 **Move Files** or **Rename Files**.
 
 Open Kavita to read the folders that are already on disk. The Kavita
 **Manga** library already has MPD Psycho, Bleach, One Piece, and
