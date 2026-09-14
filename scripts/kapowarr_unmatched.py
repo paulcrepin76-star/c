@@ -12,6 +12,8 @@ import argparse
 import json
 import os
 import re
+import shlex
+import subprocess
 import sys
 import time
 import urllib.error
@@ -223,6 +225,32 @@ def existing_volume_for_folder(volumes: list[dict], path: str) -> dict | None:
     return None
 
 
+HOST_COMICS = "/mnt/user/media/book/comics"
+
+
+def container_to_host(path: str) -> str:
+    text = path.rstrip("/")
+    if text == "/comics" or text.startswith("/comics/"):
+        return HOST_COMICS + text[len("/comics") :]
+    return text
+
+
+def host_to_container(path: str) -> str:
+    text = path.rstrip("/")
+    if text == HOST_COMICS or text.startswith(HOST_COMICS + "/"):
+        return "/comics" + text[len(HOST_COMICS) :]
+    return text
+
+
+def disk_files_from_find(stdout: str) -> list[str]:
+    files = []
+    for line in stdout.splitlines():
+        host = line.strip()
+        if host:
+            files.append(host_to_container(host))
+    return files
+
+
 def relative_volume_folder(path: str) -> str:
     text = path.rstrip("/")
     for prefix in ("/comics/", "/comics"):
@@ -245,9 +273,16 @@ def import_rows_for_folder(filepaths: list[str], comicvine_id: int) -> list[dict
 
 
 class ComicVine:
-    def __init__(self, api_key: str, cache_path: Path | None = None) -> None:
+    def __init__(
+        self,
+        api_key: str,
+        cache_path: Path | None = None,
+        *,
+        cache_only: bool = True,
+    ) -> None:
         self.api_key = api_key
         self.cache_path = cache_path
+        self.cache_only = cache_only
         self.cache: dict[str, list[dict]] = {}
         if cache_path and cache_path.is_file():
             raw = json.loads(cache_path.read_text(encoding="utf-8"))
@@ -264,6 +299,8 @@ class ComicVine:
         key = normalize_title(name)
         if key in self.cache:
             return self.cache[key]
+        if self.cache_only:
+            return []
         rows = self._fetch_all(name)
         self.cache[key] = rows
         self.save()
@@ -296,6 +333,8 @@ class ComicVine:
             "offset": str(offset),
         }
         url = "https://comicvine.gamespot.com/api/volumes/?" + urllib.parse.urlencode(params)
+        if "/search" in url:
+            raise RuntimeError("Refusing ComicVine /search; use /volumes with name:")
         req = urllib.request.Request(
             url,
             headers={"User-Agent": "KapowarrUnmatchedImport/1.0"},
@@ -317,13 +356,26 @@ class ComicVine:
 
 
 def list_folder_files(client: kc.Kapowarr, folder: str) -> list[str]:
-    rows = client.library_import(limit=200, folder_filter=folder)
-    files = []
-    for row in rows:
-        filepath = row.get("filepath") if isinstance(row, dict) else None
-        if filepath:
-            files.append(str(filepath))
-    return files
+    """List archives on disk. Never call GET /libraryimport (that hits /search)."""
+    del client
+    host = container_to_host(folder)
+    cmd = (
+        "find "
+        + shlex.quote(host)
+        + " -maxdepth 1 -type f \\( -iname '*.cbz' -o -iname '*.cbr' "
+        + "-o -iname '*.cb7' -o -iname '*.cbt' -o -iname '*.pdf' \\)"
+    )
+    result = subprocess.run(
+        ["sudo", "tailscale", "ssh", "root@lerouxfamily", cmd],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    if result.returncode != 0:
+        print(f"disk list fail {folder}: {result.stderr.strip()[:200]}", flush=True)
+        return []
+    return disk_files_from_find(result.stdout)
 
 
 def load_folders(path: str) -> list[str]:
@@ -340,9 +392,11 @@ def cmd_import_unmatched(client: kc.Kapowarr, args: argparse.Namespace) -> int:
     volume_folders = {kc.folder_key(str(item.get("folder") or "")).lower() for item in volumes}
     settings = client.settings()
     cv_key = str(settings.get("comicvine_api_key") or "")
-    if not cv_key:
-        raise RuntimeError("Kapowarr comicvine_api_key is empty")
-    vine = ComicVine(cv_key, Path(args.cache) if args.cache else None)
+    vine = ComicVine(
+        cv_key,
+        Path(args.cache) if args.cache else None,
+        cache_only=not args.fetch_cv,
+    )
 
     folders = load_folders(args.folders_file)
     summary: dict[str, Any] = {
@@ -376,13 +430,16 @@ def cmd_import_unmatched(client: kc.Kapowarr, args: argparse.Namespace) -> int:
         flush=True,
     )
 
-    def import_folder(folder: str, picked: dict) -> None:
+    def import_folder(folder: str, picked: dict) -> bool:
+        if max_folders and summary["imported_folders"] >= max_folders:
+            summary["skipped"]["max-folders"].append(folder)
+            return False
         files = list_folder_files(client, folder)
         rows = import_rows_for_folder(files, int(picked["id"]))
         if not rows:
             summary["skipped"]["no-files"].append(folder)
             print(f"skip no-files {folder}", flush=True)
-            return
+            return True
         print(
             f"import {folder} files={len(rows)} cv={picked['id']} "
             f"{picked.get('name')} ({picked.get('start_year')}) via {picked['source']}",
@@ -392,20 +449,23 @@ def cmd_import_unmatched(client: kc.Kapowarr, args: argparse.Namespace) -> int:
             summary["imported_folders"] += 1
             summary["imported_files"] += len(rows)
             summary["matched"].append({"folder": folder, **picked, "files": len(rows)})
-            return
+            return True
         try:
             client.import_files(rows, rename_files=False)
         except Exception as exc:
             summary["failed"].append({"folder": folder, "error": str(exc)})
             print(f"import fail {folder}: {exc}", flush=True)
-            return
+            return True
         summary["imported_folders"] += 1
         summary["imported_files"] += len(rows)
         summary["matched"].append({"folder": folder, **picked, "files": len(rows)})
         time.sleep(0.4)
+        return True
+
+    max_folders = int(getattr(args, "max_folders", 0) or 0)
 
     for folder, existing in existing_first:
-        import_folder(
+        if not import_folder(
             folder,
             {
                 "id": int(existing["comicvine_id"]),
@@ -413,7 +473,8 @@ def cmd_import_unmatched(client: kc.Kapowarr, args: argparse.Namespace) -> int:
                 "start_year": existing.get("year"),
                 "source": "existing-volume",
             },
-        )
+        ):
+            break
 
     if args.existing_only:
         summary["skipped"]["need-cv"] = pending
@@ -426,6 +487,7 @@ def cmd_import_unmatched(client: kc.Kapowarr, args: argparse.Namespace) -> int:
 
     for query, group in by_query.items():
         try:
+            cached = normalize_title(query) in vine.cache
             candidates = vine.volumes_named(query)
         except Exception as exc:
             print(f"comicvine fail {query!r}: {exc}", flush=True)
@@ -433,23 +495,29 @@ def cmd_import_unmatched(client: kc.Kapowarr, args: argparse.Namespace) -> int:
                 summary["failed"].append({"folder": folder, "error": str(exc)})
             time.sleep(8)
             continue
-        time.sleep(8)
+        if not cached and not vine.cache_only:
+            time.sleep(8)
         for folder in group:
             title, year, tree = folder_meta(folder)
             match = pick_comicvine_volume(candidates, title, year, tree)
             if not match:
-                summary["skipped"]["no-cv-match"].append(folder)
-                print(f"skip no-cv {folder}", flush=True)
+                reason = "no-cv-cache" if vine.cache_only else "no-cv-match"
+                summary["skipped"][reason].append(folder)
+                print(f"skip {reason} {folder}", flush=True)
                 continue
-            import_folder(
+            if not import_folder(
                 folder,
                 {
                     "id": int(match["id"]),
                     "name": match.get("name"),
                     "start_year": match.get("start_year"),
-                    "source": "comicvine",
+                    "source": "comicvine-cache" if cached or vine.cache_only else "comicvine",
                 },
-            )
+            ):
+                break
+        else:
+            continue
+        break
 
     volumes = client.volumes()
     summary["after"] = {
@@ -484,4 +552,15 @@ def add_unmatched_parser(sub: argparse._SubParsersAction) -> None:
         "--existing-only",
         action="store_true",
         help="Only attach files to volumes Kapowarr already has (no ComicVine)",
+    )
+    parser.add_argument(
+        "--fetch-cv",
+        action="store_true",
+        help="Allow ComicVine /volumes name: lookups for cache misses. Never uses /search.",
+    )
+    parser.add_argument(
+        "--max-folders",
+        type=int,
+        default=0,
+        help="Stop after this many imported folders (0 = no limit)",
     )

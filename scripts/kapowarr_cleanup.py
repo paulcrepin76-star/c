@@ -429,8 +429,18 @@ def cmd_inventory(client: Kapowarr, args: argparse.Namespace) -> int:
     files = collect_files(client, volumes)
     empty_files = [item for item in files if is_empty_archive(item)]
     empty_dups = empty_duplicate_volume_ids(volumes)
-    import_rows = client.library_import(limit=args.limit)
-    keep, move, skipped = group_import_rows(import_rows, volumes)
+    import_rows: list[dict] = []
+    keep: list[dict] = []
+    move: list[dict] = []
+    skipped: list[str] = []
+    if args.propose:
+        print(
+            "GET /libraryimport calls ComicVine /search per unmatched file. "
+            "Do not use this on hundreds of folders.",
+            flush=True,
+        )
+        import_rows = client.library_import(limit=args.limit)
+        keep, move, skipped = group_import_rows(import_rows, volumes)
     report = {
         "stats": stats,
         "volume_count": len(volumes),
@@ -491,8 +501,18 @@ def cmd_run(client: Kapowarr, args: argparse.Namespace) -> int:
         summary["deleted_files"].append({"id": file_id, "filepath": item.get("filepath"), "size": item.get("size")})
 
     volumes = client.volumes()
-    import_rows = client.library_import(limit=args.limit)
-    keep, move, skipped = group_import_rows(import_rows, volumes)
+    import_rows: list[dict] = []
+    keep: list[dict] = []
+    move: list[dict] = []
+    skipped: list[str] = []
+    if args.propose:
+        print(
+            "GET /libraryimport calls ComicVine /search per unmatched file. "
+            "Do not use this on hundreds of folders.",
+            flush=True,
+        )
+        import_rows = client.library_import(limit=args.limit)
+        keep, move, skipped = group_import_rows(import_rows, volumes)
     print(
         f"import candidates keep={len(keep)} move={len(move)} skipped={len(skipped)}",
         flush=True,
@@ -552,10 +572,20 @@ def build_parser() -> argparse.ArgumentParser:
 
     inventory = sub.add_parser("inventory", help="Read-only snapshot")
     add_shared(inventory)
+    inventory.add_argument(
+        "--propose",
+        action="store_true",
+        help="Call GET /libraryimport (ComicVine /search per file). Avoid on large libraries.",
+    )
     run = sub.add_parser("run", help="Delete empties, import matches, optional Search All")
     add_shared(run)
     run.add_argument("--dry-run", action="store_true")
     run.add_argument("--search-all", action="store_true")
+    run.add_argument(
+        "--propose",
+        action="store_true",
+        help="Call GET /libraryimport (ComicVine /search per file). Avoid on large libraries.",
+    )
     import kapowarr_unmatched as ku
 
     ku.add_unmatched_parser(sub)

@@ -161,5 +161,46 @@ class ExistingVolumeTests(unittest.TestCase):
         self.assertEqual(found["comicvine_id"], 94661)
 
 
+class DiskListTests(unittest.TestCase):
+    def test_maps_container_and_host_paths(self) -> None:
+        self.assertEqual(
+            ku.container_to_host("/comics/DC New 52/Action Comics (2011)"),
+            "/mnt/user/media/book/comics/DC New 52/Action Comics (2011)",
+        )
+        self.assertEqual(
+            ku.host_to_container(
+                "/mnt/user/media/book/comics/DC New 52/Action Comics (2011)/Action Comics 031.cbr"
+            ),
+            "/comics/DC New 52/Action Comics (2011)/Action Comics 031.cbr",
+        )
+
+    def test_parses_find_output(self) -> None:
+        stdout = (
+            "/mnt/user/media/book/comics/DC Comics/Batgirl (2025)/Batgirl 001.cbr\n"
+            "/mnt/user/media/book/comics/DC Comics/Batgirl (2025)/Batgirl 002.cbz\n"
+        )
+        self.assertEqual(
+            ku.disk_files_from_find(stdout),
+            [
+                "/comics/DC Comics/Batgirl (2025)/Batgirl 001.cbr",
+                "/comics/DC Comics/Batgirl (2025)/Batgirl 002.cbz",
+            ],
+        )
+
+    def test_folder_lister_does_not_call_libraryimport(self) -> None:
+        text = Path(ku.__file__).read_text(encoding="utf-8")
+        func = text.split("def list_folder_files", 1)[1].split("def load_folders", 1)[0]
+        self.assertNotIn("library_import", func)
+        self.assertIn("find ", func)
+
+
+class CacheOnlyTests(unittest.TestCase):
+    def test_cache_miss_does_not_fetch(self) -> None:
+        vine = ku.ComicVine("unused", cache_only=True)
+        vine.cache["green arrow"] = [{"id": 91813, "name": "Green Arrow"}]
+        self.assertEqual(vine.volumes_named("green arrow")[0]["id"], 91813)
+        self.assertEqual(vine.volumes_named("batman"), [])
+
+
 if __name__ == "__main__":
     unittest.main()

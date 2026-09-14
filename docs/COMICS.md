@@ -73,8 +73,12 @@ Do not add `/books/comics` as a single root.
 ## Kapowarr comics
 
 Kapowarr only imports files in a **subfolder** of a root. ComicVine is
-rate-limited (~200 requests/hour). A 420 (`Slow down cowboy`) means wait
-an hour.
+rate-limited (~200 requests **per API path** per hour). Library Import in
+the UI calls `/api/search` **once per unmatched file**. 500 folders is
+thousands of searches (`You have used 4689 requests... gluttonous`).
+A 420 means wait until the reset. Do not click Library Import for a
+whole tree. Use the unmatched helper, which lists files on disk and
+matches from the local cache (no `/search`):
 
 For a full cleanup (empty archives, empty duplicate volume *records*,
 then import unmatched files into the volume they already belong to):
@@ -109,11 +113,9 @@ indexer proxy on that same URL, tagged on indexers that use Cloudflare
 (Torrent9).
 
 A first-time import of folders that have no volume yet still uses
-Library Import. Prefer **Import** so files stay where Kavita reads
-them. Use **Import and Rename** only for a small, verified batch that
-is in the wrong series folder. Kapowarr's own volume search returns
-nothing, so missing folders are matched through ComicVine (`name:`
-filter only; the search endpoint 420s) and imported in place:
+cached ComicVine IDs (or volumes Kapowarr already has). Prefer **Import**
+so files stay where Kavita reads them. Use **Import and Rename** only
+for a small, verified batch that is in the wrong series folder:
 
 ```bash
 # From the Cloud Agent, after listing unmatched /comics folders
@@ -124,6 +126,9 @@ bash scripts/kapowarr-cleanup.sh unmatched \
 
 That skips manga, the Marvel NOW preview dump, and foreign reprint
 trees (ECC, Novaro, Panini, Urban, …). It does not rename files.
+It does not call ComicVine `/search`. Pass `--fetch-cv` only after
+`/search` has reset, and only for cache misses (`/volumes?filter=name:`,
+~200/hour).
 
 Kapowarr naming is set for Kavita later: series folder
 `{series_name} ({year})`, files `{series_name} ({year}) #{issue_number}`.
