@@ -209,21 +209,34 @@ def pick_comicvine_volume(
 
 
 def existing_volume_for_folder(volumes: list[dict], path: str) -> dict | None:
-    title, year, _tree = folder_meta(path)
+    """Return a Kapowarr volume only when it already uses this disk folder.
+
+    Matching a same-title volume in another tree is unsafe: Kapowarr Library
+    Import moves the files into that volume folder on VolumeAlreadyAdded.
+    """
+    title, year, tree = folder_meta(path)
     key = kc.series_key(title)
+    folder = kc.folder_key(path).lower()
+    same_folder = [
+        item
+        for item in volumes
+        if kc.folder_key(str(item.get("folder") or "")).lower() == folder
+        and item.get("comicvine_id")
+        and year_fits(year, item.get("year"), tree)
+    ]
+    if len(same_folder) == 1:
+        return same_folder[0]
+    if len(same_folder) > 1:
+        same_folder.sort(key=lambda item: -(item.get("issues_downloaded") or 0))
+        return same_folder[0]
     matches = [
         item
         for item in volumes
         if kc.series_key(str(item.get("title") or "")) == key
-        and (year is None or item.get("year") == year)
+        and item.get("comicvine_id")
+        and year_fits(year, item.get("year"), tree)
+        and kc.folder_key(str(item.get("folder") or "")).lower() == folder
     ]
-    if year is not None:
-        yeared = [item for item in matches if item.get("year") == year]
-        if len(yeared) == 1:
-            return yeared[0]
-        if len(yeared) > 1:
-            yeared.sort(key=lambda item: -(item.get("issues_downloaded") or 0))
-            return yeared[0]
     if len(matches) == 1:
         return matches[0]
     return None
@@ -435,10 +448,25 @@ def cmd_import_unmatched(client: kc.Kapowarr, args: argparse.Namespace) -> int:
         flush=True,
     )
 
+    cv_folders = {
+        int(item["comicvine_id"]): str(item.get("folder") or "")
+        for item in volumes
+        if item.get("comicvine_id")
+    }
+
     def import_folder(folder: str, picked: dict) -> bool:
         if max_folders and summary["imported_folders"] >= max_folders:
             summary["skipped"]["max-folders"].append(folder)
             return False
+        cv_id = int(picked["id"])
+        existing_folder = cv_folders.get(cv_id)
+        if existing_folder and kc.folder_key(existing_folder).lower() != kc.folder_key(folder).lower():
+            summary["skipped"]["existing-elsewhere"].append(folder)
+            print(
+                f"skip existing-elsewhere {folder} already {existing_folder} cv={cv_id}",
+                flush=True,
+            )
+            return True
         files = list_folder_files(client, folder)
         rows = import_rows_for_folder(files, int(picked["id"]))
         if not rows:
@@ -464,6 +492,7 @@ def cmd_import_unmatched(client: kc.Kapowarr, args: argparse.Namespace) -> int:
         summary["imported_folders"] += 1
         summary["imported_files"] += len(rows)
         summary["matched"].append({"folder": folder, **picked, "files": len(rows)})
+        cv_folders[cv_id] = folder
         time.sleep(0.4)
         return True
 

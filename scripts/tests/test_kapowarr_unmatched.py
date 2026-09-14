@@ -146,7 +146,7 @@ class ImportRowTests(unittest.TestCase):
 
 
 class ExistingVolumeTests(unittest.TestCase):
-    def test_matches_title_and_year(self) -> None:
+    def test_does_not_attach_another_tree(self) -> None:
         volumes = [
             {
                 "id": 87,
@@ -157,10 +157,25 @@ class ExistingVolumeTests(unittest.TestCase):
                 "issues_downloaded": 1,
             }
         ]
+        self.assertIsNone(
+            ku.existing_volume_for_folder(volumes, "/comics/DC New 52/All-Star Western")
+        )
+
+    def test_same_folder_is_ok(self) -> None:
+        volumes = [
+            {
+                "id": 87,
+                "comicvine_id": 43019,
+                "title": "All Star Western",
+                "year": 2011,
+                "folder": "/comics/DC New 52/All-Star Western",
+                "issues_downloaded": 1,
+            }
+        ]
         found = ku.existing_volume_for_folder(volumes, "/comics/DC New 52/All-Star Western")
         self.assertEqual(found["comicvine_id"], 43019)
 
-    def test_uses_imprint_root_volume(self) -> None:
+    def test_does_not_use_imprint_root_volume(self) -> None:
         volumes = [
             {
                 "id": 55,
@@ -171,10 +186,26 @@ class ExistingVolumeTests(unittest.TestCase):
                 "issues_downloaded": 3,
             }
         ]
-        found = ku.existing_volume_for_folder(
-            volumes, "/comics/dc rebirth/Shade, the Changing Girl"
+        self.assertIsNone(
+            ku.existing_volume_for_folder(
+                volumes, "/comics/dc rebirth/Shade, the Changing Girl"
+            )
         )
-        self.assertEqual(found["comicvine_id"], 94661)
+
+    def test_new_52_does_not_take_2021_title(self) -> None:
+        volumes = [
+            {
+                "id": 272,
+                "comicvine_id": 134718,
+                "title": "Harley Quinn",
+                "year": 2021,
+                "folder": "/comics/DC Comics/Harley Quinn (2021)",
+                "issues_downloaded": 34,
+            }
+        ]
+        self.assertIsNone(
+            ku.existing_volume_for_folder(volumes, "/comics/DC New 52/Harley Quinn")
+        )
 
 
 class DiskListTests(unittest.TestCase):

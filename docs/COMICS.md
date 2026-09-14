@@ -130,7 +130,8 @@ rename files. It does not call ComicVine `/search`. Pass `--fetch-cv`
 only after `/search` has reset, and only for cache misses
 (`/volumes?filter=name:`, ~200/hour). New 52 / Rebirth folders without
 a year in the name match the 2011-2016 / 2016-2021 windows, not a fake
-2011 or 2016 start year.
+2011 or 2016 start year. A ComicVine ID that Kapowarr already has in
+another folder is skipped; Library Import would move those files.
 
 Kapowarr naming is set for Kavita later: series folder
 `{series_name} ({year})`, files `{series_name} ({year}) #{issue_number}`.
