@@ -26,10 +26,6 @@ from typing import Any
 import kapowarr_cleanup as kc
 
 FOLDER_YEAR = re.compile(r"^(?P<title>.+?)\s*\((?P<year>\d{4})\)\s*$")
-TREE_YEAR = {
-    "dc new 52": 2011,
-    "dc rebirth": 2016,
-}
 DC_TREES = {
     "absolute dc",
     "dc comics",
@@ -62,6 +58,7 @@ SKIP_FOLDER_MARKERS = (
     "mpd-psycho",
     "mpd psycho",
     "dc rebirth omnibus",
+    "complete english comic collection",
 )
 PREFIX_WORDS = (
     "future state",
@@ -89,14 +86,21 @@ def normalize_title(title: str) -> str:
 
 
 def folder_meta(path: str) -> tuple[str, int | None, str]:
-    """Return ``(title, year, tree)`` from a container folder path."""
+    """Return ``(title, year, tree)`` from a container folder path.
+
+    Year comes from the folder name only. New 52 / Rebirth trees without a
+    year in the name keep ``year=None`` so matching uses the tree window
+    (2011-2016 / 2016-2021) instead of pretending every folder is 2011 or
+    2016. That 2011 default dropped Batman Eternal, Grayson, Gotham
+    Academy, and other 2013-2015 New 52 series.
+    """
     parsed = Path(path.rstrip("/"))
     name = parsed.name
     tree = parsed.parent.name
     match = FOLDER_YEAR.match(name)
     if match:
         return match.group("title"), int(match.group("year")), tree
-    return name, TREE_YEAR.get(tree.lower()), tree
+    return name, None, tree
 
 
 def search_query(title: str) -> str:
@@ -297,10 +301,11 @@ class ComicVine:
 
     def volumes_named(self, name: str) -> list[dict]:
         key = normalize_title(name)
-        if key in self.cache:
-            return self.cache[key]
+        cached = self.cache.get(key)
+        if cached:
+            return cached
         if self.cache_only:
-            return []
+            return list(cached or [])
         rows = self._fetch_all(name)
         self.cache[key] = rows
         self.save()

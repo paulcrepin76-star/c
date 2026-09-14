@@ -124,11 +124,13 @@ bash scripts/kapowarr-cleanup.sh unmatched \
   --out /tmp/kapowarr-unmatched.json
 ```
 
-That skips manga, the Marvel NOW preview dump, and foreign reprint
-trees (ECC, Novaro, Panini, Urban, …). It does not rename files.
-It does not call ComicVine `/search`. Pass `--fetch-cv` only after
-`/search` has reset, and only for cache misses (`/volumes?filter=name:`,
-~200/hour).
+That skips manga, the Marvel NOW preview dump, the ASM 1-700 dump,
+and foreign reprint trees (ECC, Novaro, Panini, Urban, …). It does not
+rename files. It does not call ComicVine `/search`. Pass `--fetch-cv`
+only after `/search` has reset, and only for cache misses
+(`/volumes?filter=name:`, ~200/hour). New 52 / Rebirth folders without
+a year in the name match the 2011-2016 / 2016-2021 windows, not a fake
+2011 or 2016 start year.
 
 Kapowarr naming is set for Kavita later: series folder
 `{series_name} ({year})`, files `{series_name} ({year}) #{issue_number}`.
