@@ -17,16 +17,16 @@ class FolderMetaTests(unittest.TestCase):
         self.assertEqual(year, 2021)
         self.assertEqual(tree, "DC Comics")
 
-    def test_new_52_infers_2011(self) -> None:
+    def test_new_52_without_year_stays_open(self) -> None:
         title, year, tree = ku.folder_meta("/comics/DC New 52/Green Arrow")
         self.assertEqual(title, "Green Arrow")
-        self.assertEqual(year, 2011)
+        self.assertIsNone(year)
         self.assertEqual(tree, "DC New 52")
 
-    def test_rebirth_infers_2016(self) -> None:
+    def test_rebirth_without_year_stays_open(self) -> None:
         title, year, _tree = ku.folder_meta("/comics/dc rebirth/Suicide Squad")
         self.assertEqual(title, "Suicide Squad")
-        self.assertEqual(year, 2016)
+        self.assertIsNone(year)
 
 
 class SearchQueryTests(unittest.TestCase):
@@ -53,6 +53,12 @@ class SkipTests(unittest.TestCase):
         )
         self.assertEqual(
             ku.should_skip_folder("/comics/dc rebirth/DC Rebirth Omnibus (2016)"),
+            "skip-list",
+        )
+        self.assertEqual(
+            ku.should_skip_folder(
+                "/comics/Amazing spiderman/The Amazing Spiderman Complete English Comic Collection (1-700)-"
+            ),
             "skip-list",
         )
 
@@ -89,6 +95,16 @@ class PickVolumeTests(unittest.TestCase):
     def test_new_52_window_picks_2011(self) -> None:
         picked = ku.pick_comicvine_volume(self.green_arrow, "Green Arrow", None, "DC New 52")
         self.assertEqual(picked["id"], 43716)
+
+    def test_new_52_window_allows_2014_series(self) -> None:
+        rows = [
+            {"id": 72915, "name": "Batman Eternal", "start_year": 2014, "count_of_issues": 52, "publisher": {"name": "DC Comics"}},
+            {"id": 89476, "name": "Batman Eternal", "start_year": 2016, "count_of_issues": 8, "publisher": {"name": "Panini Comics"}},
+            {"id": 43716, "name": "Green Arrow", "start_year": 2011, "count_of_issues": 52, "publisher": {"name": "DC Comics"}},
+        ]
+        picked = ku.pick_comicvine_volume(rows, "Batman Eternal", None, "DC New 52")
+        self.assertEqual(picked["id"], 72915)
+        self.assertIsNone(ku.pick_comicvine_volume(rows, "Batman Eternal", 2011, "DC New 52"))
 
     def test_rebirth_one_shot_keeps_rebirth_in_title(self) -> None:
         picked = ku.pick_comicvine_volume(
@@ -130,7 +146,7 @@ class ImportRowTests(unittest.TestCase):
 
 
 class ExistingVolumeTests(unittest.TestCase):
-    def test_matches_title_and_year(self) -> None:
+    def test_does_not_attach_another_tree(self) -> None:
         volumes = [
             {
                 "id": 87,
@@ -141,10 +157,25 @@ class ExistingVolumeTests(unittest.TestCase):
                 "issues_downloaded": 1,
             }
         ]
+        self.assertIsNone(
+            ku.existing_volume_for_folder(volumes, "/comics/DC New 52/All-Star Western")
+        )
+
+    def test_same_folder_is_ok(self) -> None:
+        volumes = [
+            {
+                "id": 87,
+                "comicvine_id": 43019,
+                "title": "All Star Western",
+                "year": 2011,
+                "folder": "/comics/DC New 52/All-Star Western",
+                "issues_downloaded": 1,
+            }
+        ]
         found = ku.existing_volume_for_folder(volumes, "/comics/DC New 52/All-Star Western")
         self.assertEqual(found["comicvine_id"], 43019)
 
-    def test_uses_imprint_root_volume(self) -> None:
+    def test_does_not_use_imprint_root_volume(self) -> None:
         volumes = [
             {
                 "id": 55,
@@ -155,10 +186,73 @@ class ExistingVolumeTests(unittest.TestCase):
                 "issues_downloaded": 3,
             }
         ]
-        found = ku.existing_volume_for_folder(
-            volumes, "/comics/dc rebirth/Shade, the Changing Girl"
+        self.assertIsNone(
+            ku.existing_volume_for_folder(
+                volumes, "/comics/dc rebirth/Shade, the Changing Girl"
+            )
         )
-        self.assertEqual(found["comicvine_id"], 94661)
+
+    def test_new_52_does_not_take_2021_title(self) -> None:
+        volumes = [
+            {
+                "id": 272,
+                "comicvine_id": 134718,
+                "title": "Harley Quinn",
+                "year": 2021,
+                "folder": "/comics/DC Comics/Harley Quinn (2021)",
+                "issues_downloaded": 34,
+            }
+        ]
+        self.assertIsNone(
+            ku.existing_volume_for_folder(volumes, "/comics/DC New 52/Harley Quinn")
+        )
+
+
+class DiskListTests(unittest.TestCase):
+    def test_maps_container_and_host_paths(self) -> None:
+        self.assertEqual(
+            ku.container_to_host("/comics/DC New 52/Action Comics (2011)"),
+            "/mnt/user/media/book/comics/DC New 52/Action Comics (2011)",
+        )
+        self.assertEqual(
+            ku.host_to_container(
+                "/mnt/user/media/book/comics/DC New 52/Action Comics (2011)/Action Comics 031.cbr"
+            ),
+            "/comics/DC New 52/Action Comics (2011)/Action Comics 031.cbr",
+        )
+
+    def test_parses_find_output(self) -> None:
+        stdout = (
+            "/mnt/user/media/book/comics/DC Comics/Batgirl (2025)/Batgirl 001.cbr\n"
+            "/mnt/user/media/book/comics/DC Comics/Batgirl (2025)/Batgirl 002.cbz\n"
+        )
+        self.assertEqual(
+            ku.disk_files_from_find(stdout),
+            [
+                "/comics/DC Comics/Batgirl (2025)/Batgirl 001.cbr",
+                "/comics/DC Comics/Batgirl (2025)/Batgirl 002.cbz",
+            ],
+        )
+
+    def test_folder_lister_does_not_call_libraryimport(self) -> None:
+        text = Path(ku.__file__).read_text(encoding="utf-8")
+        func = text.split("def list_folder_files", 1)[1].split("def load_folders", 1)[0]
+        self.assertNotIn("library_import", func)
+        self.assertIn("find ", func)
+
+
+class CacheOnlyTests(unittest.TestCase):
+    def test_cache_miss_does_not_fetch(self) -> None:
+        vine = ku.ComicVine("unused", cache_only=True)
+        vine.cache["green arrow"] = [{"id": 91813, "name": "Green Arrow"}]
+        self.assertEqual(vine.volumes_named("green arrow")[0]["id"], 91813)
+        self.assertEqual(vine.volumes_named("batman"), [])
+
+    def test_empty_cache_is_miss_when_fetching(self) -> None:
+        vine = ku.ComicVine("unused", cache_only=False)
+        vine.cache["earth two"] = []
+        vine._fetch_all = lambda name: [{"id": 42597, "name": "Earth Two"}]  # type: ignore[method-assign]
+        self.assertEqual(vine.volumes_named("earth two")[0]["id"], 42597)
 
 
 if __name__ == "__main__":
