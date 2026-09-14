@@ -19,12 +19,23 @@ grabs **comics**. Do not turn on Rensaio **Rename** or Kapowarr
 | `/mnt/user/media/book/manga` | `/manga` | Kavita |
 | `/mnt/user/media/book` | `/books` | Kavita |
 
-Rensaio uses Mihon extensions (not Prowlarr / qBittorrent). The install
-script turns on English/French search, shows NSFW so MPD Psycho is visible,
-skips the import wizard (that can rewrite Kavita folders), and installs
-MangaDex, MangaFire, MANGA Plus, Weeb Central, plus official English
-publishers (VIZ, Webtoons, Kodansha, Manga UP!, INKR, Tapas). Search those
-five titles in the UI and subscribe. New chapters land under
+Rensaio uses Mihon website extensions (MangaDex, MangaFire, Weeb Central,
+VIZ). It is not Prowlarr / qBittorrent. Official Jump apps only have the
+chapters they currently license, so a search that “finds” Bleach on VIZ
+still cannot grab the full run. Pick the **MangaFire** or **Weeb Central**
+row, not the first catalog dump. FlareSolverr must be
+`http://flaresolverr:8191` (not `127.0.0.1`) or Weeb Central stays empty.
+
+Clear a stuck queue (failed Weeb Central retries clog downloads) with:
+
+```bash
+ssh root@100.116.48.120
+cd /mnt/user/appdata/resto
+bash scripts/rensaio-queue.sh status
+bash scripts/rensaio-queue.sh clean
+```
+
+Do not turn on Rensaio **Rename**. New chapters land under
 `/mnt/user/media/book/manga`.
 
 If Rensaio is recreated:
@@ -36,8 +47,10 @@ bash scripts/rensaio-install.sh
 bash scripts/rensaio-search.sh
 ```
 
-Comicarr was removed. Its appdata is kept as
-`/mnt/user/appdata/comicarr-backup-*` for rollback. Manga files were not
+Comicarr was removed. It found complete packs through Prowlarr / Nyaa,
+which is why famous titles looked easier there. Do not start it again
+unless asked; it fights Kapowarr for the same folders. Appdata is kept
+as `/mnt/user/appdata/comicarr-backup-*`. Manga files were not
 deleted. Mylar3 was removed (container, appdata, and
 `/mnt/user/downloads/mylar3`). Comic files were not deleted. The leftover
 `scripts/mylar3-*.sh` helpers refuse to run. Do not reinstall Mylar3

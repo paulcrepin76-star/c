@@ -60,7 +60,12 @@ if [ "$code" = "200" ] && command -v jq >/dev/null 2>&1; then
   trap 'rm -f "$raw" "$out"' RETURN
   curl -sS --max-time 20 http://127.0.0.1:9833/api/settings > "$raw"
   # Skip the import wizard so it cannot rewrite Kavita folders. Search/subscribe instead.
-  jq '.preferredLanguages = ["en","fr"] | .nsfwVisibility = "Show" | .isWizardSetupComplete = true' "$raw" > "$out"
+  jq '.preferredLanguages = ["en","fr"]
+      | .nsfwVisibility = "Show"
+      | .isWizardSetupComplete = true
+      | .flareSolverrEnabled = true
+      | .flareSolverrUrl = "http://flaresolverr:8191"
+      | .flareSolverrAsResponseFallback = true' "$raw" > "$out"
   curl -sS --max-time 20 -X PUT -H "Content-Type: application/json" --data-binary @"$out" \
     http://127.0.0.1:9833/api/settings >/dev/null || true
   echo "preferred_languages=en,fr nsfw=Show wizard=complete"
@@ -74,7 +79,6 @@ if [ "$code" = "200" ] && command -v jq >/dev/null 2>&1; then
     eu.kanade.tachiyomi.extension.en.vizshonenjump \
     eu.kanade.tachiyomi.extension.all.webtoons \
     eu.kanade.tachiyomi.extension.en.kodansha \
-    eu.kanade.tachiyomi.extension.all.mangaup \
     eu.kanade.tachiyomi.extension.en.inkr \
     eu.kanade.tachiyomi.extension.en.tapastic
   do

@@ -23,10 +23,17 @@ for q in "Bleach" "MPD Psycho" "Naruto" "One Piece" "Shangri-La Frontier"; do
       --data-urlencode "languages=en,fr" || echo err
   )"
   count="$(jq 'if type=="array" then length else 0 end' "$tmp" 2>/dev/null || echo 0)"
-  titles="$(jq -r 'if type=="array" then [.[:5][] | (.title // .Title // .name // empty)] | .[] else empty end' "$tmp" 2>/dev/null | head -5)"
+  hits="$(jq -r --arg q "$q" '
+    def norm: ascii_downcase | gsub("[^a-z0-9]+";" ") | gsub("^ +| +$";"");
+    if type!="array" then empty else
+      ($q|norm) as $want
+      | [.[] | select((.title|norm)==$want)] 
+      | .[:6][] | "  - \(.title) [\(.provider)/\(.lang)]"
+    end
+  ' "$tmp" 2>/dev/null || true)"
   echo "search ${q}: http=${code} count=${count}"
-  if [ -n "$titles" ]; then
-    printf '%s\n' "$titles" | sed 's/^/  - /'
+  if [ -n "$hits" ]; then
+    printf '%s\n' "$hits"
     ok=$((ok + 1))
   fi
   rm -f "$tmp"
