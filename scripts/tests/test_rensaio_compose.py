@@ -36,6 +36,23 @@ class RensaioInstallScriptTests(unittest.TestCase):
         self.assertIn("eu.kanade.tachiyomi.extension.en.kodansha", self.text)
         self.assertIn("isWizardSetupComplete = true", self.text)
         self.assertIn("nsfwVisibility = \"Show\"", self.text)
+        self.assertIn("flareSolverrUrl = \"http://flaresolverr:8191\"", self.text)
+        self.assertNotIn("eu.kanade.tachiyomi.extension.all.mangaup", self.text)
+        self.assertNotIn("docker start comicarr", self.text)
+
+
+class RensaioQueueScriptTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.text = (Path(__file__).resolve().parents[1] / "rensaio-queue.sh").read_text(
+            encoding="utf-8"
+        )
+
+    def test_clears_waiting_downloads_only(self) -> None:
+        self.assertIn("action=Delete", self.text)
+        self.assertIn("status=Waiting", self.text)
+        self.assertIn("Does not rename series", self.text)
+        self.assertNotIn("docker start comicarr", self.text)
+        self.assertNotIn("/api/serie/rename", self.text)
 
 
 if __name__ == "__main__":
