@@ -19,31 +19,48 @@ if [ -z "$src" ] || [ ! -d "$src" ]; then
   exit 1
 fi
 
+MAUTIC_DB_CONTAINER="${MAUTIC_DB_CONTAINER:-resto-mautic-mysql}"
+POSTIZ_DB_CONTAINER="${POSTIZ_DB_CONTAINER:-resto-postiz-postgres}"
+TEMPORAL_DB_CONTAINER="${TEMPORAL_DB_CONTAINER:-resto-temporal-postgres}"
+
+refuse_protected() {
+  local name="$1"
+  local keep
+  for keep in "${PROTECTED_CONTAINERS[@]}"; do
+    if [ "$keep" = "$name" ]; then
+      echo "Refusing to exec into protected container ${name}."
+      exit 1
+    fi
+  done
+}
+
 restore_into() {
   local name="$1"
   local file="$2"
   shift 2
-  for allowed in "${MARKETING_CONTAINERS[@]}"; do
-    if [ "$allowed" = "$name" ]; then
-      if [ ! -f "$file" ]; then
-        echo "Missing ${file}. That database was left untouched."
-        return 0
-      fi
-      if ! docker inspect -f '{{.State.Running}}' "$name" 2>/dev/null | grep -qx true; then
-        echo "${name} is not running. ${file} was not loaded."
-        return 1
-      fi
-      docker exec -i "$name" "$@" < "$file"
-      echo "Loaded ${file} into ${name}"
-      return 0
-    fi
-  done
-  echo "Refusing to exec into ${name}."
-  exit 1
+  refuse_protected "$name"
+  if [ ! -f "$file" ]; then
+    echo "Missing ${file}. That database was left untouched."
+    return 0
+  fi
+  if ! docker inspect -f '{{.State.Running}}' "$name" 2>/dev/null | grep -qx true; then
+    echo "${name} is not running. ${file} was not loaded."
+    return 1
+  fi
+  docker exec -i "$name" "$@" < "$file"
+  echo "Loaded ${file} into ${name}"
 }
 
-restore_into resto-mautic-mysql "$src/mautic.sql" sh -c 'mysql --user="$MYSQL_USER" --password="$MYSQL_PASSWORD"'
-restore_into resto-postiz-postgres "$src/postiz.sql" sh -c 'psql -U postiz -d postiz'
-restore_into resto-postiz-postgres "$src/command.sql" sh -c 'psql -U postiz -d command'
-restore_into resto-temporal-postgres "$src/temporal.sql" sh -c 'psql -U temporal -d postgres'
+restore_into "$MAUTIC_DB_CONTAINER" "$src/mautic.sql" sh -c 'mysql --user=root --password="$MYSQL_ROOT_PASSWORD"'
+restore_into "$POSTIZ_DB_CONTAINER" "$src/postiz.sql" sh -c 'psql -U postiz -d postiz -v ON_ERROR_STOP=1'
+restore_into "$POSTIZ_DB_CONTAINER" "$src/command.sql" sh -c 'psql -U postiz -d command -v ON_ERROR_STOP=1'
+if [ -f "$src/temporal.sql" ]; then
+  restore_into "$TEMPORAL_DB_CONTAINER" "$src/temporal.sql" sh -c 'psql -U temporal -d postgres -v ON_ERROR_STOP=1'
+fi
+for file in "$src"/temporal-*.sql; do
+  [ -f "$file" ] || continue
+  base="$(basename "$file" .sql)"
+  db="${base#temporal-}"
+  restore_into "$TEMPORAL_DB_CONTAINER" "$file" sh -c "psql -U temporal -d ${db} -v ON_ERROR_STOP=1"
+done
 echo "Restore finished. resto-postgres was not contacted."

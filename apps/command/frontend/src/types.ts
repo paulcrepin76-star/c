@@ -6,6 +6,7 @@ export type IntegrationProof = {
   unit_test: string;
   still_needed: string;
   live_verified: boolean;
+  authorized_api_test: boolean;
 };
 
 export type Status = {

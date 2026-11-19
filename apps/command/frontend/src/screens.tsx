@@ -496,7 +496,7 @@ export function Connections() {
               <h2 className="font-display text-2xl">{row.name}</h2>
               <span className="text-xs uppercase tracking-[0.14em] text-[var(--muted)]">{row.code} · {row.verification}</span>
             </div>
-            <p className="mt-2 text-sm">{row.live_verified ? "Live call verified." : "No live call has been verified."}</p>
+            <p className="mt-2 text-sm">{row.authorized_api_test ? "Authorized API test passed." : "No authorized API test has passed."}</p>
             <p className="mt-2 text-sm text-[var(--muted)]">{row.unit_test}</p>
             <p className="mt-2 text-sm">{row.still_needed}</p>
           </Card>

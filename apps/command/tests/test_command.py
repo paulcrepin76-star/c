@@ -223,6 +223,7 @@ def test_integrations_are_not_marked_live(owner):
     assert rows["postiz"]["verification"] == "unit_test"
     assert rows["mautic"]["verification"] == "not_run_live"
     assert all(row["live_verified"] is False for row in body["integrations"])
+    assert all(row["authorized_api_test"] is False for row in body["integrations"])
 
 
 def test_storage_and_resource_guards():
@@ -234,15 +235,116 @@ def test_storage_and_resource_guards():
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    assert module.assess_storage("/mnt/disk1/appdata/resto", None, True)
-    assert module.assess_storage("/mnt/user/appdata/resto", 'shareUseCache="only"\n', True) == []
-    assert module.assess_storage("/mnt/user/appdata/resto", 'shareUseCache="yes"\n', True)
+    _notes, errors = module.assess_storage("/mnt/disk1/appdata/resto", None, True)
+    assert errors
+    only = 'shareUseCache="only"\nshareCachePool="nvme"\n'
+    notes, errors = module.assess_storage("/mnt/user/appdata/resto", only, True, transports={"nvme": {"nvme"}})
+    assert errors == []
+    assert any("NVMe" in note for note in notes)
+    notes, errors = module.assess_storage(
+        "/mnt/user/appdata/resto",
+        'shareUseCache="yes"\nshareCachePool="nvme"\n',
+        True,
+        transports={"nvme": {"nvme"}},
+    )
+    assert any("array" in item for item in errors)
+    notes, errors = module.assess_storage(
+        "/mnt/user/appdata/resto",
+        'shareUseCache="only"\nshareCachePool="cache"\nshareCachePool2="cache2"\n',
+        True,
+        transports={"cache": {"nvme"}},
+    )
+    assert any("cache2" in item for item in errors)
     notes, errors = module.assess_zfs(
         [{"name": "cache/appdata", "mountpoint": "/mnt/cache/appdata", "recordsize": "128K", "compression": "lz4", "sync": "standard", "logbias": "latency", "primarycache": "all", "atime": "on"}],
         "/mnt/cache/appdata/resto",
     )
-    assert notes and errors
+    assert notes and errors == []
+    assert any("left as it is" in note for note in notes)
+    assert any("does not run zfs" in note for note in notes)
     _, resource_errors = module.assess_resources(2 * 1024 * 1024, 20.0, 4, 40, False)
     assert any("GiB" in item for item in resource_errors)
     assert any("networks" in item for item in resource_errors)
-    assert module.assess_map_count(65530)
+    assert module.assess_map_count(65530, "postiz")
+    assert module.assess_map_count(65530, "mautic") is None
+    _notes, bind_errors = module.assess_bind("100.116.48.120", ["100.116.48.120"], True)
+    assert bind_errors == []
+    _notes, bind_errors = module.assess_bind("127.0.0.1", ["127.0.0.1"], True)
+    assert bind_errors
+    _notes, bind_errors = module.assess_bind("192.168.1.20", ["192.168.1.20"], True)
+    assert bind_errors
+
+
+def test_marketing_stages_do_not_start_without_approval():
+    import os
+    import subprocess
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[3]
+    dry = subprocess.run(["bash", str(root / "scripts/up-marketing.sh"), "--dry-run"], cwd=root, capture_output=True, text=True)
+    assert dry.returncode == 0, dry.stdout + dry.stderr
+    assert "mautic" in dry.stdout
+    assert "postiz" in dry.stdout
+    assert "dashboard" in dry.stdout
+    refused = subprocess.run(["bash", str(root / "scripts/up-marketing.sh"), "--stage", "mautic"], cwd=root, capture_output=True, text=True)
+    assert refused.returncode == 3, refused.stdout + refused.stderr
+    assert "Nothing was started" in refused.stdout
+    stage = subprocess.run(
+        ["bash", str(root / "scripts/up-marketing.sh"), "--stage", "postiz", "--dry-run"],
+        cwd=root,
+        capture_output=True,
+        text=True,
+    )
+    assert stage.returncode == 0, stage.stdout + stage.stderr
+    assert "temporal-elasticsearch" in stage.stdout
+    assert "command" not in stage.stdout.split("Stage postiz creates or starts only:", 1)[-1].split("It will not start", 1)[0]
+
+
+def test_rollback_removes_only_marketing_containers(tmp_path):
+    import os
+    import stat
+    import subprocess
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[3]
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    log = tmp_path / "docker.log"
+    fake = bin_dir / "docker"
+    fake.write_text(
+        "#!/bin/sh\n"
+        f'echo "$@" >> "{log}"\n'
+        'if [ "$1" = "inspect" ] && [ "$2" = "-f" ]; then\n'
+        '  if [ "$4" = "resto-postgres" ]; then\n'
+        '    echo "/resto-postgres id-pg running"\n'
+        "    exit 0\n"
+        "  fi\n"
+        "  exit 1\n"
+        "fi\n"
+        'if [ "$1" = "inspect" ]; then\n'
+        '  case "$2" in\n'
+        "    resto-mautic|resto-postgres) exit 0 ;;\n"
+        "  esac\n"
+        "  exit 1\n"
+        "fi\n"
+        "exit 0\n"
+    )
+    fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
+    env = os.environ.copy()
+    env["PATH"] = f"{bin_dir}{os.pathsep}{env.get('PATH', '')}"
+    env["MARKETING_ROLLBACK_APPROVED"] = "1"
+    env["MARKETING_ROLLBACK_DELETE_DATA"] = "0"
+    env["APPDATA"] = str(tmp_path / "appdata")
+    result = subprocess.run(
+        ["bash", str(root / "scripts/rollback-marketing.sh")],
+        cwd=root,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    text = log.read_text(encoding="utf-8")
+    assert "rm -f resto-mautic\n" in text
+    assert "rm -f resto-postgres" not in text
+    assert "rm -f resto-n8n" not in text
+    assert "Protected containers were not removed." in result.stdout

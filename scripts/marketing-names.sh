@@ -44,3 +44,47 @@ MARKETING_DATA_DIRS=(
   command
   caddy
 )
+
+# Staged starts. Each list is a subset of compose.marketing.yml.
+# Dashboard includes postiz-postgres because its database lives there.
+# It does not start the Postiz application.
+STAGE_MAUTIC_SERVICES=(
+  mautic-mysql
+  mautic
+  mautic-cron
+  mautic-worker
+)
+STAGE_POSTIZ_SERVICES=(
+  postiz-postgres
+  marketing-db-init
+  postiz-redis
+  temporal-postgres
+  temporal-elasticsearch
+  temporal
+  temporal-ui
+  postiz
+)
+STAGE_DASHBOARD_SERVICES=(
+  postiz-postgres
+  marketing-db-init
+  command
+)
+
+STAGE_MAUTIC_DIRS=(
+  mautic/mysql
+  mautic/config
+  mautic/logs
+  mautic/media/files
+  mautic/media/images
+)
+STAGE_POSTIZ_DIRS=(
+  postiz/config
+  postiz/uploads
+  postiz/redis
+  postiz/postgres
+  temporal/postgres
+  temporal/elasticsearch
+)
+STAGE_DASHBOARD_DIRS=(
+  command
+)

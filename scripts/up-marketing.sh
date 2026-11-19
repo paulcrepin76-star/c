@@ -1,35 +1,86 @@
 #!/usr/bin/env bash
-# Starts only containers named in scripts/marketing-names.sh.
-# Does not load the resto compose file, and does not start, stop, or recreate existing services.
+# Starts one marketing stage. Does not load the resto compose file.
+# Does not start, stop, or recreate existing services.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 DRY=0
-for arg in "$@"; do
-  case "$arg" in
+STAGE=""
+while [ $# -gt 0 ]; do
+  case "$1" in
     --dry-run) DRY=1 ;;
-    *) echo "Unknown argument: $arg" >&2; exit 1 ;;
+    --stage)
+      STAGE="${2:-}"
+      shift
+      ;;
+    --stage=*) STAGE="${1#*=}" ;;
+    *) echo "Unknown argument: $1" >&2; exit 1 ;;
   esac
+  shift
 done
 
 # shellcheck disable=SC1091
 source "$ROOT/scripts/marketing-names.sh"
 
-echo "Approved run creates or starts these containers, and no others:"
-printf '  %s\n' "${MARKETING_CONTAINERS[@]}"
+case "$STAGE" in
+  mautic)
+    SERVICES=("${STAGE_MAUTIC_SERVICES[@]}")
+    DIRS=("${STAGE_MAUTIC_DIRS[@]}")
+    ;;
+  postiz)
+    SERVICES=("${STAGE_POSTIZ_SERVICES[@]}")
+    DIRS=("${STAGE_POSTIZ_DIRS[@]}")
+    ;;
+  dashboard)
+    SERVICES=("${STAGE_DASHBOARD_SERVICES[@]}")
+    DIRS=("${STAGE_DASHBOARD_DIRS[@]}")
+    ;;
+  "")
+    echo "Install in three stages. Nothing was started."
+    echo "  1. MARKETING_APPROVED=1 ./scripts/up-marketing.sh --stage mautic"
+    echo "     then ./scripts/measure-marketing.sh mautic"
+    echo "  2. MARKETING_APPROVED=1 ./scripts/up-marketing.sh --stage postiz"
+    echo "     then ./scripts/measure-marketing.sh postiz"
+    echo "  3. MARKETING_APPROVED=1 ./scripts/up-marketing.sh --stage dashboard"
+    echo "     then ./scripts/measure-marketing.sh dashboard"
+    echo
+    echo "Mautic services:"
+    printf '  %s\n' "${STAGE_MAUTIC_SERVICES[@]}"
+    echo "Postiz services:"
+    printf '  %s\n' "${STAGE_POSTIZ_SERVICES[@]}"
+    echo "Dashboard services:"
+    printf '  %s\n' "${STAGE_DASHBOARD_SERVICES[@]}"
+    echo
+    echo "These existing containers are inspected and left alone:"
+    printf '  %s\n' "${PROTECTED_CONTAINERS[@]}"
+    echo "The public Caddy file is not started."
+    if [ "$DRY" -eq 1 ]; then
+      exit 0
+    fi
+    exit 3
+    ;;
+  *)
+    echo "Unknown stage: $STAGE" >&2
+    exit 1
+    ;;
+esac
+
+echo "Stage ${STAGE} creates or starts only:"
+printf '  %s\n' "${SERVICES[@]}"
 echo
 echo "It will not start, stop, or recreate:"
 printf '  %s\n' "${PROTECTED_CONTAINERS[@]}"
 echo
-echo "Writes, only after MARKETING_APPROVED=1:"
+echo "Writes, only after MARKETING_APPROVED=1 and a passing preflight:"
 echo "  missing marketing passwords in .env, values not printed"
-echo "  directories under \${APPDATA}/mautic, postiz, temporal, command"
-echo "  the Docker network named resto, only if it is missing, with no containers attached yet"
-echo "  new marketing containers from compose.marketing.yml"
+echo "  this stage's directories under APPDATA"
+echo "  the Docker network named resto, only if it is missing"
 echo
 echo "It does not load the resto compose file."
 echo "It does not change vm.max_map_count, ZFS properties, or share settings."
+echo "It passes --no-recreate, so an existing container keeps its current settings."
+echo "The public Caddy edge is not started."
 echo
 
 if [ "$DRY" -eq 1 ]; then
@@ -38,8 +89,7 @@ if [ "$DRY" -eq 1 ]; then
 fi
 
 if [ "${MARKETING_APPROVED:-0}" != "1" ]; then
-  echo "Nothing was started. When you want this on the server, run:"
-  echo "  MARKETING_APPROVED=1 ./scripts/up-marketing.sh"
+  echo "Nothing was started."
   exit 3
 fi
 
@@ -54,11 +104,12 @@ source "$ROOT/.env"
 set +a
 
 if [ "${BIND_ADDR:-127.0.0.1}" = "0.0.0.0" ]; then
-  echo "Refusing: BIND_ADDR=0.0.0.0 would publish the dashboard, Mautic, and Postiz on every interface."
-  echo "Use the Tailscale address, or leave BIND_ADDR unset so the ports stay on 127.0.0.1."
+  echo "Refusing: BIND_ADDR=0.0.0.0 would publish this stage on every interface."
+  echo "Set BIND_ADDR to the Tailscale address."
   exit 1
 fi
 
+export MARKETING_STAGE="$STAGE"
 "$ROOT/scripts/preflight-marketing.sh"
 
 # shellcheck disable=SC1091
@@ -89,22 +140,13 @@ if ! command -v docker >/dev/null 2>&1; then
   exit 1
 fi
 
-mkdir -p \
-  "${APPDATA:-$ROOT/appdata}/mautic/mysql" \
-  "${APPDATA:-$ROOT/appdata}/mautic/config" \
-  "${APPDATA:-$ROOT/appdata}/mautic/logs" \
-  "${APPDATA:-$ROOT/appdata}/mautic/media/files" \
-  "${APPDATA:-$ROOT/appdata}/mautic/media/images" \
-  "${APPDATA:-$ROOT/appdata}/postiz/config" \
-  "${APPDATA:-$ROOT/appdata}/postiz/uploads" \
-  "${APPDATA:-$ROOT/appdata}/postiz/redis" \
-  "${APPDATA:-$ROOT/appdata}/postiz/postgres" \
-  "${APPDATA:-$ROOT/appdata}/temporal/postgres" \
-  "${APPDATA:-$ROOT/appdata}/temporal/elasticsearch" \
-  "${APPDATA:-$ROOT/appdata}/command"
+appdata="${APPDATA:-$ROOT/appdata}"
+for dir in "${DIRS[@]}"; do
+  mkdir -p "${appdata}/${dir}"
+done
 
-if [ "$(id -u)" -eq 0 ]; then
-  chown -R 1000:1000 "${APPDATA:-$ROOT/appdata}/temporal/elasticsearch" || true
+if [ "$STAGE" = "postiz" ] && [ "$(id -u)" -eq 0 ]; then
+  chown -R 1000:1000 "${appdata}/temporal/elasticsearch" || true
 fi
 
 if ! docker network inspect resto >/dev/null 2>&1; then
@@ -128,17 +170,7 @@ snapshot() {
 
 before="$(snapshot)"
 
-compose() {
-  docker compose -f "$ROOT/compose.marketing.yml" "$@"
-}
-
-compose --profile marketing up -d --no-recreate \
-  mautic-mysql mautic mautic-cron mautic-worker \
-  postiz-postgres marketing-db-init \
-  postiz-redis \
-  temporal-postgres temporal-elasticsearch temporal temporal-ui \
-  postiz \
-  command
+docker compose -f "$ROOT/compose.marketing.yml" --profile marketing up -d --no-recreate "${SERVICES[@]}"
 
 after="$(snapshot)"
 if [ "$before" != "$after" ]; then
@@ -148,13 +180,8 @@ if [ "$before" != "$after" ]; then
 fi
 
 echo
-echo "Marketing containers:"
+echo "Stage ${STAGE} containers:"
 docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' | awk 'NR==1 || /resto-mautic|resto-postiz|resto-temporal|resto-command|resto-marketing/'
 echo
-echo "Dashboard: ${COMMAND_URL:-http://${BIND_ADDR:-127.0.0.1}:${COMMAND_PORT:-8090}}"
-echo "Mautic:    ${MAUTIC_URL:-http://${BIND_ADDR:-127.0.0.1}:${MAUTIC_PORT:-8084}}"
-echo "Postiz:    ${POSTIZ_URL:-http://${BIND_ADDR:-127.0.0.1}:${POSTIZ_PORT:-4007}}"
-echo "Temporal UI stays on 127.0.0.1:${TEMPORAL_UI_PORT:-8085}."
-echo "Create the Mautic admin and the Postiz user in those sites, then save API keys in the dashboard Settings."
-echo "The public HTTPS edge is separate and was not started. See docs/MARKETING.md."
-echo "This script passes --no-recreate, so a second run does not reload environment changes into an existing marketing container."
+"$ROOT/scripts/measure-marketing.sh" "$STAGE"
+echo "The public HTTPS edge was not started."

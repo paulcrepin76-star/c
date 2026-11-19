@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
-"""Read-only host checks for the marketing stack. Does not start containers or change sysctls."""
+"""Read-only host checks for the marketing stack.
+
+Does not start containers, edit ZFS datasets, change share settings, or run sysctl.
+"""
 
 from __future__ import annotations
 
+import ipaddress
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -11,65 +16,195 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
+# recordsize is per workload. A shared 128K dataset is reported, not rejected.
+WORKLOADS = (
+    ("mautic/mysql", "mysql", 16, "MySQL InnoDB pages are 16K."),
+    ("postiz/postgres", "postgres", 16, "Postgres pages are 8K, and 16K is the matching ZFS recordsize."),
+    ("temporal/postgres", "postgres", 16, "Temporal's Postgres uses the same 16K recordsize."),
+    ("temporal/elasticsearch", "search", 128, "Elasticsearch segment files are large, so 128K fits them."),
+    ("postiz/uploads", "media", 1024, "Photos and video are sequential, so 1M fits them."),
+    ("mautic/media/files", "media", 1024, "Mautic files are larger than database pages."),
+    ("mautic/media/images", "media", 1024, "Mautic images are larger than database pages."),
+    ("postiz/redis", "small", 16, "Redis persistence is small. 16K or the pool default both work."),
+    ("postiz/config", "small", 128, "Config files can stay on a 128K dataset."),
+    ("mautic/config", "small", 128, "Config files can stay on a 128K dataset."),
+    ("mautic/logs", "logs", 128, "Logs are append-only. 128K fits them."),
+    ("command", "files", 128, "Menu files are mixed. 128K fits them."),
+)
 
-def assess_storage(appdata: str, share_cfg: str | None, unraid: bool) -> list[str]:
+TAILSCALE_V4 = ipaddress.ip_network("100.64.0.0/10")
+
+
+def parse_share(share_cfg: str) -> dict[str, str]:
+    """Read Unraid 6.12+ / 7.x Primary storage and Secondary storage.
+
+    The share file still stores shareUseCache. The UI labels are:
+    only -> Primary pool, Secondary None
+    yes -> Primary pool, Secondary Array, mover pool to array
+    prefer -> Primary pool, Secondary Array, mover array to pool
+    no -> Primary Array, Secondary None
+    shareCachePool2 set -> Secondary is that pool
+    """
+    primary = _cfg_value(share_cfg, "shareCachePool")
+    secondary_pool = _cfg_value(share_cfg, "shareCachePool2")
+    use = _cfg_value(share_cfg, "shareUseCache")
+    if secondary_pool:
+        primary_kind, secondary_kind = "pool", "pool"
+        secondary_label = secondary_pool
+    elif use == "only":
+        primary_kind, secondary_kind = "pool", "none"
+        secondary_label = "None"
+    elif use == "yes":
+        primary_kind = "pool" if primary else "array"
+        secondary_kind = "array"
+        secondary_label = "Array, mover from pool to array"
+    elif use == "prefer":
+        primary_kind = "pool" if primary else "array"
+        secondary_kind = "array"
+        secondary_label = "Array, mover from array to pool"
+    elif use == "no" or not primary:
+        primary_kind, secondary_kind = "array", "none"
+        secondary_label = "None"
+        primary = primary or "array"
+    else:
+        primary_kind, secondary_kind = "unknown", "unknown"
+        secondary_label = "unreadable"
+    return {
+        "primary": primary,
+        "primary_kind": primary_kind,
+        "secondary_kind": secondary_kind,
+        "secondary_pool": secondary_pool,
+        "secondary_label": secondary_label,
+        "use_cache": use,
+    }
+
+
+def assess_storage(
+    appdata: str,
+    share_cfg: str | None,
+    unraid: bool,
+    transports: dict[str, set[str]] | None = None,
+    array_paths: list[str] | None = None,
+    pool_paths: list[str] | None = None,
+) -> tuple[list[str], list[str]]:
+    notes: list[str] = []
     errors: list[str] = []
+    transports = transports or {}
+    array_paths = array_paths or []
+    pool_paths = pool_paths or []
     raw = appdata or "."
     path = os.path.realpath(raw) if os.path.exists(raw) else raw
-    parts = path.split("/")
-    if "disk" in parts and any(part.startswith("disk") and part[4:].isdigit() for part in parts):
-        errors.append(f"{path} is on an Unraid array disk. Database files belong on the cache pool.")
-    if "/mnt/disk" in path:
-        errors.append(f"{path} is under /mnt/disk. Refusing to put marketing data on the HDD array.")
+    if _on_array(path):
+        errors.append(f"{path} is on an Unraid array disk. Marketing data belongs on the NVMe pool.")
+        return notes, errors
     if not unraid:
-        return errors
-    if not (path.startswith("/mnt/user/appdata") or path.startswith("/mnt/cache") or path.startswith("/mnt/nvme")):
+        notes.append("Not an Unraid host, so Primary storage and Secondary storage were not read.")
+        return notes, errors
+    if not (path.startswith("/mnt/user/appdata") or re.match(r"^/mnt/[^/]+/appdata(?:/|$)", path)):
         errors.append(
-            f"{path} is not under /mnt/user/appdata or a cache mount. Set APPDATA to the NVMe-backed appdata share."
+            f"{path} is not under /mnt/user/appdata or a pool's appdata directory. Set APPDATA to the NVMe-backed appdata share."
         )
     if share_cfg is None:
-        errors.append("Unraid share config /boot/config/shares/appdata.cfg is not readable, so cache-only cannot be confirmed.")
-        return errors
-    use_cache = _cfg_value(share_cfg, "shareUseCache")
-    pool = _cfg_value(share_cfg, "shareCachePool") or "cache"
-    if use_cache != "only":
         errors.append(
-            f"appdata shareUseCache is {use_cache or 'unset'}. It must be only, or the mover can place databases on the array. Pool name in the file: {pool}."
+            "Unraid share config /boot/config/shares/appdata.cfg is not readable, so Primary storage and Secondary storage cannot be confirmed."
         )
-    return errors
+        return notes, errors
+    share = parse_share(share_cfg)
+    notes.append(
+        f"Primary storage: {share['primary'] or 'unset'} ({share['primary_kind']}). Secondary storage: {share['secondary_label']}."
+    )
+    if share["primary_kind"] != "pool" or not share["primary"] or share["primary"] == "array":
+        errors.append("Primary storage is the array or is unset. Set Primary storage to the NVMe pool.")
+    elif share["secondary_kind"] == "array":
+        errors.append(
+            "Secondary storage is the array. The mover can place database files on HDDs. Set Secondary storage to None."
+        )
+    elif share["secondary_kind"] == "pool":
+        errors.append(
+            f"Secondary storage is pool {share['secondary_pool']}. Set Secondary storage to None so marketing data stays on the primary pool."
+        )
+    elif share["secondary_kind"] != "none":
+        errors.append("Secondary storage could not be read. Set Secondary storage to None.")
+    pool = share["primary"]
+    if share["primary_kind"] == "pool" and pool and pool != "array":
+        found = transports.get(pool)
+        if not found:
+            errors.append(f"The disks behind pool {pool} were not identified, so NVMe is not confirmed.")
+        elif found != {"nvme"}:
+            errors.append(f"Pool {pool} disks report {', '.join(sorted(found))}, not nvme.")
+        else:
+            notes.append(f"Pool {pool} is on NVMe.")
+    if array_paths:
+        errors.append("These paths already exist on the array: " + ", ".join(array_paths))
+    if pool_paths:
+        notes.append("These paths are on the pool: " + ", ".join(pool_paths))
+    return notes, errors
 
 
 def assess_zfs(rows: list[dict[str, str]], appdata: str) -> tuple[list[str], list[str]]:
+    """Describe recordsize per workload. Never returns a blocking error and never changes a dataset."""
+    notes: list[str] = []
+    if not rows:
+        notes.append("No ZFS datasets were reported. If the cache pool is ZFS, rerun this on the Unraid host. No dataset was changed.")
+        return notes, []
+    for rel, kind, want, why in WORKLOADS:
+        target = appdata.rstrip("/") + "/" + rel
+        match = _dataset_for(rows, target) or _dataset_for(rows, appdata)
+        if match is None and "/mnt/user/" in appdata:
+            suffix = appdata.split("/mnt/user/", 1)[1]
+            for row in rows:
+                mount = (row.get("mountpoint") or "").rstrip("/")
+                if mount.endswith("/" + suffix) or mount.endswith(suffix):
+                    match = row
+                    break
+        if match is None:
+            notes.append(f"{rel}: no ZFS dataset matches this path. {why} No dataset was changed.")
+            continue
+        actual = _size_kib(match.get("recordsize", ""))
+        label = f"{match.get('name')} recordsize={match.get('recordsize')}"
+        if kind in {"mysql", "postgres"} and actual not in {None, want}:
+            notes.append(
+                f"{rel} sits on {label}. {why} A child dataset at 16K would match this database. The existing dataset is left as it is."
+            )
+        elif kind == "media" and actual is not None and actual < 128:
+            notes.append(
+                f"{rel} sits on {label}. {why} A child dataset at 1M would fit these files. The existing dataset is left as it is."
+            )
+        else:
+            notes.append(f"{rel} sits on {label}. {why}")
+    notes.append("Preflight does not run zfs create or zfs set.")
+    return notes, []
+
+
+def assess_bind(bind: str, assigned: list[str] | None, unraid: bool) -> tuple[list[str], list[str]]:
     notes: list[str] = []
     errors: list[str] = []
-    if not rows:
-        notes.append("No ZFS datasets were reported. If the cache pool is ZFS, install the tools and rerun this on the Unraid host.")
+    if bind in {"0.0.0.0", "::", ""}:
+        errors.append("BIND_ADDR publishes on every interface. The LAN and a port forward could reach these ports.")
         return notes, errors
-    path = os.path.realpath(appdata) if appdata and os.path.exists(appdata) else appdata
-    match = _dataset_for(rows, path)
-    if match is None and path.startswith("/mnt/user/"):
-        for candidate in ("/mnt/cache/appdata", "/mnt/nvme/appdata"):
-            match = _dataset_for(rows, candidate)
-            if match:
-                notes.append(f"User share path {path} maps to dataset check on {candidate}.")
-                break
-    if match is None:
-        notes.append("No ZFS dataset mountpoint matches the appdata path.")
+    if bind == "127.0.0.1":
+        if unraid:
+            errors.append(
+                "BIND_ADDR is 127.0.0.1. Phones on Tailscale could not open the dashboard. Set BIND_ADDR to the Tailscale IPv4."
+            )
+        else:
+            notes.append("BIND_ADDR is 127.0.0.1. That is local to this machine, not a Tailscale path.")
         return notes, errors
-    record = match.get("recordsize", "")
-    notes.append(
-        "ZFS dataset {name} mount {mountpoint} recordsize={recordsize} compression={compression} sync={sync} logbias={logbias} primarycache={primarycache} atime={atime}".format(
-            **{key: match.get(key, "") for key in ("name", "mountpoint", "recordsize", "compression", "sync", "logbias", "primarycache", "atime")}
+    try:
+        ip = ipaddress.ip_address(bind)
+    except ValueError:
+        errors.append(f"BIND_ADDR {bind} is not an IP address.")
+        return notes, errors
+    if ip in TAILSCALE_V4:
+        notes.append(
+            f"{bind} is in the Tailscale range 100.64.0.0/10. Published ports listen on that address only, not on 0.0.0.0."
         )
+        if assigned is not None and bind not in assigned:
+            errors.append(f"{bind} is not assigned on this host, so Tailscale is down or the address changed.")
+        return notes, errors
+    errors.append(
+        f"{bind} is not a Tailscale address. Binding there would expose the port on that interface. Use the 100.x Tailscale address."
     )
-    kib = _size_kib(record)
-    if kib is not None and kib > 16:
-        errors.append(
-            f"Dataset {match.get('name')} recordsize is {record}. Postgres and MySQL want 16K. "
-            "Create child datasets before the first start, for example: "
-            "zfs create -o recordsize=16K -o primarycache=metadata -o atime=off -o logbias=throughput <pool>/appdata/resto/mautic "
-            "and the same for postiz and temporal. This script does not create datasets or change properties."
-        )
     return notes, errors
 
 
@@ -89,7 +224,7 @@ def assess_resources(
         notes.append(f"MemAvailable {gib:.1f} GiB")
         if mem_available_kb < 6 * 1024 * 1024:
             errors.append(
-                f"Only {gib:.1f} GiB is available. The marketing stack needs about 6 GiB free before it starts. No memory cap is set."
+                f"Only {gib:.1f} GiB is available. The full marketing stack needs about 6 GiB free before Postiz starts. No memory cap is set."
             )
     if load1 is not None:
         notes.append(f"Load average 1 minute {load1:.2f} on {cpus} CPUs")
@@ -109,8 +244,14 @@ def assess_resources(
     return notes, errors
 
 
-def assess_ports(bind: str, holders: dict[int, str]) -> list[str]:
+def assess_ports(bind: str, holders: dict[int, str], stage: str) -> list[str]:
     expected = {8084: "resto-mautic", 4007: "resto-postiz", 8090: "resto-command", 8085: "resto-temporal-ui"}
+    if stage == "mautic":
+        expected = {8084: expected[8084]}
+    elif stage == "postiz":
+        expected = {4007: expected[4007], 8085: expected[8085]}
+    elif stage == "dashboard":
+        expected = {8090: expected[8090]}
     errors = []
     for port, owner in expected.items():
         holder = holders.get(port)
@@ -132,14 +273,14 @@ def assess_ports(bind: str, holders: dict[int, str]) -> list[str]:
     return errors
 
 
-def assess_map_count(value: int) -> str | None:
-    if value < 262144:
-        return (
-            f"vm.max_map_count is {value}. Elasticsearch needs 262144. "
-            "This script will not change the kernel. On Unraid run: sysctl -w vm.max_map_count=262144 "
-            "and add that line to /boot/config/go."
-        )
-    return None
+def assess_map_count(value: int, stage: str) -> str | None:
+    if value >= 262144 or stage == "mautic":
+        return None
+    return (
+        f"vm.max_map_count is {value}. Elasticsearch, used by the Postiz stage, needs 262144. "
+        "This script will not change the kernel. On Unraid run: sysctl -w vm.max_map_count=262144 "
+        "and add that line to /boot/config/go."
+    )
 
 
 def assess_disk(path: str) -> tuple[str, str | None]:
@@ -154,11 +295,43 @@ def assess_disk(path: str) -> tuple[str, str | None]:
     return note, None
 
 
+def placement(appdata: str, pool: str) -> tuple[list[str], list[str]]:
+    """Find marketing paths that already exist on array disks or on the named pool. Read-only."""
+    if "/mnt/user/" not in appdata:
+        return [], []
+    rel = appdata.split("/mnt/user/", 1)[1].strip("/")
+    array: list[str] = []
+    pools: list[str] = []
+    root = Path("/mnt")
+    if not root.is_dir():
+        return [], []
+    relatives = [rel] + [f"{rel}/{name}" for name in ("mautic", "postiz", "temporal", "command", "caddy")]
+    for entry in root.iterdir():
+        name = entry.name
+        on_array = name.startswith("disk") and name[4:].isdigit()
+        on_pool = bool(pool) and name == pool
+        if not on_array and not on_pool:
+            continue
+        for item in relatives:
+            candidate = entry / item
+            if candidate.exists():
+                (array if on_array else pools).append(str(candidate))
+    return array, pools
+
+
 def _cfg_value(text: str, key: str) -> str:
     for line in text.splitlines():
-        if line.startswith(key + "="):
-            return line.split("=", 1)[1].strip().strip('"')
+        stripped = line.strip()
+        if stripped.startswith(key + "="):
+            return stripped.split("=", 1)[1].strip().strip('"')
     return ""
+
+
+def _on_array(path: str) -> bool:
+    parts = path.split("/")
+    if any(part.startswith("disk") and part[4:].isdigit() for part in parts):
+        return True
+    return "/mnt/disk" in path
 
 
 def _dataset_for(rows: list[dict[str, str]], path: str) -> dict[str, str] | None:
@@ -168,7 +341,8 @@ def _dataset_for(rows: list[dict[str, str]], path: str) -> dict[str, str] | None
         mount = row.get("mountpoint") or ""
         if mount in {"", "-", "none"}:
             continue
-        if path == mount or path.startswith(mount.rstrip("/") + "/"):
+        mount = mount.rstrip("/")
+        if path == mount or path.startswith(mount + "/"):
             if len(mount) > best_len:
                 best = row
                 best_len = len(mount)
@@ -176,7 +350,7 @@ def _dataset_for(rows: list[dict[str, str]], path: str) -> dict[str, str] | None
 
 
 def _size_kib(value: str) -> int | None:
-    text = value.strip().upper()
+    text = (value or "").strip().upper()
     if text.endswith("K") and text[:-1].isdigit():
         return int(text[:-1])
     if text.endswith("M") and text[:-1].isdigit():
@@ -212,23 +386,34 @@ def _map_count() -> int:
         return 0
 
 
-def _docker_networks() -> tuple[int | None, bool | None, dict[int, str]]:
+def _local_ipv4() -> list[str]:
+    try:
+        output = subprocess.check_output(["ip", "-4", "-o", "addr", "show"], text=True, stderr=subprocess.DEVNULL)
+    except (OSError, subprocess.CalledProcessError):
+        return []
+    return re.findall(r"\binet (\d+\.\d+\.\d+\.\d+)/", output)
+
+
+def _docker_networks() -> tuple[int | None, bool | None, dict[int, str], list[str]]:
     try:
         listing = subprocess.check_output(["docker", "network", "ls", "--format", "{{.Name}}"], text=True)
     except (OSError, subprocess.CalledProcessError):
-        return None, None, {}
+        return None, None, {}, []
     names = [line.strip() for line in listing.splitlines() if line.strip()]
     holders: dict[int, str] = {}
+    containers: list[str] = []
     try:
-        ps = subprocess.check_output(["docker", "ps", "--format", "{{.Names}}\t{{.Ports}}"], text=True)
+        ps = subprocess.check_output(["docker", "ps", "-a", "--format", "{{.Names}}\t{{.Status}}\t{{.Ports}}"], text=True)
     except (OSError, subprocess.CalledProcessError):
         ps = ""
     for line in ps.splitlines():
-        name, _, ports = line.partition("\t")
+        containers.append(line)
+        name, _, rest = line.partition("\t")
+        _status, _, ports = rest.partition("\t")
         for port in (8084, 4007, 8090, 8085):
             if f":{port}->" in ports:
                 holders[port] = name
-    return len(names), "resto" in names, holders
+    return len(names), "resto" in names, holders, containers
 
 
 def _zfs_rows() -> list[dict[str, str]]:
@@ -249,42 +434,99 @@ def _zfs_rows() -> list[dict[str, str]]:
     return rows
 
 
+def _pool_transports(pool: str) -> set[str] | None:
+    devices = _pool_devices(pool)
+    if not devices:
+        return None
+    found: set[str] = set()
+    for device in devices:
+        base = device
+        if base.startswith("nvme"):
+            found.add("nvme")
+            continue
+        rotational = Path(f"/sys/block/{base}/queue/rotational")
+        try:
+            flag = rotational.read_text(encoding="utf-8").strip()
+        except OSError:
+            found.add("unknown")
+            continue
+        found.add("hdd" if flag == "1" else "ssd")
+    return found or None
+
+
+def _pool_devices(pool: str) -> list[str]:
+    text = ""
+    try:
+        text = subprocess.check_output(["zpool", "status", pool], text=True, stderr=subprocess.DEVNULL)
+    except (OSError, subprocess.CalledProcessError):
+        text = ""
+    if not text:
+        try:
+            text = subprocess.check_output(["findmnt", "-n", "-o", "SOURCE", f"/mnt/{pool}"], text=True, stderr=subprocess.DEVNULL)
+        except (OSError, subprocess.CalledProcessError):
+            text = ""
+    names = re.findall(r"\b((?:nvme\d+n\d+|sd[a-z]+|hd[a-z]+|vd[a-z]+|xvd[a-z]+))", text)
+    unique = []
+    for name in names:
+        if name not in unique:
+            unique.append(name)
+    return unique
+
+
 def main() -> int:
+    print("Read-only preflight. No container will be started, no dataset will be changed, and sysctl will not be run.")
     appdata = os.environ.get("APPDATA") or str(ROOT / "appdata")
     unraid = os.path.isdir("/mnt/user")
+    stage = os.environ.get("MARKETING_STAGE", "")
     cfg_path = Path("/boot/config/shares/appdata.cfg")
     share_cfg = cfg_path.read_text(encoding="utf-8") if cfg_path.is_file() else None
-    ack_storage = os.environ.get("MARKETING_STORAGE_ACK") == "1"
-    ack_zfs = os.environ.get("MARKETING_ZFS_ACK") == "1"
     ack_load = os.environ.get("MARKETING_LOAD_ACK") == "1"
     ack_memory = os.environ.get("MARKETING_MEMORY_ACK") == "1"
     bind = os.environ.get("BIND_ADDR") or "127.0.0.1"
 
     print(f"App data: {appdata}")
+    print(f"Stage filter: {stage or 'all ports and the Postiz kernel check'}")
     if not unraid:
         print("This machine has no /mnt/user. Storage, ZFS, CPU, and RAM figures below are for this machine, not the Unraid server.")
     errors: list[str] = []
-    storage_errors = assess_storage(appdata, share_cfg, unraid)
-    if storage_errors and not (ack_storage and not any("HDD array" in item or "/mnt/disk" in item for item in storage_errors)):
-        errors.extend(storage_errors)
-    elif storage_errors and ack_storage:
-        print("Storage acknowledgment accepted for non-array warnings:")
-        print("\n".join(storage_errors))
+    share = parse_share(share_cfg) if share_cfg else None
+    pool = share["primary"] if share and share["primary_kind"] == "pool" else ""
+    array_hits, pool_hits = placement(appdata, pool) if unraid else ([], [])
+    transports: dict[str, set[str]] = {}
+    if unraid and pool:
+        detected = _pool_transports(pool)
+        if detected is not None:
+            transports[pool] = detected
+    storage_notes, storage_errors = assess_storage(
+        appdata,
+        share_cfg,
+        unraid,
+        transports=transports,
+        array_paths=array_hits,
+        pool_paths=pool_hits,
+    )
+    for note in storage_notes:
+        print(note)
+    errors.extend(storage_errors)
 
     disk_note, disk_error = assess_disk(appdata)
     print(disk_note)
     if disk_error:
         errors.append(disk_error)
 
-    zfs_notes, zfs_errors = assess_zfs(_zfs_rows(), appdata)
+    zfs_notes, _zfs_errors = assess_zfs(_zfs_rows(), appdata)
     for note in zfs_notes:
         print(note)
-    if zfs_errors and not ack_zfs:
-        errors.extend(zfs_errors)
-    elif zfs_errors:
-        print("ZFS recordsize acknowledgment accepted. Properties were not changed.")
 
-    networks, resto, holders = _docker_networks()
+    networks, resto, holders, containers = _docker_networks()
+    if containers:
+        print("Existing containers, inspected only:")
+        for line in containers:
+            print(f"  {line}")
+    elif networks is None:
+        print("Docker is not available, so existing containers were not listed.")
+    else:
+        print("Docker reported no containers.")
     resource_notes, resource_errors = assess_resources(_mem_available(), _load(), _cpus(), networks, resto)
     for note in resource_notes:
         print(note)
@@ -296,16 +538,26 @@ def main() -> int:
         else:
             errors.append(item)
 
-    map_error = assess_map_count(_map_count())
-    print(f"vm.max_map_count={_map_count()}")
+    map_value = _map_count()
+    print(f"vm.max_map_count={map_value}")
+    map_error = assess_map_count(map_value, stage)
     if map_error:
         errors.append(map_error)
-    errors.extend(assess_ports(bind, holders))
+    elif stage == "mautic" and map_value < 262144:
+        print("Mautic stage does not start Elasticsearch. Raise vm.max_map_count before the Postiz stage.")
 
-    print("Planning range once the stack is idle: about 3 to 5 GB resident, and about 6 to 8 GB while a campaign or video upload is running.")
+    bind_notes, bind_errors = assess_bind(bind, _local_ipv4(), unraid)
+    for note in bind_notes:
+        print(note)
+    errors.extend(bind_errors)
+    errors.extend(assess_ports(bind, holders, stage))
+    print("The public Caddy edge is not part of this check and is not started.")
+
+    print("Planning range once Mautic, Postiz, and the dashboard are idle: about 3 to 5 GB resident, and about 6 to 8 GB during a campaign or video upload.")
+    print("Mautic alone is about 1 to 2 GB. Postiz with Temporal and Elasticsearch adds about 2 to 4 GB.")
     print("No container memory cap is set. A tight cap is more likely to kill a campaign send than to save RAM.")
     if errors:
-        print("Preflight refused. No container was started.")
+        print("Preflight refused. No container was started and no host setting was changed.")
         print("\n".join(errors))
         return 2
     print("Preflight finished. No container was started and no host setting was changed.")

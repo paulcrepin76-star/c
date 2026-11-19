@@ -101,6 +101,7 @@ def code(path: Path) -> str:
 
 def problems() -> list[str]:
     errors: list[str] = []
+    names = NAMES.read_text(encoding="utf-8")
     marketing_raw = COMPOSE.read_text(encoding="utf-8")
     marketing = uncommented(marketing_raw)
     public = uncommented(PUBLIC.read_text(encoding="utf-8"))
@@ -135,10 +136,30 @@ def problems() -> list[str]:
         errors.append("up-marketing.sh must not remove containers")
     if "--no-recreate" not in up:
         errors.append("up-marketing.sh must pass --no-recreate")
+    if "compose.public-edge.yml" in up or "up-public-edge.sh" in up:
+        errors.append("up-marketing.sh must not start the public edge")
+    if '"${SERVICES[@]}"' not in up:
+        errors.append("up-marketing.sh must start only the selected stage services")
+    services = set(re.findall(r"(?m)^  ([a-z0-9-]+):$", marketing_raw))
+    for array_name in ("STAGE_MAUTIC_SERVICES", "STAGE_POSTIZ_SERVICES", "STAGE_DASHBOARD_SERVICES"):
+        match = re.search(rf"{array_name}=\((.*?)\)", names, re.S)
+        if not match:
+            errors.append(f"marketing-names.sh is missing {array_name}")
+            continue
+        for service in re.findall(r"[A-Za-z0-9_-]+", match.group(1)):
+            if service in PROTECTED or service not in services:
+                errors.append(f"{array_name} includes {service}, which is not a new marketing service")
+    for line in marketing.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("- "):
+            continue
+        if not any(token in stripped for token in ("/var/lib/", "/var/www/", ":/data", ":/config", ":/uploads")):
+            continue
+        if not any(bit in stripped for bit in ("/mautic/", "/postiz/", "/temporal/", "/command:", "/caddy/")):
+            errors.append(f"volume is outside marketing data: {stripped}")
     setup = code(SETUP)
     if "docker rm" in setup or "docker compose" in setup or "compose up" in setup:
         errors.append("setup.sh must not remove or start containers")
-    names = NAMES.read_text(encoding="utf-8")
     if "resto-postgres" not in names or "resto-n8n" not in names:
         errors.append("marketing-names.sh dropped a protected container")
     if "resto-postgres" in names.split("MARKETING_CONTAINERS", 1)[1].split("PROTECTED_CONTAINERS", 1)[0]:

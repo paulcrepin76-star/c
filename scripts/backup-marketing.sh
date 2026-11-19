@@ -45,35 +45,59 @@ dest="${MARKETING_BACKUP_DIR}/${stamp}"
 mkdir -p "$dest"
 chmod 700 "$dest"
 
-dump_running() {
+MAUTIC_DB_CONTAINER="${MAUTIC_DB_CONTAINER:-resto-mautic-mysql}"
+POSTIZ_DB_CONTAINER="${POSTIZ_DB_CONTAINER:-resto-postiz-postgres}"
+TEMPORAL_DB_CONTAINER="${TEMPORAL_DB_CONTAINER:-resto-temporal-postgres}"
+
+refuse_protected() {
   local name="$1"
-  for allowed in "${MARKETING_CONTAINERS[@]}"; do
-    if [ "$allowed" = "$name" ]; then
-      if docker inspect -f '{{.State.Running}}' "$name" 2>/dev/null | grep -qx true; then
-        return 0
-      fi
-      echo "${name} is not running. Its dump was skipped."
-      return 1
+  local keep
+  for keep in "${PROTECTED_CONTAINERS[@]}"; do
+    if [ "$keep" = "$name" ]; then
+      echo "Refusing to exec into protected container ${name}."
+      exit 1
     fi
   done
-  echo "Refusing to exec into ${name}. It is not a marketing container."
-  exit 1
 }
 
-if dump_running resto-mautic-mysql; then
-  docker exec resto-mautic-mysql sh -c 'mysqldump --user="$MYSQL_USER" --password="$MYSQL_PASSWORD" --single-transaction --databases "$MYSQL_DATABASE"' > "$dest/mautic.sql"
+dump_running() {
+  local name="$1"
+  refuse_protected "$name"
+  if docker inspect -f '{{.State.Running}}' "$name" 2>/dev/null | grep -qx true; then
+    return 0
+  fi
+  echo "${name} is not running. Its dump was skipped."
+  return 1
+}
+
+if dump_running "$MAUTIC_DB_CONTAINER"; then
+  docker exec "$MAUTIC_DB_CONTAINER" sh -c 'mysqldump --user=root --password="$MYSQL_ROOT_PASSWORD" --single-transaction --add-drop-database --databases "$MYSQL_DATABASE"' > "$dest/mautic.sql"
   echo "Wrote $dest/mautic.sql"
 fi
 
-if dump_running resto-postiz-postgres; then
-  docker exec resto-postiz-postgres sh -c 'pg_dump -U postiz -d postiz' > "$dest/postiz.sql"
-  docker exec resto-postiz-postgres sh -c 'pg_dump -U postiz -d command' > "$dest/command.sql"
-  echo "Wrote $dest/postiz.sql and $dest/command.sql"
+dump_pg() {
+  local name="$1"
+  local user="$2"
+  local db="$3"
+  local file="$4"
+  if docker exec "$name" psql -U "$user" -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='${db}'" | grep -q 1; then
+    docker exec "$name" pg_dump -U "$user" -d "$db" --clean --if-exists > "$file"
+    echo "Wrote $file"
+  else
+    echo "${db} is not in ${name}. It was left out of the backup."
+  fi
+}
+
+if dump_running "$POSTIZ_DB_CONTAINER"; then
+  dump_pg "$POSTIZ_DB_CONTAINER" postiz postiz "$dest/postiz.sql"
+  dump_pg "$POSTIZ_DB_CONTAINER" postiz command "$dest/command.sql"
 fi
 
-if dump_running resto-temporal-postgres; then
-  docker exec resto-temporal-postgres sh -c 'pg_dumpall -U temporal' > "$dest/temporal.sql"
-  echo "Wrote $dest/temporal.sql"
+if dump_running "$TEMPORAL_DB_CONTAINER"; then
+  databases="$(docker exec "$TEMPORAL_DB_CONTAINER" psql -U temporal -d postgres -tAc "SELECT datname FROM pg_database WHERE datistemplate = false AND datname <> 'postgres'")"
+  for db in $databases; do
+    dump_pg "$TEMPORAL_DB_CONTAINER" temporal "$db" "$dest/temporal-${db}.sql"
+  done
 fi
 
 cat > "$dest/README.txt" <<EOF

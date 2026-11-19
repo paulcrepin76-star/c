@@ -61,19 +61,30 @@ Backups do not go in those directories. See below.
 
 ## NVMe and ZFS
 
-Preflight fails if `APPDATA` resolves under `/mnt/disk*`. On Unraid it reads `/boot/config/shares/appdata.cfg` and fails unless `shareUseCache="only"`. `shareUseCache="yes"` still lets the mover put files on the array. The script does not edit the share.
+Preflight is read-only. It does not edit the share, the pool, or any dataset, and it does not run `zfs create`, `zfs set`, or `sysctl`.
 
-If `zfs` is installed, preflight prints `recordsize`, `compression`, `sync`, `logbias`, `primarycache`, and `atime` for the dataset mounted at the appdata path. Postgres and MySQL want `recordsize=16K`. A 128K dataset makes preflight fail until you set `MARKETING_ZFS_ACK=1` or create child datasets yourself. Example, with your real pool name:
+On Unraid 7 it reads `/boot/config/shares/appdata.cfg`. Primary storage is `shareCachePool`. Secondary storage is `shareCachePool2` when that is set, otherwise the array when `shareUseCache` is `yes` or `prefer`, and None when `shareUseCache` is `only`. Marketing data is accepted only when all of these are true:
 
-```bash
-zfs create -o recordsize=16K -o primarycache=metadata -o atime=off -o logbias=throughput cache/appdata/resto/mautic
-zfs create -o recordsize=16K -o primarycache=metadata -o atime=off -o logbias=throughput cache/appdata/resto/postiz
-zfs create -o recordsize=16K -o primarycache=metadata -o atime=off -o logbias=throughput cache/appdata/resto/temporal
-```
+- `APPDATA` is under `/mnt/user/appdata` or a pool's `appdata` directory.
+- Primary storage is a named pool, not the array.
+- Secondary storage is None. A secondary array lets the mover put MySQL and Postgres on HDDs. A second pool is also refused.
+- The primary pool's disks report NVMe (`zpool status`, `findmnt`, or `/sys/block/*/queue/rotational`).
+- No existing `mautic`, `postiz`, `temporal`, `command`, or `caddy` path is already on `/mnt/diskN`.
 
-Do that before the first start. Changing `recordsize` on a dataset that already holds a database does not rewrite the old blocks. These scripts never run `zfs create` or `zfs set`.
+A path under `/mnt/diskN` is a hard failure. There is no acknowledgment flag that bypasses it.
 
-Elasticsearch still needs `vm.max_map_count=262144`. Preflight exits if the value is lower. It does not run `sysctl`. On Unraid:
+ZFS record size is reported per directory and never blocks the preflight. A shared 128K parent is acceptable for a first install. Child datasets are optional and are not created by these scripts.
+
+| Path | Workload | Record size that fits |
+| --- | --- | --- |
+| `mautic/mysql` | MySQL InnoDB, 16K pages | 16K |
+| `postiz/postgres` | Postgres, 8K pages | 16K |
+| `temporal/postgres` | Postgres, 8K pages | 16K |
+| `temporal/elasticsearch` | Lucene segments | 128K |
+| `postiz/uploads`, `mautic/media` | Sequential media | 1M |
+| Redis, config, logs, command files | Small or mixed files | 16K to 128K, pool default is fine |
+
+Elasticsearch, started by the Postiz stage, needs `vm.max_map_count=262144`. The Mautic stage does not. Preflight prints the current value and exits before Postiz when it is lower. It does not change the kernel. On Unraid, after you decide to allow it:
 
 ```bash
 sysctl -w vm.max_map_count=262144
@@ -94,43 +105,53 @@ If the `resto` Docker network is missing and the daemon already has 30 or more n
 
 `./scripts/preflight-marketing.sh`
 
-- Reads memory, load, disk free space, `vm.max_map_count`, port binds, Docker network count, the appdata share setting, and ZFS properties.
-- Exits non-zero when a check fails. Writes nothing. Starts nothing.
+- Reads memory, load, disk free space, `vm.max_map_count`, port binds, the Tailscale bind address, Docker networks, every container name and published port, Primary storage, Secondary storage, and ZFS record size per workload.
+- Exits non-zero when a check fails. Writes nothing. Starts nothing. Does not change a dataset or a sysctl.
 
 `./scripts/up-marketing.sh`
 
-- With no approval, prints the plan and exits. `--dry-run` does the same and does not write `.env`.
-- With `MARKETING_APPROVED=1`, runs preflight first. Only after preflight passes does it fill placeholder secrets, create the marketing directories, create the Docker network `resto` when it is absent, and start the marketing service list with `--no-recreate`.
+- Requires `--stage mautic`, `--stage postiz`, or `--stage dashboard`. With no stage it prints the three stages and exits. It does not start every service at once.
+- `--dry-run` prints that stage and writes nothing.
+- With `MARKETING_APPROVED=1`, runs preflight first. Only after preflight passes does it fill placeholder secrets, create that stage's directories, create the Docker network `resto` when it is absent, and start only that stage's services with `--no-recreate`.
+- Mautic starts `mautic-mysql`, `mautic`, `mautic-cron`, and `mautic-worker`.
+- Postiz starts `postiz-postgres`, `marketing-db-init`, `postiz-redis`, `temporal-postgres`, `temporal-elasticsearch`, `temporal`, `temporal-ui`, and `postiz`.
+- The dashboard starts `postiz-postgres`, `marketing-db-init`, and `command`. The command database lives on the Postiz Postgres instance. This stage does not start the Postiz application.
 - Records the container id and state of `resto-postgres`, `resto-n8n`, and the other protected names. If any of those change, the script exits 4.
 - Does not run `docker rm`, `compose down`, or `compose up` against `compose.yml`.
+- Does not start `compose.public-edge.yml`.
+- After a successful stage, `measure-marketing.sh` records memory, load, disk, and container stats.
+
+`--no-recreate` keeps a container that already exists. A later change to `POSTIZ_URL` or `POSTIZ_DISABLE_REGISTRATION` does not enter that container until you remove that one marketing container and run its stage again.
 
 `./scripts/up-public-edge.sh` starts only `resto-marketing-edge` after `MARKETING_PUBLIC_APPROVED=1`. It needs two DNS names and an ACME email. It does not publish the dashboard.
 
-`./scripts/backup-marketing.sh` dumps Mautic MySQL, the Postiz database, the dashboard database, and Temporal. It refuses a destination inside `APPDATA`. Default on Unraid is `/mnt/user/backups/resto-marketing`. It does not dump `resto-postgres` and does not stop containers.
+`./scripts/backup-marketing.sh` dumps Mautic MySQL as root, the Postiz database, the dashboard database, and each Temporal database with `pg_dump --clean --if-exists`. It refuses a destination inside `APPDATA` and refuses to exec into a protected container. Default on Unraid is `/mnt/user/backups/resto-marketing`. It does not dump `resto-postgres` and does not stop containers.
 
-`./scripts/restore-marketing.sh` loads those dumps into the matching marketing containers only.
+`./scripts/restore-marketing.sh` loads those dumps into the matching marketing containers only. A failed `docker exec` stops the script. `scripts/test-restore-isolated.sh` repeats this against throwaway `marketingtest-*` containers and refuses to run when `/mnt/user` exists.
 
 `./scripts/rollback-marketing.sh` removes only the marketing container names. Protected ids are compared before and after. Data directories stay unless `MARKETING_ROLLBACK_DELETE_DATA=1`, and that flag can delete only `mautic`, `postiz`, `temporal`, `command`, and `caddy` under `APPDATA`.
 
 ## Deploy
 
-On the server, after you have read this and run preflight yourself:
+Do not run `git pull` on the server, and do not check out `main`. Fetch the reviewed branch and check out the exact commit you approved. A detached HEAD is intentional. Do not run `git reset --hard`.
 
 ```bash
 cd /mnt/user/appdata/resto
-git pull
+git fetch origin cursor/marketing-deploy-safety-7375
+git checkout <the full SHA you reviewed>
 ./scripts/setup.sh
 ./scripts/preflight-marketing.sh
 ```
 
-Fix anything preflight prints. Then:
+`preflight-marketing.sh` only reads the host. Fix anything it prints before setting `MARKETING_APPROVED`. Then install one stage at a time and read the measurement file before the next stage:
 
 ```bash
-MARKETING_APPROVED=1 ./scripts/up-marketing.sh
-./scripts/measure-marketing.sh
+MARKETING_APPROVED=1 ./scripts/up-marketing.sh --stage mautic
+MARKETING_APPROVED=1 ./scripts/up-marketing.sh --stage postiz
+MARKETING_APPROVED=1 ./scripts/up-marketing.sh --stage dashboard
 ```
 
-Nothing in this repository starts that command. The approved run is the approval.
+Nothing in this repository starts those commands. `BIND_ADDR` must be the Tailscale address, `100.116.48.120` on this server, so the published ports listen on that address. `127.0.0.1` is refused on Unraid because a phone cannot open it. `0.0.0.0` and a LAN address are refused. The public Caddy file stays unstarted.
 
 First visit, over Tailscale:
 
@@ -185,7 +206,7 @@ Uploaded images and Mautic media live in the appdata directories. The SQL dumps 
 
 ## Dashboard
 
-React, TypeScript, and Tailwind, served by the FastAPI app. One owner session. Light and dark. The Connections page lists every integration with the proof we actually have. `live_verified` is false for all of them until a platform answers in production. Overview reachability is a local probe. It is not a completed post, email, or listing update.
+React, TypeScript, and Tailwind, served by the FastAPI app. One owner session. Light and dark. The Connections page lists every integration with the proof we actually have. `live_verified` and `authorized_api_test` stay false until that platform accepts a call made with your credentials. Unit tests stub HTTP. Overview reachability is a local probe. It is not a completed post, email, or listing update.
 
 A state of **confirmed** or **published** is stored only after the destination returns success.
 

@@ -120,7 +120,11 @@ def report() -> dict:
         "note": (
             "Nothing in this report contacted Google, Meta, Yelp, Tripadvisor, Apple, TikTok, Mautic, or Postiz. "
             "Unit tests stub HTTP. A saved credential is not a successful sync. "
+            "authorized_api_test stays false until that platform accepts a call made with your credentials. "
             "Reachability on the overview is a separate local probe and does not mean a post, email, or listing was accepted."
         ),
-        "integrations": [{**row, "live_verified": False} for row in PROOFS],
+        "integrations": [
+            {**row, "live_verified": False, "authorized_api_test": False}
+            for row in PROOFS
+        ],
     }
