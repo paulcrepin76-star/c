@@ -262,9 +262,43 @@ def test_storage_and_resource_guards():
     assert notes and errors == []
     assert any("left as it is" in note for note in notes)
     assert any("does not run zfs" in note for note in notes)
-    _, resource_errors = module.assess_resources(2 * 1024 * 1024, 20.0, 4, 40, False)
+    _, resource_errors = module.assess_resources(2 * 1024 * 1024, 20.0, 4)
     assert any("GiB" in item for item in resource_errors)
-    assert any("networks" in item for item in resource_errors)
+    join_notes, join_errors = module.assess_networks(
+        [{"name": "resto", "driver": "bridge", "subnets": ["172.20.0.0/16"], "used": 12, "attached": ["resto-n8n"]}],
+        None,
+        ["192.168.1.0/24"],
+    )
+    assert join_errors == []
+    assert any("joins the existing resto network" in note for note in join_notes)
+    _notes, tight_errors = module.assess_networks(
+        [{"name": "resto", "driver": "bridge", "subnets": ["172.20.0.0/28"], "used": 10, "attached": []}],
+        None,
+        [],
+    )
+    assert any("free addresses" in item for item in tight_errors)
+    _notes, overlap_errors = module.assess_networks(
+        [
+            {"name": "resto", "driver": "bridge", "subnets": ["172.20.0.0/16"], "used": 1, "attached": []},
+            {"name": "other", "driver": "bridge", "subnets": ["172.20.1.0/24"], "used": 1, "attached": []},
+        ],
+        None,
+        [],
+    )
+    assert any("overlap" in item for item in overlap_errors)
+    create_notes, create_errors = module.assess_networks(
+        [{"name": "bridge", "driver": "bridge", "subnets": ["172.17.0.0/16"], "used": 1, "attached": []}],
+        [("172.30.0.0/24", 24), ("172.30.1.0/24", 24)],
+        ["172.30.0.0/24"],
+    )
+    assert create_errors == []
+    assert any("172.30.1.0/24" in note for note in create_notes)
+    _notes, full_errors = module.assess_networks(
+        [{"name": "bridge", "driver": "bridge", "subnets": ["172.30.0.0/24"], "used": 1, "attached": []}],
+        [("172.30.0.0/24", 24)],
+        [],
+    )
+    assert any("No free IPv4 subnet" in item for item in full_errors)
     assert module.assess_map_count(65530, "postiz")
     assert module.assess_map_count(65530, "mautic") is None
     _notes, bind_errors = module.assess_bind("100.116.48.120", ["100.116.48.120"], True)
@@ -273,6 +307,17 @@ def test_storage_and_resource_guards():
     assert bind_errors
     _notes, bind_errors = module.assess_bind("192.168.1.20", ["192.168.1.20"], True)
     assert bind_errors
+
+
+def test_unraid_inspect_script_is_read_only():
+    from pathlib import Path
+
+    text = (Path(__file__).resolve().parents[3] / "scripts" / "inspect-unraid-readonly.sh").read_text(encoding="utf-8")
+    code = "\n".join(line for line in text.splitlines() if not line.strip().startswith("#") and "echo " not in line)
+    for banned in ("git checkout", "git pull", "git reset", "docker run", "docker network create", "compose up", "zfs set", "zfs create", "sysctl"):
+        assert banned not in code
+    assert "/tmp/unraid-marketing-inspect.txt" in text
+    assert "git -C" in text
 
 
 def test_marketing_stages_do_not_start_without_approval():

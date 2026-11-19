@@ -7,6 +7,7 @@ Does not start containers, edit ZFS datasets, change share settings, or run sysc
 from __future__ import annotations
 
 import ipaddress
+import json
 import os
 import re
 import shutil
@@ -33,6 +34,18 @@ WORKLOADS = (
 )
 
 TAILSCALE_V4 = ipaddress.ip_network("100.64.0.0/10")
+# Docker's built-in local pools. Each new bridge takes one subnet of `size` bits.
+DEFAULT_LOCAL_POOLS = (
+    ("172.17.0.0/16", 16),
+    ("172.18.0.0/16", 16),
+    ("172.19.0.0/16", 16),
+    ("172.20.0.0/14", 16),
+    ("172.24.0.0/14", 16),
+    ("172.28.0.0/14", 16),
+    ("192.168.0.0/16", 20),
+)
+# Peak marketing containers that would hold an address on the resto network at once.
+MARKETING_ADDRESS_NEED = 16
 
 
 def parse_share(share_cfg: str) -> dict[str, str]:
@@ -212,8 +225,6 @@ def assess_resources(
     mem_available_kb: int | None,
     load1: float | None,
     cpus: int,
-    network_count: int | None,
-    resto_network: bool | None,
 ) -> tuple[list[str], list[str]]:
     notes: list[str] = []
     errors: list[str] = []
@@ -232,15 +243,129 @@ def assess_resources(
             errors.append(
                 f"Load average {load1:.2f} is above twice the CPU count ({cpus}). Inspect the host before adding Temporal and Elasticsearch."
             )
-    if network_count is None:
-        notes.append("Docker is not available, so network-pool usage was not counted.")
+    return notes, errors
+
+
+def pool_subnets(pools: list[tuple[str, int]] | None) -> list[ipaddress.IPv4Network]:
+    """Expand Docker local address pools into the subnets a new bridge would be offered, in order."""
+    chosen = list(pools) if pools else list(DEFAULT_LOCAL_POOLS)
+    found: list[ipaddress.IPv4Network] = []
+    for base, size in chosen:
+        network = ipaddress.ip_network(base, strict=False)
+        if not isinstance(network, ipaddress.IPv4Network):
+            continue
+        if size < network.prefixlen or size > 32:
+            continue
+        count = 1 << (size - network.prefixlen)
+        shift = 32 - size
+        start = int(network.network_address)
+        for index in range(count):
+            found.append(ipaddress.ip_network((start + (index << shift), size)))
+    return found
+
+
+def assess_networks(
+    records: list[dict] | None,
+    pools: list[tuple[str, int]] | None,
+    host_routes: list[str] | None,
+) -> tuple[list[str], list[str]]:
+    """Decide whether marketing can join the resto network or, only if it is missing, allocate one subnet.
+
+    Marketing compose marks resto as external and sets no static container address.
+    This function does not create a network.
+    """
+    notes: list[str] = []
+    errors: list[str] = []
+    if records is None:
+        notes.append("Docker is not available, so network subnets were not read.")
+        return notes, errors
+    occupied: list[ipaddress.IPv4Network] = []
+    parsed: list[tuple[dict, list[ipaddress.IPv4Network]]] = []
+    for record in records:
+        subnets: list[ipaddress.IPv4Network] = []
+        for raw in record.get("subnets") or []:
+            try:
+                network = ipaddress.ip_network(raw, strict=False)
+            except ValueError:
+                notes.append(f"{record.get('name')}: subnet {raw} could not be parsed.")
+                continue
+            if isinstance(network, ipaddress.IPv4Network):
+                subnets.append(network)
+                occupied.append(network)
+        parsed.append((record, subnets))
+        rendered = ", ".join(str(item) for item in subnets) or "no IPv4 subnet"
+        attached = ", ".join(record.get("attached") or []) or "none"
+        notes.append(
+            f"Network {record.get('name')} driver={record.get('driver') or 'unknown'} "
+            f"subnet={rendered} attached={record.get('used', 0)} ({attached})."
+        )
+    for left_index, (left, left_nets) in enumerate(parsed):
+        for right, right_nets in parsed[left_index + 1 :]:
+            for left_net in left_nets:
+                for right_net in right_nets:
+                    if left_net.overlaps(right_net):
+                        errors.append(
+                            f"Docker networks {left.get('name')} {left_net} and {right.get('name')} {right_net} overlap."
+                        )
+    routes: list[ipaddress.IPv4Network] = []
+    for raw in host_routes or []:
+        try:
+            route = ipaddress.ip_network(raw, strict=False)
+        except ValueError:
+            continue
+        if isinstance(route, ipaddress.IPv4Network):
+            routes.append(route)
+    resto = next((item for item in parsed if item[0].get("name") == "resto"), None)
+    if resto is not None:
+        record, subnets = resto
+        driver = record.get("driver") or ""
+        notes.append(
+            "Marketing joins the existing resto network. It does not create a second network and does not set container addresses."
+        )
+        if driver in {"host", "null"}:
+            errors.append(f"The resto network uses the {driver} driver. Marketing expects a bridge, macvlan, or ipvlan network.")
+            return notes, errors
+        if not subnets:
+            errors.append("The resto network has no IPv4 subnet, so new containers would not get addresses.")
+            return notes, errors
+        for subnet in subnets:
+            reserved = 2 if subnet.prefixlen <= 30 else 0
+            free = subnet.num_addresses - reserved - int(record.get("used") or 0)
+            notes.append(f"resto {subnet} has about {free} free IPv4 addresses after {record.get('used', 0)} attached containers.")
+            if free < MARKETING_ADDRESS_NEED:
+                errors.append(
+                    f"resto {subnet} has about {free} free addresses. The full marketing stack needs {MARKETING_ADDRESS_NEED}."
+                )
+            for route in routes:
+                if subnet.overlaps(route) and driver == "bridge":
+                    errors.append(
+                        f"resto bridge subnet {subnet} overlaps host route {route}. Containers on that bridge could not reach that route."
+                    )
+                elif subnet.overlaps(route):
+                    notes.append(
+                        f"resto {driver} subnet {subnet} is on host route {route}. Joining it does not allocate a new Docker subnet."
+                    )
+        return notes, errors
+    notes.append("The resto network is absent. An approved start would create one bridge named resto, and only if it is still missing.")
+    candidates = pool_subnets(pools)
+    pool_label = "daemon address pools" if pools else "Docker's built-in local pools"
+    free_subnet = None
+    for candidate in candidates:
+        if any(candidate.overlaps(item) for item in occupied):
+            continue
+        if any(candidate.overlaps(route) for route in routes):
+            continue
+        free_subnet = candidate
+        break
+    if free_subnet is None:
+        errors.append(
+            f"No free IPv4 subnet remains in {pool_label}. Creating the resto network would fail. This check does not prune networks."
+        )
     else:
-        notes.append(f"Docker networks: {network_count}. resto network present: {bool(resto_network)}")
-        if resto_network is False and network_count >= 30:
-            errors.append(
-                f"The resto network does not exist and Docker already has {network_count} networks. "
-                "Creating another one can fail when the address pools are exhausted. This script does not prune networks."
-            )
+        notes.append(
+            f"The first free subnet in {pool_label} is {free_subnet}. "
+            "Inspection does not create it. Existing container addresses stay where they are."
+        )
     return notes, errors
 
 
@@ -394,12 +519,19 @@ def _local_ipv4() -> list[str]:
     return re.findall(r"\binet (\d+\.\d+\.\d+\.\d+)/", output)
 
 
-def _docker_networks() -> tuple[int | None, bool | None, dict[int, str], list[str]]:
+def _docker_networks() -> tuple[list[dict] | None, dict[int, str], list[str]]:
     try:
-        listing = subprocess.check_output(["docker", "network", "ls", "--format", "{{.Name}}"], text=True)
+        listing = subprocess.check_output(["docker", "network", "ls", "-q"], text=True)
     except (OSError, subprocess.CalledProcessError):
-        return None, None, {}, []
-    names = [line.strip() for line in listing.splitlines() if line.strip()]
+        return None, {}, []
+    ids = [line.strip() for line in listing.splitlines() if line.strip()]
+    records: list[dict] = []
+    if ids:
+        try:
+            raw = subprocess.check_output(["docker", "network", "inspect", *ids], text=True)
+            records = _parse_network_inspect(json.loads(raw))
+        except (OSError, subprocess.CalledProcessError, json.JSONDecodeError):
+            records = []
     holders: dict[int, str] = {}
     containers: list[str] = []
     try:
@@ -413,7 +545,70 @@ def _docker_networks() -> tuple[int | None, bool | None, dict[int, str], list[st
         for port in (8084, 4007, 8090, 8085):
             if f":{port}->" in ports:
                 holders[port] = name
-    return len(names), "resto" in names, holders, containers
+    return records, holders, containers
+
+
+def _parse_network_inspect(data: list) -> list[dict]:
+    records = []
+    for item in data:
+        subnets = []
+        for cfg in (item.get("IPAM") or {}).get("Config") or []:
+            subnet = cfg.get("Subnet")
+            if subnet:
+                subnets.append(subnet)
+        attached = []
+        for container in (item.get("Containers") or {}).values():
+            name = container.get("Name")
+            if name:
+                attached.append(name)
+        records.append(
+            {
+                "name": item.get("Name") or "",
+                "driver": item.get("Driver") or "",
+                "subnets": subnets,
+                "used": len(item.get("Containers") or {}),
+                "attached": attached,
+            }
+        )
+    return records
+
+
+def _address_pools() -> list[tuple[str, int]] | None:
+    path = Path("/etc/docker/daemon.json")
+    if not path.is_file():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    pools = payload.get("default-address-pools")
+    if not isinstance(pools, list) or not pools:
+        return None
+    parsed: list[tuple[str, int]] = []
+    for pool in pools:
+        if not isinstance(pool, dict) or "base" not in pool or "size" not in pool:
+            continue
+        try:
+            parsed.append((str(pool["base"]), int(pool["size"])))
+        except (TypeError, ValueError):
+            continue
+    return parsed or None
+
+
+def _nondocker_routes() -> list[str]:
+    try:
+        output = subprocess.check_output(["ip", "-4", "route"], text=True, stderr=subprocess.DEVNULL)
+    except (OSError, subprocess.CalledProcessError):
+        return []
+    routes = []
+    for line in output.splitlines():
+        if " dev docker0" in line or " dev br-" in line:
+            continue
+        parts = line.split()
+        if not parts or parts[0] == "default" or "/" not in parts[0]:
+            continue
+        routes.append(parts[0])
+    return routes
 
 
 def _zfs_rows() -> list[dict[str, str]]:
@@ -518,16 +713,20 @@ def main() -> int:
     for note in zfs_notes:
         print(note)
 
-    networks, resto, holders, containers = _docker_networks()
+    records, holders, containers = _docker_networks()
     if containers:
         print("Existing containers, inspected only:")
         for line in containers:
             print(f"  {line}")
-    elif networks is None:
+    elif records is None:
         print("Docker is not available, so existing containers were not listed.")
     else:
         print("Docker reported no containers.")
-    resource_notes, resource_errors = assess_resources(_mem_available(), _load(), _cpus(), networks, resto)
+    network_notes, network_errors = assess_networks(records, _address_pools(), _nondocker_routes())
+    for note in network_notes:
+        print(note)
+    errors.extend(network_errors)
+    resource_notes, resource_errors = assess_resources(_mem_available(), _load(), _cpus())
     for note in resource_notes:
         print(note)
     for item in resource_errors:

@@ -2,7 +2,7 @@
 
 This is the opt-in marketing layer. It does not replace n8n, resto-core, Paperless, or Mealie. `./scripts/remote-up.sh` does not start it. `./scripts/up-marketing.sh` does not load `compose.yml`, so it cannot create or recreate those services.
 
-This workspace is not the Unraid host. A read-only SSH attempt to `100.116.48.120` timed out, so CPU, RAM, Docker network count, and ZFS recordsize were not measured on the server. Run `./scripts/preflight-marketing.sh` on Unraid before any start. The script only prints. It does not change sysctls, datasets, or containers.
+This workspace is not the Unraid host. SSH to `100.116.48.120` timed out, so the server's CPU, RAM, subnets, and ZFS are still unread. `scripts/inspect-unraid-readonly.sh` prints that report without checking out files into the resto working tree. Its only write is `/tmp/unraid-marketing-inspect.txt`. Run `./scripts/preflight-marketing.sh` on Unraid before any start, after the inspected commit is the one you approved. That script only prints. It does not change sysctls, datasets, or containers.
 
 ## Pinned images
 
@@ -92,7 +92,7 @@ sysctl -w vm.max_map_count=262144
 
 Add the same line to `/boot/config/go`.
 
-If the `resto` Docker network is missing and the daemon already has 30 or more networks, preflight stops. It does not prune networks. Creating one more network is a common way to hit "all predefined address pools have been fully subnetted." Clean unused networks yourself, then rerun preflight.
+Marketing joins the existing Docker network named `resto`. Preflight reads every network subnet, the addresses already attached, and the host routes that are not Docker bridges. It refuses when `resto` overlaps another Docker subnet, when that subnet overlaps a host route, or when fewer than 16 IPv4 addresses are free on it. If `resto` is missing, preflight looks for one free subnet in the daemon address pools, or in Docker's built-in local pools when the daemon has none. It does not create the network and it does not prune unused ones.
 
 ## What the scripts change
 
