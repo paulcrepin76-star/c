@@ -1,0 +1,96 @@
+@import "@fontsource/outfit/400.css";
+@import "@fontsource/outfit/500.css";
+@import "@fontsource/outfit/600.css";
+@import "@fontsource/fraunces/500.css";
+@import "@fontsource/fraunces/600.css";
+@import "@fontsource/fraunces/500-italic.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  --paper: #f3efe7;
+  --ink: #241c16;
+  --muted: #6f6256;
+  --card: rgba(255, 250, 244, 0.92);
+  --line: #e4d8c8;
+  --accent: #8f3d2b;
+  --accent-soft: #f3ddd4;
+  --saffron: #b7791f;
+  --good: #2c6b4a;
+  --bad: #8f3d2b;
+  --shadow: 0 18px 50px rgba(58, 36, 18, 0.06);
+}
+
+.dark {
+  color-scheme: dark;
+  --paper: #13110f;
+  --ink: #f4eee6;
+  --muted: #b3a698;
+  --card: rgba(30, 26, 22, 0.92);
+  --line: #3a322b;
+  --accent: #e2a56a;
+  --accent-soft: #3a2a22;
+  --saffron: #e2b15a;
+  --good: #8dcea8;
+  --bad: #f0a898;
+  --shadow: 0 18px 50px rgba(0, 0, 0, 0.28);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(1200px 500px at 10% -10%, rgba(183, 121, 31, 0.08), transparent 50%),
+    var(--paper);
+  color: var(--ink);
+  font-family: Outfit, "Avenir Next", "Segoe UI", sans-serif;
+}
+
+.dark body,
+.dark {
+  background:
+    radial-gradient(900px 420px at 0% -10%, rgba(226, 165, 106, 0.08), transparent 46%),
+    var(--paper);
+}
+
+button, input, select, textarea { font: inherit; }
+
+.rise { animation: rise 420ms ease both; }
+@keyframes rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rise { animation: none; }
+}
+
+.field {
+  width: 100%;
+  border-radius: 0.9rem;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  padding: 0.65rem 0.8rem;
+  outline: none;
+}
+.field:focus { border-color: var(--accent); }
+textarea.field { min-height: 7rem; resize: vertical; }
+
+.btn {
+  border-radius: 999px;
+  padding: 0.55rem 0.95rem;
+  background: var(--accent);
+  color: #fffaf3;
+  border: 0;
+  font-weight: 500;
+}
+.dark .btn { color: #24180f; }
+.btn.secondary {
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--line);
+}
+.btn:disabled { opacity: 0.55; }

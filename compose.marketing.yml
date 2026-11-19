@@ -1,0 +1,331 @@
+# Survey Café marketing stack. Opt-in.
+#
+# This file is not used by scripts/remote-up.sh, so a normal deploy does not
+# start Mautic, Postiz, Temporal, or the dashboard, and it does not recreate n8n.
+#
+#   MARKETING_APPROVED=1 ./scripts/up-marketing.sh
+#
+# Images follow the current official installs:
+#   Mautic 5 apache + MySQL 8.4 (Mautic does not support Postgres)
+#   Postiz ghcr.io/gitroomhq/postiz-app:latest + Redis + Temporal 1.28.1
+#     with the Elasticsearch visibility store from postiz-docker-compose
+# Postiz's own tables use a role on the existing resto Postgres 16.
+# Temporal keeps a separate Postgres so its setup cannot see n8n or resto data.
+
+x-mautic-env: &mautic-env
+  DOCKER_MAUTIC_LOAD_TEST_DATA: "false"
+  MAUTIC_DB_HOST: mautic-mysql
+  MAUTIC_DB_PORT: "3306"
+  MAUTIC_DB_DATABASE: mautic
+  MAUTIC_DB_USER: mautic
+  MAUTIC_DB_PASSWORD: ${MAUTIC_DB_PASSWORD:?set MAUTIC_DB_PASSWORD}
+  MAUTIC_MESSENGER_DSN_EMAIL: doctrine://default
+  MAUTIC_MESSENGER_DSN_HIT: doctrine://default
+  MAUTIC_MESSENGER_DSN_FAILED: doctrine://default
+  PHP_INI_VALUE_DATE_TIMEZONE: ${TZ:-America/New_York}
+  PHP_INI_VALUE_MEMORY_LIMIT: 512M
+
+services:
+  mautic-mysql:
+    image: mysql:8.4
+    container_name: resto-mautic-mysql
+    profiles: ["marketing"]
+    restart: unless-stopped
+    command: ["--innodb-buffer-pool-size=256M"]
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MAUTIC_DB_ROOT_PASSWORD:?set MAUTIC_DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: mautic
+      MYSQL_USER: mautic
+      MYSQL_PASSWORD: ${MAUTIC_DB_PASSWORD:?set MAUTIC_DB_PASSWORD}
+      TZ: ${TZ:-America/New_York}
+    volumes:
+      - ${APPDATA:-./appdata}/mautic/mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin --user=$$MYSQL_USER --password=$$MYSQL_PASSWORD ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 40s
+    networks: [resto]
+
+  mautic:
+    image: mautic/mautic:5-apache
+    container_name: resto-mautic
+    profiles: ["marketing"]
+    restart: unless-stopped
+    environment:
+      <<: *mautic-env
+      DOCKER_MAUTIC_ROLE: mautic_web
+      DOCKER_MAUTIC_RUN_MIGRATIONS: "true"
+    ports:
+      - "${MAUTIC_PORT:-8084}:80"
+    volumes:
+      - ${APPDATA:-./appdata}/mautic/config:/var/www/html/config
+      - ${APPDATA:-./appdata}/mautic/logs:/var/www/html/var/logs
+      - ${APPDATA:-./appdata}/mautic/media/files:/var/www/html/docroot/media/files
+      - ${APPDATA:-./appdata}/mautic/media/images:/var/www/html/docroot/media/images
+    depends_on:
+      mautic-mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1/ >/dev/null"]
+      interval: 20s
+      timeout: 10s
+      retries: 20
+      start_period: 90s
+    networks: [resto]
+
+  mautic-cron:
+    image: mautic/mautic:5-apache
+    container_name: resto-mautic-cron
+    profiles: ["marketing"]
+    restart: unless-stopped
+    environment:
+      <<: *mautic-env
+      DOCKER_MAUTIC_ROLE: mautic_cron
+    volumes:
+      - ${APPDATA:-./appdata}/mautic/config:/var/www/html/config
+      - ${APPDATA:-./appdata}/mautic/logs:/var/www/html/var/logs
+      - ${APPDATA:-./appdata}/mautic/media/files:/var/www/html/docroot/media/files
+      - ${APPDATA:-./appdata}/mautic/media/images:/var/www/html/docroot/media/images
+    depends_on:
+      mautic:
+        condition: service_healthy
+    networks: [resto]
+
+  mautic-worker:
+    image: mautic/mautic:5-apache
+    container_name: resto-mautic-worker
+    profiles: ["marketing"]
+    restart: unless-stopped
+    environment:
+      <<: *mautic-env
+      DOCKER_MAUTIC_ROLE: mautic_worker
+      DOCKER_MAUTIC_WORKERS_CONSUME_EMAIL: "1"
+      DOCKER_MAUTIC_WORKERS_CONSUME_HIT: "1"
+      DOCKER_MAUTIC_WORKERS_CONSUME_FAILED: "1"
+    volumes:
+      - ${APPDATA:-./appdata}/mautic/config:/var/www/html/config
+      - ${APPDATA:-./appdata}/mautic/logs:/var/www/html/var/logs
+      - ${APPDATA:-./appdata}/mautic/media/files:/var/www/html/docroot/media/files
+      - ${APPDATA:-./appdata}/mautic/media/images:/var/www/html/docroot/media/images
+    depends_on:
+      mautic:
+        condition: service_healthy
+    networks: [resto]
+
+  marketing-db-init:
+    image: postgres:16-alpine
+    container_name: resto-marketing-db-init
+    profiles: ["marketing"]
+    restart: "no"
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      PGUSER: ${POSTGRES_USER:-resto}
+      POSTIZ_DB_PASSWORD: ${POSTIZ_DB_PASSWORD:?set POSTIZ_DB_PASSWORD}
+    volumes:
+      - ./docker/postgres/init-postiz-db.sh:/init-postiz-db.sh:ro
+    entrypoint: ["/bin/sh", "/init-postiz-db.sh"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [resto]
+
+  postiz-redis:
+    image: redis:7.2
+    container_name: resto-postiz-redis
+    profiles: ["marketing"]
+    restart: unless-stopped
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    volumes:
+      - ${APPDATA:-./appdata}/postiz/redis:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks: [resto]
+
+  temporal-postgres:
+    image: postgres:16
+    container_name: resto-temporal-postgres
+    profiles: ["marketing"]
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: temporal
+      POSTGRES_PASSWORD: ${TEMPORAL_DB_PASSWORD:?set TEMPORAL_DB_PASSWORD}
+      TZ: ${TZ:-America/New_York}
+    volumes:
+      - ${APPDATA:-./appdata}/temporal/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U temporal"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    networks: [resto]
+
+  temporal-elasticsearch:
+    image: elasticsearch:7.17.27
+    container_name: resto-temporal-elasticsearch
+    profiles: ["marketing"]
+    restart: unless-stopped
+    environment:
+      cluster.routing.allocation.disk.threshold_enabled: "true"
+      cluster.routing.allocation.disk.watermark.low: 512mb
+      cluster.routing.allocation.disk.watermark.high: 256mb
+      cluster.routing.allocation.disk.watermark.flood_stage: 128mb
+      discovery.type: single-node
+      ES_JAVA_OPTS: -Xms256m -Xmx256m
+      xpack.security.enabled: "false"
+      TZ: ${TZ:-America/New_York}
+    volumes:
+      - ${APPDATA:-./appdata}/temporal/elasticsearch:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS \"http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s\" || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
+    networks: [resto]
+
+  temporal:
+    image: temporalio/auto-setup:1.28.1
+    container_name: resto-temporal
+    profiles: ["marketing"]
+    restart: unless-stopped
+    environment:
+      DB: postgres12
+      DB_PORT: "5432"
+      POSTGRES_USER: temporal
+      POSTGRES_PWD: ${TEMPORAL_DB_PASSWORD:?set TEMPORAL_DB_PASSWORD}
+      POSTGRES_SEEDS: temporal-postgres
+      DYNAMIC_CONFIG_FILE_PATH: config/dynamicconfig/development-sql.yaml
+      ENABLE_ES: "true"
+      ES_SEEDS: temporal-elasticsearch
+      ES_VERSION: v7
+      TEMPORAL_NAMESPACE: default
+    volumes:
+      - ./docker/temporal/dynamicconfig:/etc/temporal/config/dynamicconfig:ro
+    depends_on:
+      temporal-postgres:
+        condition: service_healthy
+      temporal-elasticsearch:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "temporal", "operator", "cluster", "health", "--address", "127.0.0.1:7233"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 40s
+    networks: [resto]
+
+  temporal-ui:
+    image: temporalio/ui:2.34.0
+    container_name: resto-temporal-ui
+    profiles: ["marketing"]
+    restart: unless-stopped
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_CORS_ORIGINS: http://127.0.0.1:8090
+    ports:
+      - "127.0.0.1:${TEMPORAL_UI_PORT:-8085}:8080"
+    depends_on:
+      temporal:
+        condition: service_healthy
+    networks: [resto]
+
+  postiz:
+    image: ghcr.io/gitroomhq/postiz-app:latest
+    container_name: resto-postiz
+    profiles: ["marketing"]
+    restart: unless-stopped
+    environment:
+      MAIN_URL: ${POSTIZ_URL:-http://100.116.48.120:4007}
+      FRONTEND_URL: ${POSTIZ_URL:-http://100.116.48.120:4007}
+      NEXT_PUBLIC_BACKEND_URL: ${POSTIZ_URL:-http://100.116.48.120:4007}/api
+      JWT_SECRET: ${POSTIZ_JWT_SECRET:?set POSTIZ_JWT_SECRET}
+      DATABASE_URL: postgresql://postiz:${POSTIZ_DB_PASSWORD}@postgres:5432/postiz
+      REDIS_URL: redis://postiz-redis:6379
+      BACKEND_INTERNAL_URL: http://localhost:3000
+      TEMPORAL_ADDRESS: temporal:7233
+      IS_GENERAL: "true"
+      DISABLE_REGISTRATION: ${POSTIZ_DISABLE_REGISTRATION:-false}
+      RUN_CRON: "true"
+      STORAGE_PROVIDER: local
+      UPLOAD_DIRECTORY: /uploads
+      NEXT_PUBLIC_UPLOAD_DIRECTORY: /uploads
+      X_API_KEY: ${X_API_KEY:-}
+      X_API_SECRET: ${X_API_SECRET:-}
+      LINKEDIN_CLIENT_ID: ${LINKEDIN_CLIENT_ID:-}
+      LINKEDIN_CLIENT_SECRET: ${LINKEDIN_CLIENT_SECRET:-}
+      FACEBOOK_APP_ID: ${FACEBOOK_APP_ID:-}
+      FACEBOOK_APP_SECRET: ${FACEBOOK_APP_SECRET:-}
+      YOUTUBE_CLIENT_ID: ${YOUTUBE_CLIENT_ID:-}
+      YOUTUBE_CLIENT_SECRET: ${YOUTUBE_CLIENT_SECRET:-}
+      TIKTOK_CLIENT_ID: ${TIKTOK_CLIENT_ID:-}
+      TIKTOK_CLIENT_SECRET: ${TIKTOK_CLIENT_SECRET:-}
+      API_LIMIT: "30"
+      TZ: ${TZ:-America/New_York}
+    volumes:
+      - ${APPDATA:-./appdata}/postiz/config:/config
+      - ${APPDATA:-./appdata}/postiz/uploads:/uploads
+    ports:
+      - "${POSTIZ_PORT:-4007}:5000"
+    depends_on:
+      marketing-db-init:
+        condition: service_completed_successfully
+      postiz-redis:
+        condition: service_healthy
+      temporal:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "const r=require('http').get('http://localhost:5000/',res=>process.exit(res.statusCode<500?0:1));r.on('error',()=>process.exit(1));r.setTimeout(4000,()=>{r.destroy();process.exit(1)})"]
+      interval: 30s
+      timeout: 10s
+      retries: 8
+      start_period: 120s
+    networks: [resto]
+
+  command:
+    build:
+      context: ./apps/command
+    image: resto-command:local
+    container_name: resto-command
+    profiles: ["marketing"]
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-America/New_York}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-resto}:${POSTGRES_PASSWORD}@postgres:5432/command
+      COMMAND_SECRET_KEY: ${COMMAND_SECRET_KEY:?set COMMAND_SECRET_KEY}
+      COMMAND_ADMIN_EMAIL: ${COMMAND_ADMIN_EMAIL:-}
+      COMMAND_ADMIN_PASSWORD: ${COMMAND_ADMIN_PASSWORD:?set COMMAND_ADMIN_PASSWORD}
+      COMMAND_API_KEY: ${RESTO_API_KEY:-}
+      RESTO_API_KEY: ${RESTO_API_KEY:-}
+      COMMAND_PUBLIC_URL: ${COMMAND_URL:-http://100.116.48.120:8090}
+      MAUTIC_INTERNAL_URL: http://mautic
+      POSTIZ_INTERNAL_URL: http://postiz:5000
+      N8N_INTERNAL_URL: http://n8n:5678
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-}
+      OLLAMA_TEXT_MODEL: ${OLLAMA_TEXT_MODEL:-}
+      OLLAMA_VISION_MODEL: ${OLLAMA_VISION_MODEL:-}
+      DATA_DIR: /data
+    ports:
+      - "${COMMAND_PORT:-8090}:8090"
+    volumes:
+      - ${APPDATA:-./appdata}/command:/data
+    depends_on:
+      marketing-db-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8090/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 8
+      start_period: 20s
+    networks: [resto]
+
+networks:
+  resto:
+    name: resto

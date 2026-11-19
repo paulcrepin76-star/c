@@ -1,0 +1,67 @@
+{
+  "name": "Marketing nightly status",
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "nodes": [
+    {
+      "id": "n1",
+      "name": "Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [0, 220],
+      "parameters": {
+        "width": 420,
+        "height": 160,
+        "content": "## Read only\nAsks the dashboard whether Mautic, Postiz, and n8n answer.\nDoes not send email or post anything.\nStays inactive until you turn it on."
+      }
+    },
+    {
+      "id": "n2",
+      "name": "Every night 02:40",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0],
+      "parameters": {
+        "rule": {
+          "interval": [
+            { "field": "days", "daysInterval": 1, "triggerAtHour": 2, "triggerAtMinute": 40 }
+          ]
+        }
+      }
+    },
+    {
+      "id": "n3",
+      "name": "Test now",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [0, 100],
+      "parameters": {}
+    },
+    {
+      "id": "n4",
+      "name": "Read status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [280, 40],
+      "parameters": {
+        "method": "GET",
+        "url": "http://command:8090/api/n8n/status",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-API-Key", "value": "={{ $env.RESTO_API_KEY }}" }
+          ]
+        },
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Every night 02:40": {
+      "main": [[{ "node": "Read status", "type": "main", "index": 0 }]]
+    },
+    "Test now": {
+      "main": [[{ "node": "Read status", "type": "main", "index": 0 }]]
+    }
+  }
+}

@@ -1,0 +1,60 @@
+{
+  "name": "Marketing event announcement",
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "nodes": [
+    {
+      "id": "m1",
+      "name": "Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [0, 220],
+      "parameters": {
+        "width": 460,
+        "height": 180,
+        "content": "## Drafts only\nThis calls the dashboard, which creates an event plus a social draft and an email draft.\nIt does not publish to Facebook, Instagram, or Mautic.\nLeave this inactive until Postiz and Mautic are signed in."
+      }
+    },
+    {
+      "id": "m2",
+      "name": "Event webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "survey-event",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "webhookId": "survey-event"
+    },
+    {
+      "id": "m3",
+      "name": "Queue drafts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [280, 0],
+      "parameters": {
+        "method": "POST",
+        "url": "http://command:8090/api/n8n/events/announce",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-API-Key", "value": "={{ $env.RESTO_API_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.body }}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Event webhook": {
+      "main": [[{ "node": "Queue drafts", "type": "main", "index": 0 }]]
+    }
+  }
+}

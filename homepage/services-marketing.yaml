@@ -1,0 +1,16 @@
+- Marketing:
+    - Survey Command:
+        icon: mdi-silverware-fork-knife
+        href: http://100.116.48.120:8090
+        description: Marketing dashboard
+        weight: 100
+    - Mautic:
+        icon: mdi-email-fast
+        href: http://100.116.48.120:8084
+        description: Email and contacts
+        weight: 200
+    - Postiz:
+        icon: mdi-calendar-multiselect
+        href: http://100.116.48.120:4007
+        description: Social scheduling
+        weight: 300
