@@ -1,3 +1,13 @@
+export type IntegrationProof = {
+  id: string;
+  name: string;
+  code: string;
+  verification: string;
+  unit_test: string;
+  still_needed: string;
+  live_verified: boolean;
+};
+
 export type Status = {
   service: string;
   reachable: boolean;

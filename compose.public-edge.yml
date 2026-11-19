@@ -1,0 +1,31 @@
+# Public HTTPS for the two callbacks social networks and mail clients must reach:
+# Postiz (OAuth and media fetch) and Mautic (trackers, unsubscribes, hosted forms).
+#
+# The dashboard is not in this file. Leave it on Tailscale.
+# scripts/up-marketing.sh does not start this file.
+#
+#   MARKETING_PUBLIC_APPROVED=1 ./scripts/up-public-edge.sh
+
+services:
+  edge:
+    image: caddy:2.10.2-alpine
+    container_name: resto-marketing-edge
+    profiles: ["public-edge"]
+    restart: unless-stopped
+    environment:
+      PUBLIC_POSTIZ_HOST: ${PUBLIC_POSTIZ_HOST:?set PUBLIC_POSTIZ_HOST}
+      PUBLIC_MAUTIC_HOST: ${PUBLIC_MAUTIC_HOST:?set PUBLIC_MAUTIC_HOST}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ${APPDATA:-./appdata}/caddy/data:/data
+      - ${APPDATA:-./appdata}/caddy/config:/config
+    networks: [resto]
+
+networks:
+  resto:
+    name: resto
+    external: true

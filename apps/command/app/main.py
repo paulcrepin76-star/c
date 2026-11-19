@@ -40,6 +40,7 @@ def create_app() -> FastAPI:
     app.add_middleware(
         SessionMiddleware,
         secret_key=settings.command_secret_key or "command-dev-session",
+        session_cookie="survey_command",
         same_site="lax",
         https_only=settings.command_https_only,
         max_age=60 * 60 * 12,

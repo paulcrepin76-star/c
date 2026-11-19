@@ -85,4 +85,4 @@ Square / mailbox / portal passwords stay in n8n credentials or in `.env` on the 
 
 ## Marketing
 
-Mautic, Postiz, and the Survey Café command dashboard are an opt-in Compose file. They join the `resto` network so n8n can call them, and a normal `docker compose up` does not start them. Mautic uses its own MySQL because Mautic has no Postgres support. Postiz tables use a role on the existing Postgres. Temporal, which current Postiz requires, keeps a separate Postgres and the Elasticsearch visibility store from the official Postiz compose. Details and the API limits are in [MARKETING.md](MARKETING.md).
+Mautic, Postiz, and the Survey Café command dashboard are an opt-in Compose file. A normal `docker compose up` does not start them, and the marketing start script does not load this file, so it cannot start Postgres or n8n. Mautic 7.2.2 uses its own MySQL 8.4 because Mautic has no Postgres support. Postiz v2.26.0 and the dashboard use a new Postgres 17. Temporal keeps the Postgres 16 and Elasticsearch versions from the official Postiz compose. Details, pins, and the rollback steps are in [MARKETING.md](MARKETING.md).

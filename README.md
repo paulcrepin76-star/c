@@ -75,9 +75,9 @@ One Compose stack, one Postgres, these containers:
 
 Marketing is a separate opt-in stack. It does not start with the command above. See [docs/MARKETING.md](docs/MARKETING.md).
 
-| command | 8090 | Survey Café marketing dashboard |
-| mautic | 8084 | Email and contacts |
-| postiz | 4007 | Social scheduling |
+| command | 8090, bound to BIND_ADDR | Survey Café marketing dashboard |
+| mautic | 8084, bound to BIND_ADDR | Email and contacts. Mautic 7.2.2 |
+| postiz | 4007, bound to BIND_ADDR | Social scheduling. Postiz v2.26.0 |
 
 On Unraid (`ssh root@100.116.48.120`) Paperless and Mealie are already running. Install only the missing pieces:
 

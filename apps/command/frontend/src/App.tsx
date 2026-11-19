@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { ApiError, api } from "./api";
-import { Ads, Events, Login, Marketing, Menu, Overview, Profiles, Reviews, Settings, Social } from "./screens";
+import { Ads, Connections, Events, Login, Marketing, Menu, Overview, Profiles, Reviews, Settings, Social } from "./screens";
 import { Shell } from "./ui";
 
 export function App() {
@@ -38,6 +38,7 @@ export function App() {
         <Route path="ads" element={<Ads />} />
         <Route path="reviews" element={<Reviews />} />
         <Route path="events" element={<Events />} />
+        <Route path="connections" element={<Connections />} />
         <Route path="settings" element={<Settings />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

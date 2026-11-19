@@ -118,8 +118,8 @@ CAPABILITIES: list[dict] = [
         "review_read": "unavailable",
         "review_reply": "unavailable",
         "posts": "unavailable",
-        "summary": "Email campaigns and contacts live in the Mautic container on this server. The API user is created in Mautic, then saved here.",
-        "requirements": "Mautic running, API enabled, and either basic auth or an OAuth2 client. Campaigns are created unpublished.",
+        "summary": "Email campaigns and contacts live in Mautic 7.2.2 on this server. The API user is created in Mautic, then saved here.",
+        "requirements": "Mautic 7.2.2 running on MySQL 8.4, API enabled, and either basic auth or an OAuth2 client. Campaigns are created unpublished.",
     },
     {
         "id": "postiz",

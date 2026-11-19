@@ -22,7 +22,8 @@ def test_login_and_overview_have_no_invented_activity(owner):
     assert body["counts"]["posts_in_progress"] == 0
     statuses = {row["service"]: row for row in body["statuses"]}
     assert statuses["n8n"]["reachable"] is False
-    assert statuses["postgres"]["reachable"] is True
+    assert statuses["dashboard database"]["reachable"] is True
+    assert "resto-postgres" in statuses["dashboard database"]["detail"]
 
 
 def test_yelp_push_stays_manual_and_google_confirms_only_on_success(owner, monkeypatch):
@@ -199,14 +200,49 @@ def test_closed_week_is_not_a_google_hours_payload():
     assert any_day_open(empty_hours()) is False
 
 
-def test_marketing_compose_does_not_touch_n8n_or_set_memory_limits():
-    text = open("/workspace/compose.marketing.yml", encoding="utf-8").read()
-    assert 'profiles: ["marketing"]' in text
-    assert "mautic/mautic:5-apache" in text
-    assert "ghcr.io/gitroomhq/postiz-app:latest" in text
-    assert "mem_limit" not in text
-    assert "resto-n8n" not in text
-    assert "temporalio/auto-setup:1.28.1" in text
-    main = open("/workspace/compose.yml", encoding="utf-8").read()
+def test_marketing_compose_is_pinned_and_isolated():
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[3]
+    result = subprocess.run([sys.executable, str(root / "scripts/check-marketing-compose.py")], cwd=root, capture_output=True, text=True)
+    assert result.returncode == 0, result.stdout + result.stderr
+    main = (root / "compose.yml").read_text(encoding="utf-8")
     assert "mautic/mautic" not in main
     assert "postiz-app" not in main
+
+
+def test_integrations_are_not_marked_live(owner):
+    body = owner.get("/api/integrations").json()
+    assert body["live_calls_made"] is False
+    rows = {row["id"]: row for row in body["integrations"]}
+    assert rows["google"]["verification"] == "unit_test"
+    assert rows["google"]["live_verified"] is False
+    assert rows["apple"]["code"] == "not_implemented"
+    assert rows["postiz"]["verification"] == "unit_test"
+    assert rows["mautic"]["verification"] == "not_run_live"
+    assert all(row["live_verified"] is False for row in body["integrations"])
+
+
+def test_storage_and_resource_guards():
+    import importlib.util
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[3] / "scripts" / "preflight_marketing.py"
+    spec = importlib.util.spec_from_file_location("preflight_marketing", path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert module.assess_storage("/mnt/disk1/appdata/resto", None, True)
+    assert module.assess_storage("/mnt/user/appdata/resto", 'shareUseCache="only"\n', True) == []
+    assert module.assess_storage("/mnt/user/appdata/resto", 'shareUseCache="yes"\n', True)
+    notes, errors = module.assess_zfs(
+        [{"name": "cache/appdata", "mountpoint": "/mnt/cache/appdata", "recordsize": "128K", "compression": "lz4", "sync": "standard", "logbias": "latency", "primarycache": "all", "atime": "on"}],
+        "/mnt/cache/appdata/resto",
+    )
+    assert notes and errors
+    _, resource_errors = module.assess_resources(2 * 1024 * 1024, 20.0, 4, 40, False)
+    assert any("GiB" in item for item in resource_errors)
+    assert any("networks" in item for item in resource_errors)
+    assert module.assess_map_count(65530)

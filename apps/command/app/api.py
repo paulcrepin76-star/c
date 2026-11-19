@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app import domain
 from app.capabilities import CAPABILITIES
+from app.integrations import report as integration_report
 from app.config import settings
 from app.crypto import passwords_match
 from app.db import get_db
@@ -156,6 +157,11 @@ def status(db: Session = Depends(get_db), _: str = Depends(require_user)):
 @router.get("/capabilities")
 def capabilities(_: str = Depends(require_user)):
     return {"capabilities": CAPABILITIES}
+
+
+@router.get("/integrations")
+def integrations(_: str = Depends(require_user)):
+    return integration_report()
 
 
 @router.get("/profiles")

@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # First-run helper. Safe to re-run: it never overwrites passwords in .env.
+# It does not start, stop, or remove containers. It may create missing data
+# directories and fill empty marketing secrets in .env.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -82,7 +84,6 @@ else
   echo "No Paperless container detected. Using ${PAPERLESS_BASE}"
   echo "This stack will NOT install Paperless — keep the one you already have."
 fi
-docker rm -f resto-paperless >/dev/null 2>&1 || true
 
 if [ -n "${EXISTING_MEALIE:-}" ]; then
   MEALIE_PORT="$(detect_port "$EXISTING_MEALIE" 9000 9000)"
@@ -92,7 +93,6 @@ else
   echo "No Mealie container detected. Using ${MEALIE_BASE}"
   echo "This stack will NOT install Mealie — keep the one you already have."
 fi
-docker rm -f resto-mealie >/dev/null 2>&1 || true
 
 if [ -f "$ROOT/.env" ]; then
   echo ".env already exists — keeping passwords, updating service URLs."
@@ -136,8 +136,10 @@ fill_marketing_secrets "$ROOT/.env"
 
 cat <<EOF
 
-This stack will start: resto-core, n8n, Metabase, Postgres
+This script did not start or remove any container.
+A later ./scripts/remote-up.sh starts resto-core, n8n, Metabase, and Postgres.
 It will NOT install Paperless or Mealie. Keep the ones you already have.
+Marketing stays off until MARKETING_APPROVED=1 ./scripts/up-marketing.sh.
 
 Next:
   ./scripts/remote-up.sh
