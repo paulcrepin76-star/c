@@ -89,3 +89,4 @@ docker exec resto-postgres pg_dump -U resto resto > /mnt/user/backups/resto-$(da
 - Do not expose Paperless, n8n, or Postgres to the internet without a reverse proxy and auth.
 - Do not start with Playwright logins for FPL and Sam's Club. Get email ingest working first.
 - Do not put live passwords in the Compose file or in this repo.
+- Do not start Mautic or Postiz with the normal compose up. When you want them, read [MARKETING.md](MARKETING.md) and run `MARKETING_APPROVED=1 ./scripts/up-marketing.sh`.

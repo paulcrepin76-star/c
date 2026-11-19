@@ -82,3 +82,7 @@ Promo emails and ntfy alerts come after this history exists. Website catalog scr
 `.env` on the Unraid share holds Postgres, Paperless, n8n and resto-core keys.
 
 Square / mailbox / portal passwords stay in n8n credentials or in `.env` on the server. They are not in this repository and they should not be pasted into a chat.
+
+## Marketing
+
+Mautic, Postiz, and the Survey Café command dashboard are an opt-in Compose file. They join the `resto` network so n8n can call them, and a normal `docker compose up` does not start them. Mautic uses its own MySQL because Mautic has no Postgres support. Postiz tables use a role on the existing Postgres. Temporal, which current Postiz requires, keeps a separate Postgres and the Elasticsearch visibility store from the official Postiz compose. Details and the API limits are in [MARKETING.md](MARKETING.md).

@@ -11,6 +11,9 @@ __pycache__/
 .coverage
 htmlcov/
 appdata/
+apps/command/data/
+apps/command/frontend/node_modules/
+apps/command/frontend/dist/
 *.log
 .DS_Store
 n8n/local-files/

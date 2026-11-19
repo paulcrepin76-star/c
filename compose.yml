@@ -16,6 +16,12 @@
 #   8123  homeassistant  fridge sensors
 #   8971  frigate        cameras
 #
+# Marketing (opt-in, compose.marketing.yml — not started by ./scripts/remote-up.sh):
+#   8090  command      Survey Café marketing dashboard
+#   8084  mautic
+#   4007  postiz
+#   8085  temporal UI on 127.0.0.1 only
+#
 # Internal-only: redis, tika, gotenberg.
 
 name: resto

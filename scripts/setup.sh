@@ -130,6 +130,10 @@ fi
 
 chmod 600 "$ROOT/.env" 2>/dev/null || true
 
+# shellcheck disable=SC1091
+source "$ROOT/scripts/marketing-env.sh"
+fill_marketing_secrets "$ROOT/.env"
+
 cat <<EOF
 
 This stack will start: resto-core, n8n, Metabase, Postgres

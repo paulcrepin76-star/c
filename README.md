@@ -73,6 +73,12 @@ One Compose stack, one Postgres, these containers:
 | metabase | 3001 | Dashboards |
 | postgres | 5433 | Shared database server |
 
+Marketing is a separate opt-in stack. It does not start with the command above. See [docs/MARKETING.md](docs/MARKETING.md).
+
+| command | 8090 | Survey Café marketing dashboard |
+| mautic | 8084 | Email and contacts |
+| postiz | 4007 | Social scheduling |
+
 On Unraid (`ssh root@100.116.48.120`) Paperless and Mealie are already running. Install only the missing pieces:
 
 ```bash
