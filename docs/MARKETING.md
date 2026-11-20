@@ -96,7 +96,16 @@ That command prints the current value and changes nothing. It exits 3. Apply the
 MARKETING_MAP_COUNT_APPROVED=1 ./scripts/map-count-unraid.sh
 ```
 
-The script runs `sysctl -w vm.max_map_count=262144` and, when `/boot/config/go` exists, appends that same line once. Unraid rebuilds `/etc` at boot, so a line in `/etc/sysctl.conf` does not survive a reboot. `/boot/config/go` is on the flash drive and does. Reverse the running value with `sysctl -w vm.max_map_count=65530`, and reverse the reboot setting by deleting that line from `/boot/config/go`. Phase 2 does not call this script and unsets `MARKETING_MAP_COUNT_APPROVED`.
+With that approval the script reads `/boot/config/go` first. It reports an `exit` or `return` that would skip a line added at the end of the file. It keeps a single `sysctl -w vm.max_map_count=262144` before any of those statements, and it removes an older whole-line setting instead of leaving two values. A statement that sets `vm.max_map_count` in a more complicated way stops the script before it writes. The original `go` file is copied to `/boot/config/go.pre-marketing-mapcount` before the rewrite. The script reads that result back and checks it. Only then does it change the running kernel value. Unraid rebuilds `/etc` at boot, so a line in `/etc/sysctl.conf` does not survive a reboot. `/boot/config/go` is on the flash drive and does.
+
+Restore the original boot file, and only then the saved running value:
+
+```bash
+./scripts/map-count-rollback.sh
+MARKETING_MAP_COUNT_ROLLBACK_APPROVED=1 ./scripts/map-count-rollback.sh
+```
+
+The first of those exits 3 and changes nothing. Phase 2 does not call either script and unsets `MARKETING_MAP_COUNT_APPROVED`.
 
 Marketing joins the existing Docker network named `resto`. Preflight reads every network subnet, the addresses already attached, and the host routes that are not Docker bridges. It refuses when `resto` overlaps another Docker subnet, when that subnet overlaps a host route, or when fewer than 16 IPv4 addresses are free on it. If `resto` is missing, preflight looks for one free subnet in the daemon address pools, or in Docker's built-in local pools when the daemon has none. It does not create the network and it does not prune unused ones.
 
@@ -188,7 +197,7 @@ Postiz is the second approval. The dashboard and the public Caddy file stay unst
 
 `MAUTIC_TRUSTED_PROXIES` is the JSON array `[]`. Mautic is opened directly on Tailscale, so it trusts no proxy. A bare CIDR is not valid JSON and Mautic refuses to start. Phase 2 corrects that one line in the existing `.env` when it is not a JSON array, and it does not recreate the Mautic containers. When public HTTPS is approved later, set `MAUTIC_TRUSTED_PROXIES='["172.29.0.0/16"]'` and recreate only Mautic. That recreate is not part of Phase 2.
 
-Phase 2 is `scripts/deploy-postiz-phase2.sh`. Set `MARKETING_DEPLOY_COMMIT` to the full SHA that was checked out. The script refuses a branch name. HEAD must contain the Phase 1 installer `99b5b0dd3d54ba5752d710a84d53e7c02449c748`. The script requires the existing `.env`, a passphrase of at least 16 characters, and a healthy Mautic. It dumps `resto-mautic-mysql`, checks the dump footer and checksum, and encrypts `.env` before and after any new Postiz secrets are filled. Existing passwords are not replaced. It then runs the Postiz preflight. `vm.max_map_count` below 262144 stops the run. The script does not change that setting.
+Phase 2 is `scripts/deploy-postiz-phase2.sh`. Set `MARKETING_DEPLOY_COMMIT` to the full SHA that was checked out. The script refuses a branch name. HEAD must contain the Phase 1 installer `99b5b0dd3d54ba5752d710a84d53e7c02449c748`. The script requires the existing `.env`, a passphrase of at least 16 characters, and a healthy Mautic. It dumps `resto-mautic-mysql` and encrypts the original `.env` before it reads or writes `MAUTIC_TRUSTED_PROXIES`. A value that is already a JSON array is left unchanged. An invalid value is replaced with `[]` only after that original backup has been verified, and the Mautic containers are not recreated. New Postiz secrets are filled after that backup, and a second encrypted copy is verified. Existing Mautic passwords are not replaced. It then runs the Postiz preflight. `vm.max_map_count` below 262144 stops the run. The script does not change that setting.
 
 The only containers it starts are `resto-postiz`, `resto-postiz-postgres`, `resto-postiz-redis`, `resto-marketing-db-init`, `resto-temporal`, `resto-temporal-postgres`, `resto-temporal-elasticsearch`, and `resto-temporal-ui`. Postiz is published on `100.116.48.120:4007`. Temporal UI stays on `127.0.0.1:8085`. The empty `command` database is created for later and `resto-command` is not started.
 

@@ -161,7 +161,6 @@ echo "Backup passphrase verified. It was not printed."
 if [ ! -f "$ROOT/.env" ] || [ -L "$ROOT/.env" ]; then
   stop 1 "Refusing: the working marketing .env must already exist and must not be a symlink. Phase 2 does not copy .env.example over it. Nothing was started."
 fi
-chmod 600 "$ROOT/.env"
 appdata="$(marketing_env_value "$ROOT/.env" APPDATA)"
 bind="$(marketing_env_value "$ROOT/.env" BIND_ADDR)"
 if [ "$appdata" != "$want_data" ]; then
@@ -171,25 +170,6 @@ if [ "$bind" != "$want_bind" ]; then
   stop 1 "Refusing: BIND_ADDR is ${bind:-unset}. It must be ${want_bind}. Nothing was started."
 fi
 marketing_require_separate_paths "$ROOT" "$appdata"
-
-export MARKETING_PYTHON_FETCH=1
-if ! py="$("$ROOT/scripts/ensure-private-python.sh" | tail -n 1)" || [ ! -x "$py" ]; then
-  stop 1 "Private Python could not be prepared. No system package was installed. Nothing was started."
-fi
-echo "Private Python: ${py}"
-proxy_result="$("$py" "$ROOT/scripts/fix-mautic-trusted-proxies.py" "$ROOT/.env")"
-case "$proxy_result" in
-  kept)
-    echo "MAUTIC_TRUSTED_PROXIES is valid JSON. The running Mautic containers were not recreated."
-    ;;
-  corrected)
-    chmod 600 "$ROOT/.env"
-    echo "Corrected MAUTIC_TRUSTED_PROXIES in .env to an empty JSON array. The running Mautic containers were not recreated."
-    ;;
-  *)
-    stop 1 "Could not validate MAUTIC_TRUSTED_PROXIES. Nothing was started."
-    ;;
-esac
 
 if ! command -v docker >/dev/null 2>&1; then
   stop 1 "Docker is not available. Nothing was started."
@@ -272,6 +252,26 @@ if [ "$env_before_code" -ne 0 ] || ! env_before="$(verify_env_backup "$tmp/env-b
   stop 7
 fi
 echo "Verified encrypted configuration backup: ${env_before}"
+echo "The original marketing .env was backed up before any configuration change."
+
+chmod 600 "$ROOT/.env"
+export MARKETING_PYTHON_FETCH=1
+if ! py="$("$ROOT/scripts/ensure-private-python.sh" | tail -n 1)" || [ ! -x "$py" ]; then
+  stop 1 "Private Python could not be prepared. No system package was installed. Nothing was started."
+fi
+echo "Private Python: ${py}"
+proxy_state="$("$py" "$ROOT/scripts/fix-mautic-trusted-proxies.py" --check "$ROOT/.env")"
+if [ "$proxy_state" = "valid" ]; then
+  echo "MAUTIC_TRUSTED_PROXIES is already valid JSON. Mautic configuration was not modified."
+else
+  proxy_result="$("$py" "$ROOT/scripts/fix-mautic-trusted-proxies.py" "$ROOT/.env")"
+  if [ "$proxy_result" != "corrected" ]; then
+    stop 1 "Could not validate MAUTIC_TRUSTED_PROXIES. Mautic was not recreated."
+  fi
+  chmod 600 "$ROOT/.env"
+  echo "Corrected MAUTIC_TRUSTED_PROXIES in .env to an empty JSON array after the original backup was verified."
+  echo "The running Mautic containers were not recreated."
+fi
 
 fill_marketing_secrets "$ROOT/.env"
 chmod 600 "$ROOT/.env"

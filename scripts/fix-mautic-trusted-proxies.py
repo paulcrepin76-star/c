@@ -29,10 +29,15 @@ def _json_list(value: str) -> bool:
 
 
 def main() -> int:
-    if len(sys.argv) != 2:
-        print("Usage: fix-mautic-trusted-proxies.py /path/to/.env", file=sys.stderr)
+    check_only = False
+    args = sys.argv[1:]
+    if args and args[0] == "--check":
+        check_only = True
+        args = args[1:]
+    if len(args) != 1:
+        print("Usage: fix-mautic-trusted-proxies.py [--check] /path/to/.env", file=sys.stderr)
         return 1
-    path = Path(sys.argv[1])
+    path = Path(args[0])
     if path.is_symlink():
         print("Refusing: env file is a symlink. Nothing was written.")
         return 1
@@ -41,23 +46,28 @@ def main() -> int:
         return 1
     original = path.read_text(encoding="utf-8")
     lines = original.splitlines()
-    found = False
+    found = 0
+    valid = 0
     changed = False
     output: list[str] = []
     for line in lines:
         if line.startswith("MAUTIC_TRUSTED_PROXIES="):
-            found = True
+            found += 1
             value = line.split("=", 1)[1]
             if _json_list(value):
+                valid += 1
                 output.append(line)
             else:
                 output.append("MAUTIC_TRUSTED_PROXIES='[]'")
                 changed = True
         else:
             output.append(line)
-    if not found:
+    if found == 0:
         output.append("MAUTIC_TRUSTED_PROXIES='[]'")
         changed = True
+    if check_only:
+        print("valid" if found == 1 and valid == 1 else "invalid")
+        return 0
     text = "\n".join(output) + "\n"
     if changed and text != original:
         path.write_text(text, encoding="utf-8")
