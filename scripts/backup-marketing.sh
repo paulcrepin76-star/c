@@ -6,6 +6,9 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 # shellcheck disable=SC1091
 source "$ROOT/scripts/marketing-names.sh"
+# shellcheck disable=SC1091
+source "$ROOT/scripts/marketing-guard.sh"
+marketing_refuse_production "$ROOT"
 
 if [ -f "$ROOT/.env" ]; then
   set -a
@@ -24,6 +27,7 @@ if [ "${MARKETING_BACKUP_APPROVED:-0}" != "1" ]; then
 fi
 
 APPDATA="${APPDATA:-$ROOT/appdata}"
+marketing_refuse_production "$APPDATA"
 if [ -z "${MARKETING_BACKUP_DIR:-}" ]; then
   if [ -d /mnt/user/backups ]; then
     MARKETING_BACKUP_DIR=/mnt/user/backups/resto-marketing

@@ -3,6 +3,9 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck disable=SC1091
+source "$ROOT/scripts/marketing-guard.sh"
+marketing_refuse_production "$ROOT"
 STAGE="${1:-}"
 if [ -f "$ROOT/.env" ]; then
   set -a
@@ -15,6 +18,9 @@ fi
 source "$ROOT/scripts/marketing-names.sh"
 
 STAMP="$(date +%F-%H%M%S)"
+if [ -n "${APPDATA:-}" ]; then
+  marketing_refuse_production "$APPDATA"
+fi
 OUT="${APPDATA:-$ROOT/appdata}/marketing-measurements"
 mkdir -p "$OUT"
 FILE="$OUT/${STAMP}${STAGE:+-$STAGE}.txt"

@@ -138,6 +138,10 @@ def problems() -> list[str]:
         errors.append("up-marketing.sh must pass --no-recreate")
     if "compose.public-edge.yml" in up or "up-public-edge.sh" in up:
         errors.append("up-marketing.sh must not start the public edge")
+    if "docker network create" in up:
+        errors.append("up-marketing.sh must not create a Docker network")
+    if "marketing-guard.sh" not in up:
+        errors.append("up-marketing.sh must guard the production resto tree")
     if '"${SERVICES[@]}"' not in up:
         errors.append("up-marketing.sh must start only the selected stage services")
     services = set(re.findall(r"(?m)^  ([a-z0-9-]+):$", marketing_raw))

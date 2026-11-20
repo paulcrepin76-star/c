@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# Clones a detached marketing checkout on the NVMe pool.
+# Does not run git commands in /mnt/cache/appdata/resto or /mnt/user/appdata/resto.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck disable=SC1091
+source "$ROOT/scripts/marketing-guard.sh"
+
+export GIT_OPTIONAL_LOCKS=0
+
+dest="${MARKETING_SOURCE:-/mnt/cache/projects/resto-marketing}"
+remote="${MARKETING_REMOTE:-https://github.com/paulcrepin76-star/c.git}"
+branch="${MARKETING_BRANCH:-cursor/marketing-deploy-safety-7375}"
+# 95aa65b is the subnet inspection. cc57ca5 is the stacked marketing pull request.
+ancestor_subnet="95aa65bc110b6baa8aec840d5f824f684b8f4d5f"
+ancestor_stack="cc57ca5d18222ef51114f6937a60bc9ac6c163f1"
+
+marketing_refuse_production "$dest"
+
+if [ "${MARKETING_CLONE_APPROVED:-0}" != "1" ]; then
+  echo "Nothing was cloned."
+  echo "When you approve it, this creates ${dest} and checks out ${branch} there."
+  echo "The production tree /mnt/cache/appdata/resto is not read or written by git."
+  exit 3
+fi
+
+if [ -e "$dest" ] && [ -n "$(ls -A "$dest" 2>/dev/null || true)" ]; then
+  echo "Refusing: ${dest} already exists. Nothing was cloned."
+  exit 1
+fi
+
+mkdir -p "$(dirname "$dest")"
+git clone --origin origin "$remote" "$dest"
+git -C "$dest" fetch origin "$branch"
+git -C "$dest" checkout --detach "origin/${branch}"
+
+if ! git -C "$dest" merge-base --is-ancestor "$ancestor_subnet" HEAD; then
+  echo "Refusing: ${dest} does not contain ${ancestor_subnet}."
+  exit 1
+fi
+if ! git -C "$dest" merge-base --is-ancestor "$ancestor_stack" HEAD; then
+  echo "Refusing: ${dest} does not contain the stacked marketing commit ${ancestor_stack}."
+  exit 1
+fi
+
+echo "Marketing source: ${dest}"
+echo "HEAD $(git -C "$dest" rev-parse HEAD)"
+echo "This checkout contains ${ancestor_subnet} and ${ancestor_stack}."
+echo "The production tree was not checked out, reset, cleaned, or pulled."

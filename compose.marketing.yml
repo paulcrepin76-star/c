@@ -10,6 +10,8 @@
 #     (the versions in the official postiz-docker-compose file, with Postgres and Redis patched)
 #
 # Postiz and the dashboard use a new Postgres. They do not connect to resto-postgres.
+# APPDATA is the marketing data directory, /mnt/cache/appdata/surveycafe-marketing.
+# Files under ./docker stay in the source checkout. They are not database files.
 
 x-mautic-env: &mautic-env
   DOCKER_MAUTIC_LOAD_TEST_DATA: "false"

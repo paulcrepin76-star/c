@@ -4,6 +4,9 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
+# shellcheck disable=SC1091
+source "$ROOT/scripts/marketing-guard.sh"
+marketing_refuse_production "$ROOT"
 
 if [ -f "$ROOT/.env" ]; then
   set -a
@@ -12,5 +15,10 @@ if [ -f "$ROOT/.env" ]; then
   set +a
 fi
 
-python3 "$ROOT/scripts/check-marketing-compose.py"
-python3 "$ROOT/scripts/preflight_marketing.py"
+if [ -n "${APPDATA:-}" ]; then
+  marketing_refuse_production "$APPDATA"
+fi
+
+py="$("$ROOT/scripts/ensure-private-python.sh")"
+"$py" "$ROOT/scripts/check-marketing-compose.py"
+"$py" "$ROOT/scripts/preflight_marketing.py"

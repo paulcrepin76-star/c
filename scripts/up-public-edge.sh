@@ -4,6 +4,9 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
+# shellcheck disable=SC1091
+source "$ROOT/scripts/marketing-guard.sh"
+marketing_refuse_production "$ROOT"
 
 if [ "${MARKETING_PUBLIC_APPROVED:-0}" != "1" ]; then
   echo "Nothing was started. Public HTTPS is separate from the Tailscale dashboard."

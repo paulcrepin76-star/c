@@ -6,6 +6,16 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
+# shellcheck disable=SC1091
+source "$ROOT/scripts/marketing-guard.sh"
+if [ -d /mnt/cache/appdata/resto ]; then
+  here="$(marketing_resolve "$ROOT")"
+  prod="$(marketing_resolve /mnt/cache/appdata/resto)"
+  if [ "$here" != "$prod" ]; then
+    echo "setup.sh writes the original resto data directories. Marketing uses scripts/up-marketing.sh from /mnt/cache/projects/resto-marketing. Nothing was written."
+    exit 1
+  fi
+fi
 
 hex() { openssl rand -hex "${1:-32}"; }
 

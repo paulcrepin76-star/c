@@ -6,6 +6,9 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 # shellcheck disable=SC1091
 source "$ROOT/scripts/marketing-names.sh"
+# shellcheck disable=SC1091
+source "$ROOT/scripts/marketing-guard.sh"
+marketing_refuse_production "$ROOT"
 
 if [ -f "$ROOT/.env" ]; then
   set -a
@@ -31,18 +34,11 @@ if ! command -v docker >/dev/null 2>&1; then
   exit 1
 fi
 
-snapshot() {
-  local name
-  for name in "${PROTECTED_CONTAINERS[@]}"; do
-    if docker inspect "$name" >/dev/null 2>&1; then
-      docker inspect -f '{{.Name}} {{.Id}} {{.State.Status}}' "$name"
-    else
-      echo "$name absent"
-    fi
-  done
-}
+if [ -n "${APPDATA:-}" ]; then
+  marketing_refuse_production "$APPDATA"
+fi
 
-before="$(snapshot)"
+before="$(marketing_snapshot_others)"
 
 for name in "${MARKETING_CONTAINERS[@]}"; do
   protected=0
@@ -63,9 +59,9 @@ for name in "${MARKETING_CONTAINERS[@]}"; do
   fi
 done
 
-after="$(snapshot)"
+after="$(marketing_snapshot_others)"
 if [ "$before" != "$after" ]; then
-  echo "A protected container changed. Rollback should not have done that."
+  echo "A container outside the marketing list changed. Rollback should not have done that."
   diff -u <(printf '%s\n' "$before") <(printf '%s\n' "$after") || true
   exit 4
 fi
@@ -98,4 +94,4 @@ else
   echo "Data directories were kept. Take a backup before using MARKETING_ROLLBACK_DELETE_DATA=1."
 fi
 
-echo "Rollback finished. Protected containers were not removed."
+echo "Rollback finished. Containers outside the marketing list were not removed."

@@ -348,8 +348,9 @@ def test_marketing_stages_do_not_start_without_approval():
         text=True,
     )
     assert stage.returncode == 0, stage.stdout + stage.stderr
-    assert "temporal-elasticsearch" in stage.stdout
-    assert "command" not in stage.stdout.split("Stage postiz creates or starts only:", 1)[-1].split("It will not start", 1)[0]
+    services = stage.stdout.split("Stage postiz creates or starts only:", 1)[1].split("\n\n", 1)[0]
+    assert "temporal-elasticsearch" in services
+    assert "\n  command\n" not in services
 
 
 def test_rollback_removes_only_marketing_containers(tmp_path):
@@ -366,16 +367,22 @@ def test_rollback_removes_only_marketing_containers(tmp_path):
     fake.write_text(
         "#!/bin/sh\n"
         f'echo "$@" >> "{log}"\n'
+        'if [ "$1" = "ps" ]; then\n'
+        "  printf '%s\\n' mealie paperless-ngx-webserver-1 resto-mautic resto-postgres\n"
+        "  exit 0\n"
+        "fi\n"
         'if [ "$1" = "inspect" ] && [ "$2" = "-f" ]; then\n'
-        '  if [ "$4" = "resto-postgres" ]; then\n'
-        '    echo "/resto-postgres id-pg running"\n'
-        "    exit 0\n"
-        "  fi\n"
-        "  exit 1\n"
+        '  case "$4" in\n'
+        '    resto-postgres) echo "/resto-postgres id-pg running" ;;\n'
+        '    mealie) echo "/mealie id-mealie running" ;;\n'
+        '    paperless-ngx-webserver-1) echo "/paperless-ngx-webserver-1 id-paper running" ;;\n'
+        "    *) exit 1 ;;\n"
+        "  esac\n"
+        "  exit 0\n"
         "fi\n"
         'if [ "$1" = "inspect" ]; then\n'
         '  case "$2" in\n'
-        "    resto-mautic|resto-postgres) exit 0 ;;\n"
+        "    resto-mautic|resto-postgres|mealie|paperless-ngx-webserver-1) exit 0 ;;\n"
         "  esac\n"
         "  exit 1\n"
         "fi\n"
@@ -399,4 +406,50 @@ def test_rollback_removes_only_marketing_containers(tmp_path):
     assert "rm -f resto-mautic\n" in text
     assert "rm -f resto-postgres" not in text
     assert "rm -f resto-n8n" not in text
-    assert "Protected containers were not removed." in result.stdout
+    assert "rm -f mealie" not in text
+    assert "rm -f paperless-ngx-webserver-1" not in text
+    assert "inspect -f {{.Name}} {{.Id}} {{.State.Status}} mealie" in text
+    assert "Containers outside the marketing list were not removed." in result.stdout
+
+
+def test_marketing_paths_and_postiz_gate():
+    import os
+    import subprocess
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[3]
+    refused = subprocess.run(
+        ["bash", "-c", "source scripts/marketing-guard.sh; marketing_refuse_production /mnt/cache/appdata/resto/n8n"],
+        cwd=root,
+        capture_output=True,
+        text=True,
+    )
+    assert refused.returncode == 1, refused.stdout + refused.stderr
+    assert "production resto tree" in refused.stdout
+    postiz = subprocess.run(
+        ["bash", str(root / "scripts/up-marketing.sh"), "--stage", "postiz"],
+        cwd=root,
+        env={**os.environ, "MARKETING_APPROVED": "1"},
+        capture_output=True,
+        text=True,
+    )
+    assert postiz.returncode == 3, postiz.stdout + postiz.stderr
+    assert "Postiz stays stopped" in postiz.stdout
+    clone = subprocess.run(
+        ["bash", str(root / "scripts/clone-marketing-source.sh")],
+        cwd=root,
+        capture_output=True,
+        text=True,
+    )
+    assert clone.returncode == 3, clone.stdout + clone.stderr
+    blocked = subprocess.run(
+        ["bash", str(root / "scripts/clone-marketing-source.sh")],
+        cwd=root,
+        env={**os.environ, "MARKETING_CLONE_APPROVED": "1", "MARKETING_SOURCE": "/mnt/user/appdata/resto"},
+        capture_output=True,
+        text=True,
+    )
+    assert blocked.returncode == 1, blocked.stdout + blocked.stderr
+    py = subprocess.run(["bash", str(root / "scripts/ensure-private-python.sh")], cwd=root, capture_output=True, text=True)
+    assert py.returncode == 0, py.stdout + py.stderr
+    assert py.stdout.strip().endswith("python3")

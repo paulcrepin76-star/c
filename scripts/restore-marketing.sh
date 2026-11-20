@@ -6,6 +6,9 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 # shellcheck disable=SC1091
 source "$ROOT/scripts/marketing-names.sh"
+# shellcheck disable=SC1091
+source "$ROOT/scripts/marketing-guard.sh"
+marketing_refuse_production "$ROOT"
 
 src="${1:-}"
 if [ "${MARKETING_RESTORE_APPROVED:-0}" != "1" ]; then

@@ -2,7 +2,7 @@
 
 This is the opt-in marketing layer. It does not replace n8n, resto-core, Paperless, or Mealie. `./scripts/remote-up.sh` does not start it. `./scripts/up-marketing.sh` does not load `compose.yml`, so it cannot create or recreate those services.
 
-This workspace is not the Unraid host. SSH to `100.116.48.120` timed out, so the server's CPU, RAM, subnets, and ZFS are still unread. `scripts/inspect-unraid-readonly.sh` prints that report without checking out files into the resto working tree. Its only write is `/tmp/unraid-marketing-inspect.txt`. Run `./scripts/preflight-marketing.sh` on Unraid before any start, after the inspected commit is the one you approved. That script only prints. It does not change sysctls, datasets, or containers.
+The production checkout on Unraid is `/mnt/cache/appdata/resto`. Marketing does not run git there. Source code is checked out at `/mnt/cache/projects/resto-marketing`, and container data is `/mnt/cache/appdata/surveycafe-marketing`.
 
 ## Pinned images
 
@@ -49,7 +49,7 @@ Vendor guidance plus the pinned heap sizes. This is not a measurement from Unrai
 
 Plan on about 3–5 GB once the stack is idle and about 6–8 GB while a campaign or a video upload is running. Preflight refuses to continue when `MemAvailable` is under 6 GiB unless you set `MARKETING_MEMORY_ACK=1` after reading the number. It also refuses when the one-minute load average is above twice the CPU count unless you set `MARKETING_LOAD_ACK=1`. Those switches do not raise a limit. They only record that you saw the warning.
 
-Images want roughly 6 GB. Keep at least 20 GB free on the cache pool. New paths, all under `APPDATA` (Unraid: `/mnt/user/appdata/resto`):
+Images want roughly 6 GB. The Docker image has about 98 GB free, and the NVMe pool has about 3.2 TB free. Marketing data lives under `APPDATA` (`/mnt/cache/appdata/surveycafe-marketing`), not in the production tree:
 
 - `mautic/` — MySQL and Mautic files
 - `postiz/postgres`, `postiz/redis`, `postiz/config`, `postiz/uploads`
@@ -112,11 +112,12 @@ Marketing joins the existing Docker network named `resto`. Preflight reads every
 
 - Requires `--stage mautic`, `--stage postiz`, or `--stage dashboard`. With no stage it prints the three stages and exits. It does not start every service at once.
 - `--dry-run` prints that stage and writes nothing.
-- With `MARKETING_APPROVED=1`, runs preflight first. Only after preflight passes does it fill placeholder secrets, create that stage's directories, create the Docker network `resto` when it is absent, and start only that stage's services with `--no-recreate`.
+- With `MARKETING_APPROVED=1`, runs preflight first. Only after preflight passes does it fill placeholder secrets, create that stage's directories under `/mnt/cache/appdata/surveycafe-marketing`, and start only that stage's services with `--no-recreate`.
 - Mautic starts `mautic-mysql`, `mautic`, `mautic-cron`, and `mautic-worker`.
-- Postiz starts `postiz-postgres`, `marketing-db-init`, `postiz-redis`, `temporal-postgres`, `temporal-elasticsearch`, `temporal`, `temporal-ui`, and `postiz`.
-- The dashboard starts `postiz-postgres`, `marketing-db-init`, and `command`. The command database lives on the Postiz Postgres instance. This stage does not start the Postiz application.
-- Records the container id and state of `resto-postgres`, `resto-n8n`, and the other protected names. If any of those change, the script exits 4.
+- Postiz stays stopped unless `MARKETING_POSTIZ_APPROVED=1`. That approval also requires `vm.max_map_count=262144` for Elasticsearch. The script does not change the kernel.
+- The dashboard stays stopped unless `MARKETING_DASHBOARD_APPROVED=1`. Its database lives on the Postiz Postgres instance. That stage does not start the Postiz application.
+- Snapshots every container that marketing does not own, including the live Paperless, Mealie, and media containers. If any of those change id or state, the script exits 4.
+- Joins the existing Docker network `resto`. If that network is missing, it stops. It does not create a bridge.
 - Does not run `docker rm`, `compose down`, or `compose up` against `compose.yml`.
 - Does not start `compose.public-edge.yml`.
 - After a successful stage, `measure-marketing.sh` records memory, load, disk, and container stats.
@@ -129,29 +130,32 @@ Marketing joins the existing Docker network named `resto`. Preflight reads every
 
 `./scripts/restore-marketing.sh` loads those dumps into the matching marketing containers only. A failed `docker exec` stops the script. `scripts/test-restore-isolated.sh` repeats this against throwaway `marketingtest-*` containers and refuses to run when `/mnt/user` exists.
 
-`./scripts/rollback-marketing.sh` removes only the marketing container names. Protected ids are compared before and after. Data directories stay unless `MARKETING_ROLLBACK_DELETE_DATA=1`, and that flag can delete only `mautic`, `postiz`, `temporal`, `command`, and `caddy` under `APPDATA`.
+`./scripts/rollback-marketing.sh` removes only the marketing container names. Every other container is compared before and after. Data directories stay unless `MARKETING_ROLLBACK_DELETE_DATA=1`, and that flag can delete only `mautic`, `postiz`, `temporal`, `command`, and `caddy` under the marketing `APPDATA`.
 
 ## Deploy
 
-Do not run `git pull` on the server, and do not check out `main`. Fetch the reviewed branch and check out the exact commit you approved. A detached HEAD is intentional. Do not run `git reset --hard`.
+The production checkout is `/mnt/cache/appdata/resto` on `main` at `111fceefdb904828f56c761fb873d1222753b5af`, with local changes. Leave it there. Do not run `git checkout`, `git pull`, `git reset`, or `git clean` in that directory, and do not run `setup.sh` from the marketing checkout.
+
+Marketing source and data are two directories on the NVMe pool:
+
+- source: `/mnt/cache/projects/resto-marketing`
+- data: `/mnt/cache/appdata/surveycafe-marketing`
+
+`scripts/clone-marketing-source.sh` clones a detached checkout of `cursor/marketing-deploy-safety-7375` into the source directory and checks that it contains `95aa65bc110b6baa8aec840d5f824f684b8f4d5f` and the stacked marketing commit `cc57ca5d18222ef51114f6937a60bc9ac6c163f1`. It does not run git against the production tree. Compose files under `./docker` stay in the source checkout. Database and upload directories come from `APPDATA`.
+
+When the host has no `python3`, an approved run unpacks CPython 3.12.12 into the source checkout's `.tools` directory. That is not a system package. The archive is `cpython-3.12.12+20260127-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz`, sha256 `1c9b8720a71f810a04352dc82667ebd7757a565f46e9a7770215a80049582184`.
+
+The first approved stage is Mautic only:
 
 ```bash
-cd /mnt/user/appdata/resto
-git fetch origin cursor/marketing-deploy-safety-7375
-git checkout <the full SHA you reviewed>
-./scripts/setup.sh
-./scripts/preflight-marketing.sh
-```
-
-`preflight-marketing.sh` only reads the host. Fix anything it prints before setting `MARKETING_APPROVED`. Then install one stage at a time and read the measurement file before the next stage:
-
-```bash
+cd /mnt/cache/projects/resto-marketing
+cp .env.example .env
+# APPDATA is already /mnt/cache/appdata/surveycafe-marketing
+# BIND_ADDR is already 100.116.48.120
 MARKETING_APPROVED=1 ./scripts/up-marketing.sh --stage mautic
-MARKETING_APPROVED=1 ./scripts/up-marketing.sh --stage postiz
-MARKETING_APPROVED=1 ./scripts/up-marketing.sh --stage dashboard
 ```
 
-Nothing in this repository starts those commands. `BIND_ADDR` must be the Tailscale address, `100.116.48.120` on this server, so the published ports listen on that address. `127.0.0.1` is refused on Unraid because a phone cannot open it. `0.0.0.0` and a LAN address are refused. The public Caddy file stays unstarted.
+Postiz and the dashboard are separate approvals. The public Caddy file stays unstarted. `BIND_ADDR` must be the Tailscale address. `127.0.0.1` is refused on Unraid because a phone cannot open it. `0.0.0.0` and a LAN address are refused.
 
 First visit, over Tailscale:
 

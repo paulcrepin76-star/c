@@ -11,22 +11,23 @@ fill_marketing_secrets() {
     case "$current" in
       ""|change-me|change-me-*)
         value="$(openssl rand -hex "$bytes")"
-        python3 - "$file" "$key" "$value" <<'PY'
-import sys
-path, key, value = sys.argv[1:]
-lines = open(path, encoding="utf-8").read().splitlines()
-out = []
-found = False
-for line in lines:
-    if line.startswith(key + "="):
-        out.append(f"{key}={value}")
-        found = True
-    else:
-        out.append(line)
-if not found:
-    out.append(f"{key}={value}")
-open(path, "w", encoding="utf-8").write("\n".join(out) + "\n")
-PY
+        tmp="$(mktemp)"
+        found=0
+        while IFS= read -r line || [ -n "$line" ]; do
+          case "$line" in
+            "${key}="*)
+              printf '%s=%s\n' "$key" "$value"
+              found=1
+              ;;
+            *)
+              printf '%s\n' "$line"
+              ;;
+          esac
+        done < "$file" > "$tmp"
+        if [ "$found" -eq 0 ]; then
+          printf '%s=%s\n' "$key" "$value" >> "$tmp"
+        fi
+        mv "$tmp" "$file"
         echo "Set ${key} in .env"
         ;;
     esac
