@@ -143,28 +143,40 @@ Marketing source and data are two directories on the NVMe pool:
 - source: `/mnt/cache/projects/resto-marketing`
 - data: `/mnt/cache/appdata/surveycafe-marketing`
 
-`scripts/clone-marketing-source.sh` clones a detached checkout of `cursor/marketing-deploy-safety-7375` into the source directory and checks that it contains `95aa65bc110b6baa8aec840d5f824f684b8f4d5f` and the stacked marketing commit `cc57ca5d18222ef51114f6937a60bc9ac6c163f1`. It does not run git against the production tree. Compose files under `./docker` stay in the source checkout. Database and upload directories come from `APPDATA`.
+`scripts/clone-marketing-source.sh` clones into the source directory and detaches HEAD at `MARKETING_DEPLOY_COMMIT`. That value has to be the full 40-character SHA. The script does not check out a branch tip. It checks that the commit contains `95aa65bc110b6baa8aec840d5f824f684b8f4d5f`, the stacked marketing commit `cc57ca5d18222ef51114f6937a60bc9ac6c163f1`, `d82e03f39aaa74d34c59ea009d7a4b8fb15a170a`, and `e8f918406dd0b004e5d1c4ee64d4654ba4e03939`. It does not run git against the production tree. Compose files under `./docker` stay in the source checkout. Database and upload directories come from `APPDATA`.
 
-When the host has no `python3`, an approved run unpacks CPython 3.12.12 into the source checkout's `.tools` directory. That is not a system package. The archive is `cpython-3.12.12+20260127-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz`, sha256 `1c9b8720a71f810a04352dc82667ebd7757a565f46e9a7770215a80049582184`.
+When the host has no `python3`, `scripts/deploy-mautic-phase1.sh` unpacks CPython 3.12.12 into the source checkout's `.tools` directory before the first-run check and before preflight. That is not a system package. The archive is `cpython-3.12.12+20260127-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz`, sha256 `1c9b8720a71f810a04352dc82667ebd7757a565f46e9a7770215a80049582184`.
 
 The first approved stage is Mautic only:
 
 ```bash
 cd /mnt/cache/projects/resto-marketing
-cp .env.example .env
-chmod 600 .env
-# APPDATA is already /mnt/cache/appdata/surveycafe-marketing
-# BIND_ADDR is already 100.116.48.120
-# HOME_MARKET is quoted. These scripts source .env with Bash.
-./scripts/check-marketing-firstrun.sh
-MARKETING_APPROVED=1 ./scripts/up-marketing.sh --stage mautic
-# Set MARKETING_ENV_PASSPHRASE in this shell first. Keep it out of .env and out of git.
-MARKETING_ENV_BACKUP_APPROVED=1 ./scripts/backup-marketing-env.sh
+# MARKETING_DEPLOY_COMMIT is the full 40-character SHA. Do not check out the branch tip.
+git fetch origin cursor/marketing-deploy-safety-7375
+git checkout --detach "$MARKETING_DEPLOY_COMMIT"
+test "$(git rev-parse HEAD)" = "$MARKETING_DEPLOY_COMMIT"
+# Optional: export MARKETING_ENV_PASSPHRASE in this shell. It is not written on the server.
+MARKETING_PHASE1_APPROVED=1 ./scripts/deploy-mautic-phase1.sh
 ```
 
 `check-marketing-firstrun.sh` copies `.env.example` to a temporary directory, sources that copy in an isolated shell, and runs `docker compose config`. It does not write the checkout `.env` and it does not start a container. A later run is safe after `/mnt/cache/appdata/surveycafe-marketing` exists: the checker fails only when compose config creates a directory that was not already there.
 
-`scripts/deploy-mautic-phase1.sh` is the Mautic-only install. It checks that the checkout contains `d82e03f39aaa74d34c59ea009d7a4b8fb15a170a`, runs preflight, and stops without writing `.env` or starting a container when RAM, CPU, the resto network, storage, or port 8084 fails. The only containers it starts are Mautic, MySQL, cron, and the worker. Set `MARKETING_ENV_PASSPHRASE` in the shell before the run when the encrypted backup should be created in the same step. The passphrase is not written on the server. Run the env backup after the up script fills the placeholder passwords if it was not set. The passphrase has to be at least 16 characters. Store it outside the server. A later database dump still does not contain this file.
+`scripts/deploy-mautic-phase1.sh` is the Mautic-only install. Set `MARKETING_DEPLOY_COMMIT` to the full SHA that was checked out. The script refuses a branch name and refuses a HEAD that is not that SHA. It also requires `e8f918406dd0b004e5d1c4ee64d4654ba4e03939` to be contained in that commit. It bootstraps private Python, runs preflight, and stops without writing `.env` or starting a container when RAM, CPU, the resto network, storage, or port 8084 fails. The only containers it starts are Mautic, MySQL, cron, and the worker.
+
+Exit status:
+
+| Code | Meaning |
+| --- | --- |
+| 0 | Mautic is healthy on the Tailscale port and the encrypted `.env` backup was verified. |
+| 1 | Refused before Docker. The commit, `APPDATA`, or `BIND_ADDR` was wrong. No container was started. |
+| 2 | Preflight or the first-run check failed. No container was started. |
+| 3 | `MARKETING_PHASE1_APPROVED` was not set. Nothing was started. |
+| 4 | Partial installation. Docker was invoked and the install did not finish. The state of every marketing container is printed. |
+| 5 | Installation succeeded. No passphrase was supplied, so the encrypted backup was not created. This is not a failed installation. |
+| 6 | A passphrase was supplied and rejected before Docker. Nothing was started. The passphrase is not printed. |
+| 7 | Installation succeeded, but the encrypted backup could not be created or verified. This is not a failed installation. |
+
+Set `MARKETING_ENV_PASSPHRASE` in the shell before the run when the backup should be created in the same step. It must be at least 16 characters. The script verifies that it can encrypt and decrypt a sample, then verifies the real backup checksum and mode `600`. The passphrase is not printed and is not written on the server. Store it outside the server. A later database dump still does not contain this file.
 
 Postiz and the dashboard are separate approvals. The public Caddy file stays unstarted. `BIND_ADDR` must be the Tailscale address. `127.0.0.1` is refused on Unraid because a phone cannot open it. `0.0.0.0` and a LAN address are refused.
 

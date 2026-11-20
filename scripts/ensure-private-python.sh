@@ -38,7 +38,7 @@ tmp="$(mktemp)"
 trap 'rm -f "$tmp"' EXIT
 echo "Downloading a private CPython into ${ROOT}/.tools. /usr is left alone." >&2
 curl -fsSL "$url" -o "$tmp"
-echo "${sha}  ${tmp}" | sha256sum -c -
+echo "${sha}  ${tmp}" | sha256sum -c - >&2
 tar -xzf "$tmp" -C "$ROOT/.tools"
 if [ ! -x "$private" ]; then
   echo "The archive did not contain ${private}." >&2

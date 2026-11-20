@@ -795,18 +795,110 @@ def test_mautic_phase1_stops_when_preflight_fails(tmp_path):
     assert "--stage mautic" in text
     assert "--stage postiz" not in text
     assert "docker network create" not in text
+    assert text.index('"$ROOT/scripts/ensure-private-python.sh"') < text.index('"$ROOT/scripts/check-marketing-firstrun.sh"')
+    assert text.index('"$ROOT/scripts/ensure-private-python.sh"') < text.index('"$ROOT/scripts/preflight-marketing.sh"')
+    clone = (root / "scripts/clone-marketing-source.sh").read_text(encoding="utf-8")
+    assert 'checkout --detach "$deploy_commit"' in clone
+    assert 'checkout --detach "origin/${branch}"' not in clone
     assert "sysctl" not in text
     assert "vm.max_map_count" not in text
     held = subprocess.run(["bash", str(script)], cwd=root, capture_output=True, text=True)
     assert held.returncode == 3, held.stdout + held.stderr
     assert "Nothing was started." in held.stdout
+    head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=root, capture_output=True, text=True, check=True).stdout.strip()
     env = os.environ.copy()
     env["MARKETING_PHASE1_APPROVED"] = "1"
+    env["MARKETING_DEPLOY_COMMIT"] = head
     env.pop("MARKETING_MEMORY_ACK", None)
     env.pop("MARKETING_LOAD_ACK", None)
+    env.pop("MARKETING_ENV_PASSPHRASE", None)
     refused = subprocess.run(["bash", str(script)], cwd=root, env=env, capture_output=True, text=True)
-    assert refused.returncode == 1, refused.stdout + refused.stderr
+    assert refused.returncode == 2, refused.stdout + refused.stderr
     assert "Preflight failed. No container was started." in refused.stdout
     assert "No marketing .env was installed." in refused.stdout
+    assert "resto-mautic status=absent" in refused.stdout
     assert not (root / ".env").exists()
     assert "Approved Mautic commit d82e03f39aaa74d34c59ea009d7a4b8fb15a170a is contained" in refused.stdout
+    assert "Reviewed installer commit e8f918406dd0b004e5d1c4ee64d4654ba4e03939 is contained" in refused.stdout
+
+    wrong = env.copy()
+    wrong["MARKETING_DEPLOY_COMMIT"] = "0123456789abcdef0123456789abcdef01234567"
+    mismatched = subprocess.run(["bash", str(script)], cwd=root, env=wrong, capture_output=True, text=True)
+    assert mismatched.returncode == 1, mismatched.stdout + mismatched.stderr
+    assert "pinned deployment commit" in mismatched.stdout
+    assert not (root / ".env").exists()
+
+    branch = env.copy()
+    branch["MARKETING_DEPLOY_COMMIT"] = "cursor/marketing-deploy-safety-7375"
+    named = subprocess.run(["bash", str(script)], cwd=root, env=branch, capture_output=True, text=True)
+    assert named.returncode == 1, named.stdout + named.stderr
+    assert "branch name is not accepted" in named.stdout
+
+    short_pass = "short-pass"
+    rejected = env.copy()
+    rejected["MARKETING_ENV_PASSPHRASE"] = short_pass
+    bad_pass = subprocess.run(["bash", str(script)], cwd=root, env=rejected, capture_output=True, text=True)
+    assert bad_pass.returncode == 6, bad_pass.stdout + bad_pass.stderr
+    assert "passphrase was rejected" in bad_pass.stdout
+    assert short_pass not in bad_pass.stdout + bad_pass.stderr
+    assert not (root / ".env").exists()
+
+
+def test_phase1_uses_private_python_when_the_host_has_none(tmp_path):
+    import os
+    import shutil
+    import subprocess
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[3]
+    wt = tmp_path / "checkout"
+    subprocess.run(["git", "worktree", "add", "--detach", str(wt), "HEAD"], cwd=root, check=True)
+    try:
+        for name in ("deploy-mautic-phase1.sh", "ensure-private-python.sh"):
+            shutil.copy(root / "scripts" / name, wt / "scripts" / name)
+        bindir = tmp_path / "bin"
+        bindir.mkdir()
+        seen = set()
+        for directory in os.environ["PATH"].split(os.pathsep):
+            folder = Path(directory)
+            if not folder.is_dir():
+                continue
+            for entry in folder.iterdir():
+                if entry.name.startswith("python") or entry.name in seen:
+                    continue
+                if entry.is_file() and os.access(entry, os.X_OK):
+                    os.symlink(entry, bindir / entry.name)
+                    seen.add(entry.name)
+        head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=wt, check=True, capture_output=True, text=True).stdout.strip()
+        env = os.environ.copy()
+        env["PATH"] = str(bindir)
+        env["MARKETING_PHASE1_APPROVED"] = "1"
+        env["MARKETING_DEPLOY_COMMIT"] = head
+        env.pop("MARKETING_ENV_PASSPHRASE", None)
+        env.pop("MARKETING_PYTHON_FETCH", None)
+        result = subprocess.run(
+            ["bash", str(wt / "scripts/deploy-mautic-phase1.sh")],
+            cwd=wt,
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        combined = result.stdout + result.stderr
+        private = wt / ".tools" / "python" / "bin" / "python3"
+        assert result.returncode == 2, combined
+        assert private.is_file()
+        assert ".tools/python/bin/python3" in result.stdout
+        assert "Using the private CPython under .tools. No system package was installed." in result.stdout
+        assert "Sourced a fresh .env.example in an isolated shell." in result.stdout
+        assert "Preflight failed. No container was started." in result.stdout
+        assert "Host python3 is missing" not in combined
+        assert not (wt / ".env").exists()
+        version = subprocess.run(
+            [str(private), "-c", "import sys; print(sys.version_info[:2])"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        assert version.stdout.strip() == "(3, 12)"
+    finally:
+        subprocess.run(["git", "worktree", "remove", "--force", str(wt)], cwd=root, check=False)

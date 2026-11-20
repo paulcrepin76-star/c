@@ -183,7 +183,15 @@ echo "Joining the existing Docker network resto."
 
 before="$(marketing_snapshot_others)"
 
+set +e
 docker compose -f "$ROOT/compose.marketing.yml" --profile marketing up -d --no-recreate "${SERVICES[@]}"
+compose_code=$?
+set -e
+if [ "$compose_code" -ne 0 ]; then
+  echo "docker compose up failed with exit ${compose_code}."
+  echo "This is a partial installation, not a preflight failure."
+  exit 4
+fi
 
 after="$(marketing_snapshot_others)"
 if [ "$before" != "$after" ]; then
