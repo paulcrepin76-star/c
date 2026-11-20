@@ -45,7 +45,17 @@ case "$MARKETING_BACKUP_DIR" in
     ;;
 esac
 
-stamp="$(date +%F-%H%M%S)"
+if [ -n "${MARKETING_BACKUP_STAMP:-}" ]; then
+  case "$MARKETING_BACKUP_STAMP" in
+    *[!A-Za-z0-9._-]*)
+      echo "Refusing backup stamp. Nothing was dumped."
+      exit 1
+      ;;
+  esac
+  stamp="$MARKETING_BACKUP_STAMP"
+else
+  stamp="$(date +%F-%H%M%S)"
+fi
 dest="${MARKETING_BACKUP_DIR}/${stamp}"
 mkdir -p "$dest"
 chmod 700 "$dest"
@@ -75,9 +85,26 @@ dump_running() {
   return 1
 }
 
+wrote_mautic=0
 if dump_running "$MAUTIC_DB_CONTAINER"; then
-  docker exec "$MAUTIC_DB_CONTAINER" sh -c 'mysqldump --user=root --password="$MYSQL_ROOT_PASSWORD" --single-transaction --add-drop-database --databases "$MYSQL_DATABASE"' > "$dest/mautic.sql"
+  if ! docker exec "$MAUTIC_DB_CONTAINER" sh -c 'mysqldump --user=root --password="$MYSQL_ROOT_PASSWORD" --single-transaction --add-drop-database --databases "$MYSQL_DATABASE"' > "$dest/mautic.sql"; then
+    echo "Mautic dump failed. The database was not restored or recreated."
+    exit 1
+  fi
+  if ! grep -q "Dump completed" "$dest/mautic.sql"; then
+    echo "Mautic dump is incomplete. The database was not restored or recreated."
+    exit 1
+  fi
+  chmod 600 "$dest/mautic.sql"
+  sha256sum "$dest/mautic.sql" | awk '{print $1}' > "$dest/mautic.sql.sha256"
+  chmod 600 "$dest/mautic.sql.sha256"
   echo "Wrote $dest/mautic.sql"
+  echo "Verified Mautic dump checksum: $dest/mautic.sql.sha256"
+  wrote_mautic=1
+fi
+if [ "${MARKETING_BACKUP_REQUIRE_MAUTIC:-0}" = "1" ] && [ "$wrote_mautic" -ne 1 ]; then
+  echo "Mautic database was not dumped. Nothing else was started."
+  exit 1
 fi
 
 dump_pg() {

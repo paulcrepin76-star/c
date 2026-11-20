@@ -404,8 +404,8 @@ def assess_map_count(value: int, stage: str) -> str | None:
         return None
     return (
         f"vm.max_map_count is {value}. Elasticsearch, used by the Postiz stage, needs 262144. "
-        "This script will not change the kernel. On Unraid run: sysctl -w vm.max_map_count=262144 "
-        "and add that line to /boot/config/go."
+        "This script will not change the kernel. scripts/map-count-unraid.sh prints the reversible "
+        "Unraid change and applies it only when MARKETING_MAP_COUNT_APPROVED=1."
     )
 
 

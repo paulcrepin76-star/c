@@ -466,6 +466,7 @@ def test_fresh_env_example_sources_and_mautic_preflight_can_finish(tmp_path, mon
     assert first.returncode == 0, first.stdout + first.stderr
     assert "Sourced a fresh .env.example in an isolated shell." in first.stdout
     assert "Compose config validated for the Mautic service. No container was started." in first.stdout
+    assert "MAUTIC_TRUSTED_PROXIES is []." in first.stdout
     assert "docker compose up" not in (root / "scripts/check-marketing-firstrun.sh").read_text(encoding="utf-8")
     assert not Path("/mnt/cache/appdata/surveycafe-marketing").exists()
     assert "already existed" not in first.stdout
@@ -902,3 +903,160 @@ def test_phase1_uses_private_python_when_the_host_has_none(tmp_path):
         assert version.stdout.strip() == "(3, 12)"
     finally:
         subprocess.run(["git", "worktree", "remove", "--force", str(wt)], cwd=root, check=False)
+
+
+def test_trusted_proxies_json_is_corrected_without_touching_other_secrets(tmp_path):
+    import subprocess
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[3]
+    script = root / "scripts" / "fix-mautic-trusted-proxies.py"
+    secret = "mautic-db-pass-test-value-9f3c"
+    broken = tmp_path / "broken.env"
+    broken.write_text(
+        f"MAUTIC_DB_PASSWORD={secret}\nMAUTIC_TRUSTED_PROXIES=172.16.0.0/12\n",
+        encoding="utf-8",
+    )
+    result = subprocess.run(["python3", str(script), str(broken)], capture_output=True, text=True)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.stdout.strip() == "corrected"
+    text = broken.read_text(encoding="utf-8")
+    assert f"MAUTIC_DB_PASSWORD={secret}" in text
+    assert "MAUTIC_TRUSTED_PROXIES='[]'" in text
+    assert "172.16.0.0/12" not in text
+    assert secret not in result.stdout + result.stderr
+
+    kept = tmp_path / "kept.env"
+    original = "MAUTIC_TRUSTED_PROXIES='[\"172.29.0.0/16\"]'\nMAUTIC_DB_PASSWORD=already-set\n"
+    kept.write_text(original, encoding="utf-8")
+    again = subprocess.run(["python3", str(script), str(kept)], capture_output=True, text=True)
+    assert again.returncode == 0, again.stdout + again.stderr
+    assert again.stdout.strip() == "kept"
+    assert kept.read_text(encoding="utf-8") == original
+
+
+def test_map_count_script_changes_nothing_until_approved():
+    import subprocess
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[3]
+    before = Path("/proc/sys/vm/max_map_count").read_text(encoding="utf-8")
+    env = {key: value for key, value in __import__("os").environ.items() if key != "MARKETING_MAP_COUNT_APPROVED"}
+    result = subprocess.run(["bash", str(root / "scripts" / "map-count-unraid.sh")], cwd=root, env=env, capture_output=True, text=True)
+    assert result.returncode == 3, result.stdout + result.stderr
+    assert "Nothing was changed." in result.stdout
+    assert "sysctl -w vm.max_map_count=65530" in result.stdout
+    assert Path("/proc/sys/vm/max_map_count").read_text(encoding="utf-8") == before
+
+
+def test_phase2_stops_before_docker_and_preserves_mautic_rollback():
+    import os
+    import subprocess
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[3]
+    script = root / "scripts" / "deploy-postiz-phase2.sh"
+    text = script.read_text(encoding="utf-8")
+    assert "sysctl -w" not in text
+    assert "docker network create" not in text
+    assert "--stage mautic" not in text
+    assert "--stage postiz" in text
+    assert "MARKETING_DASHBOARD_APPROVED" in text
+    assert "MARKETING_PUBLIC_APPROVED" in text
+    head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=root, capture_output=True, text=True, check=True).stdout.strip()
+
+    refused = subprocess.run(["bash", str(script)], cwd=root, capture_output=True, text=True)
+    assert refused.returncode == 3, refused.stdout + refused.stderr
+    assert "Nothing was started." in refused.stdout
+
+    env = os.environ.copy()
+    env["MARKETING_PHASE2_APPROVED"] = "1"
+    env["MARKETING_DEPLOY_COMMIT"] = "cursor/postiz-phase2-7375"
+    env.pop("MARKETING_ENV_PASSPHRASE", None)
+    named = subprocess.run(["bash", str(script)], cwd=root, env=env, capture_output=True, text=True)
+    assert named.returncode == 1, named.stdout + named.stderr
+    assert "branch name is not accepted" in named.stdout
+
+    passphrase = "phase2-passphrase-token"
+    short = env.copy()
+    short["MARKETING_DEPLOY_COMMIT"] = head
+    short["MARKETING_ENV_PASSPHRASE"] = "short-pass"
+    bad = subprocess.run(["bash", str(script)], cwd=root, env=short, capture_output=True, text=True)
+    assert bad.returncode == 6, bad.stdout + bad.stderr
+    assert "passphrase was rejected" in bad.stdout
+    assert "short-pass" not in bad.stdout + bad.stderr
+    assert not (root / ".env").exists()
+
+    missing = env.copy()
+    missing["MARKETING_DEPLOY_COMMIT"] = head
+    missing["MARKETING_ENV_PASSPHRASE"] = passphrase
+    stopped = subprocess.run(["bash", str(script)], cwd=root, env=missing, capture_output=True, text=True)
+    assert stopped.returncode == 1, stopped.stdout + stopped.stderr
+    assert "working marketing .env must already exist" in stopped.stdout
+    assert passphrase not in stopped.stdout + stopped.stderr
+    assert "Phase 2 does not copy .env.example" in stopped.stdout
+    assert not (root / ".env").exists()
+
+    rollback = subprocess.run(["bash", str(root / "scripts" / "rollback-postiz-phase2.sh")], cwd=root, capture_output=True, text=True)
+    assert rollback.returncode == 3, rollback.stdout + rollback.stderr
+    assert "resto-mautic" in rollback.stdout
+    assert "Nothing was stopped." in rollback.stdout
+
+
+def test_phase2_rollback_removes_postiz_and_leaves_mautic(tmp_path):
+    import os
+    import stat
+    import subprocess
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[3]
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    log = tmp_path / "docker.log"
+    fake = bin_dir / "docker"
+    fake.write_text(
+        "#!/bin/sh\n"
+        f'echo "$@" >> "{log}"\n'
+        'if [ "$1" = "ps" ]; then\n'
+        "  printf '%s\\n' mealie resto-mautic resto-postiz resto-temporal resto-postgres\n"
+        "  exit 0\n"
+        "fi\n"
+        'if [ "$1" = "inspect" ] && [ "$2" = "-f" ]; then\n'
+        '  case "$4" in\n'
+        '    resto-mautic|resto-mautic-mysql|resto-mautic-cron|resto-mautic-worker) echo "id-mautic" ;;\n'
+        '    mealie) echo "/mealie id-mealie running" ;;\n'
+        '    resto-postgres) echo "/resto-postgres id-pg running" ;;\n'
+        "    *) exit 1 ;;\n"
+        "  esac\n"
+        "  exit 0\n"
+        "fi\n"
+        'if [ "$1" = "inspect" ]; then\n'
+        '  case "$2" in\n'
+        "    resto-postiz|resto-temporal) exit 0 ;;\n"
+        "  esac\n"
+        "  exit 1\n"
+        "fi\n"
+        "exit 0\n"
+    )
+    fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
+    env = os.environ.copy()
+    env["PATH"] = f"{bin_dir}{os.pathsep}{env.get('PATH', '')}"
+    env["MARKETING_PHASE2_ROLLBACK_APPROVED"] = "1"
+    env["MARKETING_PHASE2_ROLLBACK_DELETE_DATA"] = "0"
+    env.pop("APPDATA", None)
+    result = subprocess.run(
+        ["bash", str(root / "scripts/rollback-postiz-phase2.sh")],
+        cwd=root,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    text = log.read_text(encoding="utf-8")
+    assert "rm -f resto-postiz\n" in text
+    assert "rm -f resto-temporal\n" in text
+    assert "rm -f resto-mautic" not in text
+    assert "rm -f resto-mautic-mysql" not in text
+    assert "rm -f resto-postgres" not in text
+    assert "rm -f mealie" not in text
+    assert "Mautic was not removed." in result.stdout
