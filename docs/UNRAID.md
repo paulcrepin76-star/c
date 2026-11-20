@@ -84,6 +84,8 @@ Back up `/mnt/user/appdata/resto` and the Paperless media folder with your usual
 docker exec resto-postgres pg_dump -U resto resto > /mnt/user/backups/resto-$(date +%F).sql
 ```
 
+Marketing databases are separate. Dump those with `MARKETING_BACKUP_APPROVED=1 ./scripts/backup-marketing.sh`. That script does not dump `resto-postgres`. See [MARKETING.md](MARKETING.md).
+
 ## What not to do
 
 - Do not expose Paperless, n8n, or Postgres to the internet without a reverse proxy and auth.

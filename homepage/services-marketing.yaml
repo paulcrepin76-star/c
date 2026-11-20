@@ -1,3 +1,4 @@
+# These URLs assume BIND_ADDR is the Tailscale address. The compose default is 127.0.0.1.
 - Marketing:
     - Survey Command:
         icon: mdi-silverware-fork-knife

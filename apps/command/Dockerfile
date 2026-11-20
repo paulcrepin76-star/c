@@ -1,11 +1,11 @@
-FROM node:22-alpine AS frontend
+FROM node:22.21.1-alpine AS frontend
 WORKDIR /src
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 COPY frontend ./
 RUN npm run build
 
-FROM python:3.12-slim
+FROM python:3.12.12-slim-bookworm
 WORKDIR /app
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl \

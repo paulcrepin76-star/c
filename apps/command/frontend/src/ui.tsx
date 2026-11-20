@@ -10,6 +10,7 @@ const NAV = [
   ["/ads", "Advertising"],
   ["/reviews", "Reviews"],
   ["/events", "Events"],
+  ["/connections", "Connections"],
   ["/settings", "Settings"],
 ];
 

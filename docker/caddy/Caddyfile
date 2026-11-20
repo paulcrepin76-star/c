@@ -1,0 +1,11 @@
+{
+	email {$ACME_EMAIL}
+}
+
+{$PUBLIC_POSTIZ_HOST} {
+	reverse_proxy postiz:5000
+}
+
+{$PUBLIC_MAUTIC_HOST} {
+	reverse_proxy mautic:80
+}

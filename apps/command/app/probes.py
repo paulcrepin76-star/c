@@ -58,10 +58,10 @@ def service_status(db: Session) -> list[dict]:
         reachable, detail = False, exc.__class__.__name__
     rows.append(
         {
-            "service": "postgres",
+            "service": "dashboard database",
             "reachable": reachable,
             "authenticated": None,
-            "detail": detail,
+            "detail": detail + ". This check does not open resto-postgres.",
             "ms": round((time.perf_counter() - started) * 1000),
         }
     )

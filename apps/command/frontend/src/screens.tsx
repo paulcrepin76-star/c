@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, money } from "./api";
-import type { CafeEvent, Campaign, Capability, Channel, MenuItem, Overview as OverviewData, Post, Profile, Review, SecretField, Status } from "./types";
+import type { CafeEvent, Campaign, Capability, Channel, IntegrationProof, MenuItem, Overview as OverviewData, Post, Profile, Review, SecretField, Status } from "./types";
 import { Banner, Bars, Card, PageTitle, StatusDot, useError } from "./ui";
 
 const DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
@@ -473,6 +473,39 @@ export function Events() {
   );
 }
 
+export function Connections() {
+  const [rows, setRows] = useState<IntegrationProof[]>([]);
+  const [note, setNote] = useState("");
+  const { error, run } = useError();
+  useEffect(() => {
+    void run(async () => {
+      const body = await api<{ note: string; live_calls_made: boolean; integrations: IntegrationProof[] }>("/api/integrations");
+      setNote(body.note);
+      setRows(body.integrations);
+    });
+  }, []);
+  return (
+    <>
+      <PageTitle kicker="Proof" title="Connections" text="One desk for every platform. A row stays unverified until that platform answers. Saving a key, or passing a unit test, is not a sync." />
+      {error && <Banner text={error} tone="bad" />}
+      {note && <Banner text={note} />}
+      <div className="mt-4 space-y-3">
+        {rows.map((row) => (
+          <Card key={row.id}>
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <h2 className="font-display text-2xl">{row.name}</h2>
+              <span className="text-xs uppercase tracking-[0.14em] text-[var(--muted)]">{row.code} · {row.verification}</span>
+            </div>
+            <p className="mt-2 text-sm">{row.authorized_api_test ? "Authorized API test passed." : "No authorized API test has passed."}</p>
+            <p className="mt-2 text-sm text-[var(--muted)]">{row.unit_test}</p>
+            <p className="mt-2 text-sm">{row.still_needed}</p>
+          </Card>
+        ))}
+      </div>
+    </>
+  );
+}
+
 export function Settings() {
   const [fields, setFields] = useState<SecretField[]>([]);
   const [system, setSystem] = useState<Record<string, string | boolean>>({});
@@ -489,7 +522,7 @@ export function Settings() {
   const groups = [...new Set(fields.map((field) => field.group))];
   return (
     <>
-      <PageTitle kicker="House keys" title="Settings" text="Secrets are encrypted with COMMAND_SECRET_KEY and are not included in the export. Access the dashboard through Tailscale. Do not publish these ports on the open internet." />
+      <PageTitle kicker="House keys" title="Settings" text="Secrets are encrypted with COMMAND_SECRET_KEY and are not included in the export. The session cookie is HttpOnly, SameSite lax, and lasts 12 hours. Use Tailscale for this dashboard. Public HTTPS is a separate Caddy edge for Mautic and Postiz only, and it is not started with the dashboard." />
       {error && <Banner text={error} tone="bad" />}
       <Card className="mb-4">
         <h2 className="font-display text-2xl">Health</h2>

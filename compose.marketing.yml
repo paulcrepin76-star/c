@@ -1,16 +1,17 @@
-# Survey Café marketing stack. Opt-in.
+# Survey Café marketing stack. Opt-in. Not started by scripts/remote-up.sh.
 #
-# This file is not used by scripts/remote-up.sh, so a normal deploy does not
-# start Mautic, Postiz, Temporal, or the dashboard, and it does not recreate n8n.
+# This file is self-contained. scripts/up-marketing.sh does not load compose.yml,
+# so it cannot create or recreate n8n, resto-postgres, Paperless, or Mealie.
 #
-#   MARKETING_APPROVED=1 ./scripts/up-marketing.sh
+# Images are pinned to patch versions. Do not replace these with :latest.
+#   Mautic 7.2.2 apache + MySQL 8.4.13 (Mautic 7 requires MySQL 8.4+ or MariaDB 10.11+)
+#   Postiz v2.26.0 + Redis 7.2.17 + Postgres 17.12
+#   Temporal auto-setup 1.28.1 + Postgres 16.16 + Elasticsearch 7.17.27
+#     (the versions in the official postiz-docker-compose file, with Postgres and Redis patched)
 #
-# Images follow the current official installs:
-#   Mautic 5 apache + MySQL 8.4 (Mautic does not support Postgres)
-#   Postiz ghcr.io/gitroomhq/postiz-app:latest + Redis + Temporal 1.28.1
-#     with the Elasticsearch visibility store from postiz-docker-compose
-# Postiz's own tables use a role on the existing resto Postgres 16.
-# Temporal keeps a separate Postgres so its setup cannot see n8n or resto data.
+# Postiz and the dashboard use a new Postgres. They do not connect to resto-postgres.
+# APPDATA is the marketing data directory, /mnt/cache/appdata/surveycafe-marketing.
+# Files under ./docker stay in the source checkout. They are not database files.
 
 x-mautic-env: &mautic-env
   DOCKER_MAUTIC_LOAD_TEST_DATA: "false"
@@ -22,16 +23,22 @@ x-mautic-env: &mautic-env
   MAUTIC_MESSENGER_DSN_EMAIL: doctrine://default
   MAUTIC_MESSENGER_DSN_HIT: doctrine://default
   MAUTIC_MESSENGER_DSN_FAILED: doctrine://default
+  # Trust the Docker network so the optional Caddy edge can terminate HTTPS.
+  # This does not publish Mautic. Direct Tailscale access does not use this header.
+  MAUTIC_TRUSTED_PROXIES: ${MAUTIC_TRUSTED_PROXIES:-172.16.0.0/12}
   PHP_INI_VALUE_DATE_TIMEZONE: ${TZ:-America/New_York}
   PHP_INI_VALUE_MEMORY_LIMIT: 512M
 
 services:
   mautic-mysql:
-    image: mysql:8.4
+    image: mysql:8.4.13
     container_name: resto-mautic-mysql
     profiles: ["marketing"]
     restart: unless-stopped
-    command: ["--innodb-buffer-pool-size=256M"]
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --innodb-buffer-pool-size=256M
     environment:
       MYSQL_ROOT_PASSWORD: ${MAUTIC_DB_ROOT_PASSWORD:?set MAUTIC_DB_ROOT_PASSWORD}
       MYSQL_DATABASE: mautic
@@ -49,7 +56,7 @@ services:
     networks: [resto]
 
   mautic:
-    image: mautic/mautic:5-apache
+    image: mautic/mautic:7.2.2-apache
     container_name: resto-mautic
     profiles: ["marketing"]
     restart: unless-stopped
@@ -58,7 +65,7 @@ services:
       DOCKER_MAUTIC_ROLE: mautic_web
       DOCKER_MAUTIC_RUN_MIGRATIONS: "true"
     ports:
-      - "${MAUTIC_PORT:-8084}:80"
+      - "${BIND_ADDR:-127.0.0.1}:${MAUTIC_PORT:-8084}:80"
     volumes:
       - ${APPDATA:-./appdata}/mautic/config:/var/www/html/config
       - ${APPDATA:-./appdata}/mautic/logs:/var/www/html/var/logs
@@ -76,7 +83,7 @@ services:
     networks: [resto]
 
   mautic-cron:
-    image: mautic/mautic:5-apache
+    image: mautic/mautic:7.2.2-apache
     container_name: resto-mautic-cron
     profiles: ["marketing"]
     restart: unless-stopped
@@ -94,7 +101,7 @@ services:
     networks: [resto]
 
   mautic-worker:
-    image: mautic/mautic:5-apache
+    image: mautic/mautic:7.2.2-apache
     container_name: resto-mautic-worker
     profiles: ["marketing"]
     restart: unless-stopped
@@ -114,25 +121,44 @@ services:
         condition: service_healthy
     networks: [resto]
 
+  postiz-postgres:
+    image: postgres:17.12-alpine
+    container_name: resto-postiz-postgres
+    profiles: ["marketing"]
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postiz
+      POSTGRES_PASSWORD: ${POSTIZ_DB_PASSWORD:?set POSTIZ_DB_PASSWORD}
+      POSTGRES_DB: postiz
+      TZ: ${TZ:-America/New_York}
+    volumes:
+      - ${APPDATA:-./appdata}/postiz/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postiz -d postiz"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    networks: [resto]
+
   marketing-db-init:
-    image: postgres:16-alpine
+    image: postgres:17.12-alpine
     container_name: resto-marketing-db-init
     profiles: ["marketing"]
     restart: "no"
     environment:
-      PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
-      PGUSER: ${POSTGRES_USER:-resto}
-      POSTIZ_DB_PASSWORD: ${POSTIZ_DB_PASSWORD:?set POSTIZ_DB_PASSWORD}
+      PGPASSWORD: ${POSTIZ_DB_PASSWORD:?set POSTIZ_DB_PASSWORD}
+      COMMAND_DB_PASSWORD: ${COMMAND_DB_PASSWORD:?set COMMAND_DB_PASSWORD}
     volumes:
       - ./docker/postgres/init-postiz-db.sh:/init-postiz-db.sh:ro
     entrypoint: ["/bin/sh", "/init-postiz-db.sh"]
     depends_on:
-      postgres:
+      postiz-postgres:
         condition: service_healthy
     networks: [resto]
 
   postiz-redis:
-    image: redis:7.2
+    image: redis:7.2.17
     container_name: resto-postiz-redis
     profiles: ["marketing"]
     restart: unless-stopped
@@ -148,7 +174,7 @@ services:
     networks: [resto]
 
   temporal-postgres:
-    image: postgres:16
+    image: postgres:16.16
     container_name: resto-temporal-postgres
     profiles: ["marketing"]
     restart: unless-stopped
@@ -237,16 +263,16 @@ services:
     networks: [resto]
 
   postiz:
-    image: ghcr.io/gitroomhq/postiz-app:latest
+    image: ghcr.io/gitroomhq/postiz-app:v2.26.0
     container_name: resto-postiz
     profiles: ["marketing"]
     restart: unless-stopped
     environment:
-      MAIN_URL: ${POSTIZ_URL:-http://100.116.48.120:4007}
-      FRONTEND_URL: ${POSTIZ_URL:-http://100.116.48.120:4007}
-      NEXT_PUBLIC_BACKEND_URL: ${POSTIZ_URL:-http://100.116.48.120:4007}/api
+      MAIN_URL: ${POSTIZ_URL:-http://127.0.0.1:4007}
+      FRONTEND_URL: ${POSTIZ_URL:-http://127.0.0.1:4007}
+      NEXT_PUBLIC_BACKEND_URL: ${POSTIZ_URL:-http://127.0.0.1:4007}/api
       JWT_SECRET: ${POSTIZ_JWT_SECRET:?set POSTIZ_JWT_SECRET}
-      DATABASE_URL: postgresql://postiz:${POSTIZ_DB_PASSWORD}@postgres:5432/postiz
+      DATABASE_URL: postgresql://postiz:${POSTIZ_DB_PASSWORD}@postiz-postgres:5432/postiz
       REDIS_URL: redis://postiz-redis:6379
       BACKEND_INTERNAL_URL: http://localhost:3000
       TEMPORAL_ADDRESS: temporal:7233
@@ -272,7 +298,7 @@ services:
       - ${APPDATA:-./appdata}/postiz/config:/config
       - ${APPDATA:-./appdata}/postiz/uploads:/uploads
     ports:
-      - "${POSTIZ_PORT:-4007}:5000"
+      - "${BIND_ADDR:-127.0.0.1}:${POSTIZ_PORT:-4007}:5000"
     depends_on:
       marketing-db-init:
         condition: service_completed_successfully
@@ -297,13 +323,14 @@ services:
     restart: unless-stopped
     environment:
       TZ: ${TZ:-America/New_York}
-      DATABASE_URL: postgresql://${POSTGRES_USER:-resto}:${POSTGRES_PASSWORD}@postgres:5432/command
+      DATABASE_URL: postgresql://command:${COMMAND_DB_PASSWORD}@postiz-postgres:5432/command
       COMMAND_SECRET_KEY: ${COMMAND_SECRET_KEY:?set COMMAND_SECRET_KEY}
       COMMAND_ADMIN_EMAIL: ${COMMAND_ADMIN_EMAIL:-}
       COMMAND_ADMIN_PASSWORD: ${COMMAND_ADMIN_PASSWORD:?set COMMAND_ADMIN_PASSWORD}
+      COMMAND_HTTPS_ONLY: ${COMMAND_HTTPS_ONLY:-false}
       COMMAND_API_KEY: ${RESTO_API_KEY:-}
       RESTO_API_KEY: ${RESTO_API_KEY:-}
-      COMMAND_PUBLIC_URL: ${COMMAND_URL:-http://100.116.48.120:8090}
+      COMMAND_PUBLIC_URL: ${COMMAND_URL:-http://127.0.0.1:8090}
       MAUTIC_INTERNAL_URL: http://mautic
       POSTIZ_INTERNAL_URL: http://postiz:5000
       N8N_INTERNAL_URL: http://n8n:5678
@@ -312,7 +339,7 @@ services:
       OLLAMA_VISION_MODEL: ${OLLAMA_VISION_MODEL:-}
       DATA_DIR: /data
     ports:
-      - "${COMMAND_PORT:-8090}:8090"
+      - "${BIND_ADDR:-127.0.0.1}:${COMMAND_PORT:-8090}:8090"
     volumes:
       - ${APPDATA:-./appdata}/command:/data
     depends_on:
@@ -329,3 +356,4 @@ services:
 networks:
   resto:
     name: resto
+    external: true
