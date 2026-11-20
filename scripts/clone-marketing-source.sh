@@ -18,6 +18,7 @@ ancestor_subnet="95aa65bc110b6baa8aec840d5f824f684b8f4d5f"
 ancestor_stack="cc57ca5d18222ef51114f6937a60bc9ac6c163f1"
 ancestor_approved="d82e03f39aaa74d34c59ea009d7a4b8fb15a170a"
 ancestor_installer="e8f918406dd0b004e5d1c4ee64d4654ba4e03939"
+ancestor_phase1="99b5b0dd3d54ba5752d710a84d53e7c02449c748"
 
 marketing_refuse_production "$dest"
 
@@ -66,9 +67,13 @@ if ! git -C "$dest" merge-base --is-ancestor "$ancestor_installer" HEAD; then
   echo "Refusing: ${dest} does not contain the reviewed installer commit ${ancestor_installer}."
   exit 1
 fi
+if ! git -C "$dest" merge-base --is-ancestor "$ancestor_phase1" HEAD; then
+  echo "Refusing: ${dest} does not contain the Phase 1 installer ${ancestor_phase1}."
+  exit 1
+fi
 
 echo "Marketing source: ${dest}"
 echo "HEAD ${head_commit}"
 echo "This checkout is exactly ${deploy_commit}."
-echo "This checkout contains ${ancestor_subnet}, ${ancestor_stack}, ${ancestor_approved}, and ${ancestor_installer}."
+echo "This checkout contains ${ancestor_subnet}, ${ancestor_stack}, ${ancestor_approved}, ${ancestor_installer}, and ${ancestor_phase1}."
 echo "The production tree was not checked out, reset, cleaned, or pulled."

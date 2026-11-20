@@ -32,6 +32,7 @@ test "$APPDATA" = "/mnt/cache/appdata/surveycafe-marketing"
 test "$BIND_ADDR" = "100.116.48.120"
 test "$HOME_LON" = "-81.7787"
 test "$COMMAND_ADMIN_EMAIL" = "surveycafedowntown@gmail.com"
+test "$MAUTIC_TRUSTED_PROXIES" = "[]"
 printf "%s\n" "Sourced a fresh .env.example in an isolated shell."
 ' bash "$tmp/.env"
 
@@ -90,6 +91,14 @@ if resto.get("external") is not True or resto.get("name") != "resto":
 ports = services["mautic"].get("ports") or []
 if not any(str(item.get("published")) == "8084" and item.get("host_ip") == "100.116.48.120" for item in ports):
     raise SystemExit(f"Mautic is not published on the Tailscale address: {ports}")
+proxies = (services["mautic"].get("environment") or {}).get("MAUTIC_TRUSTED_PROXIES")
+try:
+    parsed = json.loads(proxies)
+except json.JSONDecodeError as exc:
+    raise SystemExit(f"MAUTIC_TRUSTED_PROXIES is not JSON: {exc}") from exc
+if parsed != []:
+    raise SystemExit(f"MAUTIC_TRUSTED_PROXIES must be an empty JSON array for direct Tailscale access: {proxies!r}")
+print("MAUTIC_TRUSTED_PROXIES is [].")
 print("Compose config validated for the Mautic service. No container was started.")
 PY
 

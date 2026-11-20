@@ -23,9 +23,9 @@ x-mautic-env: &mautic-env
   MAUTIC_MESSENGER_DSN_EMAIL: doctrine://default
   MAUTIC_MESSENGER_DSN_HIT: doctrine://default
   MAUTIC_MESSENGER_DSN_FAILED: doctrine://default
-  # Trust the Docker network so the optional Caddy edge can terminate HTTPS.
-  # This does not publish Mautic. Direct Tailscale access does not use this header.
-  MAUTIC_TRUSTED_PROXIES: ${MAUTIC_TRUSTED_PROXIES:-172.16.0.0/12}
+  # JSON array. Direct Tailscale access trusts no proxy. A bare CIDR is invalid
+  # and Mautic will not boot. Public HTTPS can later set ["172.29.0.0/16"].
+  MAUTIC_TRUSTED_PROXIES: "${MAUTIC_TRUSTED_PROXIES:-[]}"
   PHP_INI_VALUE_DATE_TIMEZONE: ${TZ:-America/New_York}
   PHP_INI_VALUE_MEMORY_LIMIT: 512M
 
@@ -292,6 +292,8 @@ services:
       YOUTUBE_CLIENT_SECRET: ${YOUTUBE_CLIENT_SECRET:-}
       TIKTOK_CLIENT_ID: ${TIKTOK_CLIENT_ID:-}
       TIKTOK_CLIENT_SECRET: ${TIKTOK_CLIENT_SECRET:-}
+      INSTAGRAM_APP_ID: ${INSTAGRAM_APP_ID:-}
+      INSTAGRAM_APP_SECRET: ${INSTAGRAM_APP_SECRET:-}
       API_LIMIT: "30"
       TZ: ${TZ:-America/New_York}
     volumes:

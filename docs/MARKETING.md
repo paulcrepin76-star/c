@@ -87,10 +87,25 @@ ZFS record size is reported per directory and never blocks the preflight. A shar
 Elasticsearch, started by the Postiz stage, needs `vm.max_map_count=262144`. The Mautic stage does not. Preflight prints the current value and exits before Postiz when it is lower. It does not change the kernel. On Unraid, after you decide to allow it:
 
 ```bash
-sysctl -w vm.max_map_count=262144
+./scripts/map-count-unraid.sh
 ```
 
-Add the same line to `/boot/config/go`.
+That command prints the current value and changes nothing. It exits 3. Apply the change only with a separate approval:
+
+```bash
+MARKETING_MAP_COUNT_APPROVED=1 ./scripts/map-count-unraid.sh
+```
+
+With that approval the script reads `/boot/config/go` first. It reports an `exit` or `return` that would skip a line added at the end of the file. It keeps a single `sysctl -w vm.max_map_count=262144` before any of those statements, and it removes an older whole-line setting instead of leaving two values. A statement that sets `vm.max_map_count` in a more complicated way stops the script before it writes. The original `go` file is copied to `/boot/config/go.pre-marketing-mapcount` before the rewrite. The script reads that result back and checks it. Only then does it change the running kernel value. Unraid rebuilds `/etc` at boot, so a line in `/etc/sysctl.conf` does not survive a reboot. `/boot/config/go` is on the flash drive and does.
+
+Restore the original boot file, and only then the saved running value:
+
+```bash
+./scripts/map-count-rollback.sh
+MARKETING_MAP_COUNT_ROLLBACK_APPROVED=1 ./scripts/map-count-rollback.sh
+```
+
+The first of those exits 3 and changes nothing. Phase 2 does not call either script and unsets `MARKETING_MAP_COUNT_APPROVED`.
 
 Marketing joins the existing Docker network named `resto`. Preflight reads every network subnet, the addresses already attached, and the host routes that are not Docker bridges. It refuses when `resto` overlaps another Docker subnet, when that subnet overlaps a host route, or when fewer than 16 IPv4 addresses are free on it. If `resto` is missing, preflight looks for one free subnet in the daemon address pools, or in Docker's built-in local pools when the daemon has none. It does not create the network and it does not prune unused ones.
 
@@ -143,7 +158,7 @@ Marketing source and data are two directories on the NVMe pool:
 - source: `/mnt/cache/projects/resto-marketing`
 - data: `/mnt/cache/appdata/surveycafe-marketing`
 
-`scripts/clone-marketing-source.sh` clones into the source directory and detaches HEAD at `MARKETING_DEPLOY_COMMIT`. That value has to be the full 40-character SHA. The script does not check out a branch tip. It checks that the commit contains `95aa65bc110b6baa8aec840d5f824f684b8f4d5f`, the stacked marketing commit `cc57ca5d18222ef51114f6937a60bc9ac6c163f1`, `d82e03f39aaa74d34c59ea009d7a4b8fb15a170a`, and `e8f918406dd0b004e5d1c4ee64d4654ba4e03939`. It does not run git against the production tree. Compose files under `./docker` stay in the source checkout. Database and upload directories come from `APPDATA`.
+`scripts/clone-marketing-source.sh` clones into the source directory and detaches HEAD at `MARKETING_DEPLOY_COMMIT`. That value has to be the full 40-character SHA. The script does not check out a branch tip. It checks that the commit contains `95aa65bc110b6baa8aec840d5f824f684b8f4d5f`, the stacked marketing commit `cc57ca5d18222ef51114f6937a60bc9ac6c163f1`, `d82e03f39aaa74d34c59ea009d7a4b8fb15a170a`, `e8f918406dd0b004e5d1c4ee64d4654ba4e03939`, and the Phase 1 installer `99b5b0dd3d54ba5752d710a84d53e7c02449c748`. It does not run git against the production tree. Compose files under `./docker` stay in the source checkout. Database and upload directories come from `APPDATA`.
 
 When the host has no `python3`, `scripts/deploy-mautic-phase1.sh` unpacks CPython 3.12.12 into the source checkout's `.tools` directory before the first-run check and before preflight. That is not a system package. The archive is `cpython-3.12.12+20260127-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz`, sha256 `1c9b8720a71f810a04352dc82667ebd7757a565f46e9a7770215a80049582184`.
 
@@ -178,7 +193,38 @@ Exit status:
 
 Set `MARKETING_ENV_PASSPHRASE` in the shell before the run when the backup should be created in the same step. It must be at least 16 characters. The script verifies that it can encrypt and decrypt a sample, then verifies the real backup checksum and mode `600`. The passphrase is not printed and is not written on the server. Store it outside the server. A later database dump still does not contain this file.
 
-Postiz and the dashboard are separate approvals. The public Caddy file stays unstarted. `BIND_ADDR` must be the Tailscale address. `127.0.0.1` is refused on Unraid because a phone cannot open it. `0.0.0.0` and a LAN address are refused.
+Postiz is the second approval. The dashboard and the public Caddy file stay unstarted. `BIND_ADDR` must be the Tailscale address. `127.0.0.1` is refused on Unraid because a phone cannot open it. `0.0.0.0` and a LAN address are refused.
+
+`MAUTIC_TRUSTED_PROXIES` is the JSON array `[]`. Mautic is opened directly on Tailscale, so it trusts no proxy. A bare CIDR is not valid JSON and Mautic refuses to start. Phase 2 corrects that one line in the existing `.env` when it is not a JSON array, and it does not recreate the Mautic containers. When public HTTPS is approved later, set `MAUTIC_TRUSTED_PROXIES='["172.29.0.0/16"]'` and recreate only Mautic. That recreate is not part of Phase 2.
+
+Phase 2 is `scripts/deploy-postiz-phase2.sh`. Set `MARKETING_DEPLOY_COMMIT` to the full SHA that was checked out. The script refuses a branch name. HEAD must contain the Phase 1 installer `99b5b0dd3d54ba5752d710a84d53e7c02449c748`. The script requires the existing `.env`, a passphrase of at least 16 characters, and a healthy Mautic. It dumps `resto-mautic-mysql` and encrypts the original `.env` before it reads or writes `MAUTIC_TRUSTED_PROXIES`. A value that is already a JSON array is left unchanged. An invalid value is replaced with `[]` only after that original backup has been verified, and the Mautic containers are not recreated. New Postiz secrets are filled after that backup, and a second encrypted copy is verified. Existing Mautic passwords are not replaced. It then runs the Postiz preflight. `vm.max_map_count` below 262144 stops the run. The script does not change that setting.
+
+The only containers it starts are `resto-postiz`, `resto-postiz-postgres`, `resto-postiz-redis`, `resto-marketing-db-init`, `resto-temporal`, `resto-temporal-postgres`, `resto-temporal-elasticsearch`, and `resto-temporal-ui`. Postiz is published on `100.116.48.120:4007`. Temporal UI stays on `127.0.0.1:8085`. The empty `command` database is created for later and `resto-command` is not started.
+
+Phase 2 exit status:
+
+| Code | Meaning |
+| --- | --- |
+| 0 | Postiz, Temporal, Elasticsearch, Postgres, and Redis are healthy. Mautic is still healthy and its container ids are unchanged. Backups were verified before the start. |
+| 1 | Refused before Phase 2 Docker changes. The commit, `.env`, paths, or Mautic health check failed. No Phase 2 container was started. |
+| 2 | Preflight failed, including `vm.max_map_count`, RAM, the resto network, storage, or ports. No Phase 2 container was started. Mautic was not recreated. |
+| 3 | `MARKETING_PHASE2_APPROVED` was not set. Nothing was started. |
+| 4 | Partial Phase 2 installation. Docker was invoked and the install did not finish, or a Mautic container id changed. The state of every marketing container is printed. |
+| 6 | The backup passphrase was missing or rejected. Nothing was started. The passphrase is not printed. |
+| 7 | The Mautic database backup or the encrypted configuration backup could not be created or verified. Phase 2 was not started. Mautic was not recreated. |
+
+There is no exit 5. Phase 2 does not continue without a verified backup.
+
+Social accounts stay disconnected in this phase. Meta, TikTok, and the other OAuth providers reject a Tailscale URL. Postiz builds each redirect as `{FRONTEND_URL}/integrations/social/{provider}`. For a later public name `https://social.example.com` the callbacks are:
+
+| Provider | Redirect URI | Credentials already in `.env` |
+| --- | --- | --- |
+| Facebook Page | `https://social.example.com/integrations/social/facebook` | `FACEBOOK_APP_ID`, `FACEBOOK_APP_SECRET` |
+| Instagram through the Facebook Business | `https://social.example.com/integrations/social/instagram` | the same Facebook app |
+| Instagram standalone | `https://social.example.com/integrations/social/instagram-standalone` | `INSTAGRAM_APP_ID`, `INSTAGRAM_APP_SECRET` |
+| TikTok | `https://social.example.com/integrations/social/tiktok` | `TIKTOK_CLIENT_ID`, `TIKTOK_CLIENT_SECRET` |
+
+Those values stay empty until the developer apps exist. TikTok also requires HTTPS for media fetch, a public privacy policy, and Login Kit plus Content Posting API. DNS, Caddy, and `POSTIZ_URL=https://social.example.com` are a later approval. Phase 2 does not request a certificate and does not publish port 80 or 443.
 
 First visit, over Tailscale:
 
@@ -205,9 +251,19 @@ POSTIZ_URL=https://social.example.com
 MARKETING_PUBLIC_APPROVED=1 ./scripts/up-public-edge.sh
 ```
 
-Caddy is `caddy:2.10.2-alpine`. It proxies those two names to Postiz and Mautic on the Docker network. Mautic trusts proxies in `172.16.0.0/12` via `MAUTIC_TRUSTED_PROXIES`, which is where that Caddy container sits. After the certificate exists, set the Mautic site URL to `https://mail.example.com` inside Mautic. Set `POSTIZ_URL` to the public Postiz origin before connecting a social account, then recreate only the Postiz container when you are ready for it to pick up the new URL.
+Caddy is `caddy:2.10.2-alpine`. It proxies those two names to Postiz and Mautic on the Docker network. Direct Tailscale access keeps `MAUTIC_TRUSTED_PROXIES='[]'`. After the certificate exists, set `MAUTIC_TRUSTED_PROXIES='["172.29.0.0/16"]'`, recreate only the Mautic containers, and set the Mautic site URL to `https://mail.example.com` inside Mautic. Set `POSTIZ_URL` to the public Postiz origin before connecting a social account, then recreate only the Postiz container when you are ready for it to pick up the new URL.
 
 ## Rollback
+
+Phase 2 rollback removes only the Postiz and Temporal containers. Mautic keeps running and `APPDATA/mautic` is kept:
+
+```bash
+MARKETING_PHASE2_ROLLBACK_APPROVED=1 ./scripts/rollback-postiz-phase2.sh
+```
+
+Add `MARKETING_PHASE2_ROLLBACK_DELETE_DATA=1` only when the Postiz and Temporal directories should also be removed. That flag does not delete `APPDATA/mautic`.
+
+`scripts/rollback-marketing.sh` is the full marketing rollback. It removes Mautic as well. It is not the Phase 2 procedure.
 
 Before the first start, take the normal appdata backup. There is no marketing data yet, so a failed first start rolls back by removing the new containers:
 

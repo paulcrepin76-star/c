@@ -82,7 +82,17 @@ if ! chmod 600 "$ENV_FILE"; then
   exit 1
 fi
 
-stamp="$(date +%F-%H%M%S)"
+if [ -n "${MARKETING_ENV_BACKUP_STAMP:-}" ]; then
+  case "$MARKETING_ENV_BACKUP_STAMP" in
+    *[!A-Za-z0-9._-]*)
+      echo "Refusing backup stamp. Nothing was copied."
+      exit 1
+      ;;
+  esac
+  stamp="$MARKETING_ENV_BACKUP_STAMP"
+else
+  stamp="$(date +%F-%H%M%S)"
+fi
 dest="${MARKETING_ENV_BACKUP_DIR}/${stamp}"
 cipher_tmp="$(mktemp)"
 check="$(mktemp)"
