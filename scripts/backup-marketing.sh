@@ -20,9 +20,10 @@ fi
 if [ "${MARKETING_BACKUP_APPROVED:-0}" != "1" ]; then
   echo "Nothing was dumped. This script reads only these containers when they are running:"
   printf '  %s\n' resto-mautic-mysql resto-postiz-postgres resto-temporal-postgres
-  echo "It writes SQL files under MARKETING_BACKUP_DIR, which must be outside APPDATA."
-  echo "On Unraid the default is /mnt/user/backups/resto-marketing when that parent exists."
-  echo "  MARKETING_BACKUP_APPROVED=1 ./scripts/backup-marketing.sh"
+echo "It writes SQL files under MARKETING_BACKUP_DIR, which must be outside APPDATA."
+echo "On Unraid the default is /mnt/user/backups/resto-marketing when that parent exists."
+echo "The marketing .env is not in this dump. Encrypt it with scripts/backup-marketing-env.sh."
+echo "  MARKETING_BACKUP_APPROVED=1 ./scripts/backup-marketing.sh"
   exit 3
 fi
 
@@ -107,6 +108,8 @@ fi
 cat > "$dest/README.txt" <<EOF
 Marketing logical backup ${stamp}
 These dumps do not include resto-postgres, n8n, or uploaded media.
+They also do not include the marketing .env. That file lives in the source checkout and holds database passwords and encryption keys.
+Encrypt it with scripts/backup-marketing-env.sh.
 Also keep the Unraid appdata backup of ${APPDATA}/mautic, postiz, temporal, command, and caddy.
 Restore with MARKETING_RESTORE_APPROVED=1 ./scripts/restore-marketing.sh ${dest}
 EOF

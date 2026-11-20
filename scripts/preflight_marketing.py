@@ -386,6 +386,7 @@ def assess_ports(bind: str, holders: dict[int, str], stage: str) -> list[str]:
         if holder == owner:
             continue
         sock = socket.socket()
+        sock.settimeout(1.0)
         try:
             taken = sock.connect_ex((bind, port)) == 0
         except OSError as exc:

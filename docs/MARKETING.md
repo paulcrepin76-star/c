@@ -126,7 +126,9 @@ Marketing joins the existing Docker network named `resto`. Preflight reads every
 
 `./scripts/up-public-edge.sh` starts only `resto-marketing-edge` after `MARKETING_PUBLIC_APPROVED=1`. It needs two DNS names and an ACME email. It does not publish the dashboard.
 
-`./scripts/backup-marketing.sh` dumps Mautic MySQL as root, the Postiz database, the dashboard database, and each Temporal database with `pg_dump --clean --if-exists`. It refuses a destination inside `APPDATA` and refuses to exec into a protected container. Default on Unraid is `/mnt/user/backups/resto-marketing`. It does not dump `resto-postgres` and does not stop containers.
+`./scripts/backup-marketing.sh` dumps Mautic MySQL as root, the Postiz database, the dashboard database, and each Temporal database with `pg_dump --clean --if-exists`. It refuses a destination inside `APPDATA` and refuses to exec into a protected container. Default on Unraid is `/mnt/user/backups/resto-marketing`. It does not dump `resto-postgres` and does not stop containers. That dump does not include the marketing `.env`.
+
+`./scripts/backup-marketing-env.sh` encrypts the checkout `.env`. That file stays in `/mnt/cache/projects/resto-marketing`, outside appdata, and it holds the database passwords and `COMMAND_SECRET_KEY`. The ciphertext is AES-256-CBC with PBKDF2 (600000 iterations) and a salt. It is written to `/mnt/user/backups/resto-marketing/env/STAMP` when that backups directory exists, mode 600, outside the source checkout and outside `APPDATA`. The passphrase is `MARKETING_ENV_PASSPHRASE` in the environment for that one command. The script does not write the passphrase or the plaintext. `./scripts/restore-marketing-env.sh` decrypts it back to the checkout `.env` only, mode 600, and leaves an existing file in place unless `MARKETING_ENV_RESTORE_OVERWRITE=1`.
 
 `./scripts/restore-marketing.sh` loads those dumps into the matching marketing containers only. A failed `docker exec` stops the script. `scripts/test-restore-isolated.sh` repeats this against throwaway `marketingtest-*` containers and refuses to run when `/mnt/user` exists.
 
@@ -150,10 +152,17 @@ The first approved stage is Mautic only:
 ```bash
 cd /mnt/cache/projects/resto-marketing
 cp .env.example .env
+chmod 600 .env
 # APPDATA is already /mnt/cache/appdata/surveycafe-marketing
 # BIND_ADDR is already 100.116.48.120
+# HOME_MARKET is quoted. These scripts source .env with Bash.
+./scripts/check-marketing-firstrun.sh
 MARKETING_APPROVED=1 ./scripts/up-marketing.sh --stage mautic
+# Set MARKETING_ENV_PASSPHRASE in this shell first. Keep it out of .env and out of git.
+MARKETING_ENV_BACKUP_APPROVED=1 ./scripts/backup-marketing-env.sh
 ```
+
+`check-marketing-firstrun.sh` copies `.env.example` to a temporary directory, sources that copy in an isolated shell, and runs `docker compose config`. It does not write the checkout `.env` and it does not start a container. Run the env backup after the up script fills the placeholder passwords. The passphrase has to be at least 16 characters. Store it outside the server. A later database dump still does not contain this file.
 
 Postiz and the dashboard are separate approvals. The public Caddy file stays unstarted. `BIND_ADDR` must be the Tailscale address. `127.0.0.1` is refused on Unraid because a phone cannot open it. `0.0.0.0` and a LAN address are refused.
 
@@ -198,15 +207,18 @@ After the stack has data:
 
 ```bash
 MARKETING_BACKUP_APPROVED=1 ./scripts/backup-marketing.sh
+MARKETING_ENV_BACKUP_APPROVED=1 ./scripts/backup-marketing-env.sh
 ```
 
-Restore into containers that are already running:
+Restore into containers that are already running. Set `MARKETING_ENV_PASSPHRASE` in the shell before the env restore:
 
 ```bash
 MARKETING_RESTORE_APPROVED=1 ./scripts/restore-marketing.sh /mnt/user/backups/resto-marketing/STAMP
+MARKETING_ENV_RESTORE_APPROVED=1 MARKETING_ENV_RESTORE_OVERWRITE=1 \
+  ./scripts/restore-marketing-env.sh /mnt/user/backups/resto-marketing/env/STAMP
 ```
 
-Uploaded images and Mautic media live in the appdata directories. The SQL dumps do not replace those files. Keep the Unraid appdata backup for them.
+Uploaded images and Mautic media live in the appdata directories. The SQL dumps do not replace those files. Keep the Unraid appdata backup for them. The env restore writes only the marketing checkout `.env`. It does not write into `/mnt/cache/appdata/resto`.
 
 ## Dashboard
 

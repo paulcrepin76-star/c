@@ -88,6 +88,7 @@ echo "It leaves the production Git tree alone."
 echo "It does not change vm.max_map_count, ZFS properties, or share settings."
 echo "It passes --no-recreate, so an existing container keeps its current settings."
 echo "The public Caddy edge is not started."
+echo "It does not back up .env. After passwords are filled, encrypt that file with scripts/backup-marketing-env.sh."
 echo
 
 if [ "$DRY" -eq 1 ]; then
@@ -140,6 +141,7 @@ export MARKETING_PYTHON_FETCH=1
 # shellcheck disable=SC1091
 source "$ROOT/scripts/marketing-env.sh"
 fill_marketing_secrets "$ROOT/.env"
+echo "Passwords are in this checkout's .env. Encrypt that file with scripts/backup-marketing-env.sh before relying on this stage."
 
 set -a
 # shellcheck disable=SC1091

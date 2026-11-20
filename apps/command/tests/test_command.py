@@ -453,3 +453,304 @@ def test_marketing_paths_and_postiz_gate():
     py = subprocess.run(["bash", str(root / "scripts/ensure-private-python.sh")], cwd=root, capture_output=True, text=True)
     assert py.returncode == 0, py.stdout + py.stderr
     assert py.stdout.strip().endswith("python3")
+
+
+def test_fresh_env_example_sources_and_mautic_preflight_can_finish(tmp_path, monkeypatch, capsys):
+    import importlib.util
+    import os
+    import subprocess
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[3]
+    first = subprocess.run(["bash", str(root / "scripts/check-marketing-firstrun.sh")], cwd=root, capture_output=True, text=True)
+    assert first.returncode == 0, first.stdout + first.stderr
+    assert "Sourced a fresh .env.example in an isolated shell." in first.stdout
+    assert "Compose config validated for the Mautic service. No container was started." in first.stdout
+    assert "docker compose up" not in (root / "scripts/check-marketing-firstrun.sh").read_text(encoding="utf-8")
+    assert not Path("/mnt/cache/appdata/surveycafe-marketing").exists()
+
+    broken = tmp_path / "unquoted.env"
+    broken.write_text(
+        (root / ".env.example").read_text(encoding="utf-8").replace(
+            'HOME_MARKET="Bonita Springs, Florida"',
+            "HOME_MARKET=Bonita Springs, Florida",
+        ),
+        encoding="utf-8",
+    )
+    unquoted = subprocess.run(
+        [
+            "env",
+            "-i",
+            f"PATH={os.environ['PATH']}",
+            "bash",
+            "--noprofile",
+            "--norc",
+            "-c",
+            'set -euo pipefail; set -a; source "$1"; set +a',
+            "bash",
+            str(broken),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert unquoted.returncode != 0, unquoted.stdout + unquoted.stderr
+
+    fresh = tmp_path / "fresh.env"
+    fresh.write_text((root / ".env.example").read_text(encoding="utf-8"), encoding="utf-8")
+    dumped = subprocess.run(
+        [
+            "env",
+            "-i",
+            f"PATH={os.environ['PATH']}",
+            "bash",
+            "--noprofile",
+            "--norc",
+            "-c",
+            'set -euo pipefail; set -a; source "$1"; set +a; printf "%s\\n" "$HOME_MARKET" "$APPDATA" "$BIND_ADDR" "$HOME_LON" "$COMMAND_ADMIN_EMAIL"',
+            "bash",
+            str(fresh),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert dumped.returncode == 0, dumped.stdout + dumped.stderr
+    market, appdata, bind, lon, email = dumped.stdout.splitlines()
+    assert market == "Bonita Springs, Florida"
+    assert appdata == "/mnt/cache/appdata/surveycafe-marketing"
+    assert bind == "100.116.48.120"
+    assert lon == "-81.7787"
+    assert email == "surveycafedowntown@gmail.com"
+    monkeypatch.setenv("APPDATA", appdata)
+    monkeypatch.setenv("BIND_ADDR", bind)
+
+    hosted = subprocess.run(
+        ["bash", str(root / "scripts/preflight-marketing.sh")],
+        cwd=root,
+        env={**os.environ, "MARKETING_ENV_FILE": str(fresh), "MARKETING_STAGE": "mautic"},
+        capture_output=True,
+        text=True,
+    )
+    assert hosted.returncode in {0, 2}, hosted.stdout + hosted.stderr
+    assert "Read-only preflight" in hosted.stdout
+    assert "command not found" not in hosted.stderr
+    assert "Springs" not in hosted.stderr
+
+    path = root / "scripts" / "preflight_marketing.py"
+    spec = importlib.util.spec_from_file_location("preflight_marketing_firstrun", path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    monkeypatch.setattr(module, "_mem_available", lambda: 8 * 1024 * 1024)
+    monkeypatch.setattr(module, "_load", lambda: 0.4)
+    monkeypatch.setattr(module, "_cpus", lambda: 8)
+    monkeypatch.setattr(module, "_map_count", lambda: 65530)
+    monkeypatch.setattr(module, "_local_ipv4", lambda: ["100.116.48.120"])
+    monkeypatch.setattr(
+        module,
+        "_docker_networks",
+        lambda: (
+            [{"name": "resto", "driver": "bridge", "subnets": ["172.29.0.0/16"], "used": 8, "attached": ["mealie", "resto-n8n"]}],
+            {},
+            [],
+        ),
+    )
+    monkeypatch.setattr(module, "_address_pools", lambda: None)
+    monkeypatch.setattr(module, "_nondocker_routes", lambda: ["192.168.1.0/24"])
+    monkeypatch.setattr(module, "_zfs_rows", lambda: [])
+    monkeypatch.setenv("MARKETING_STAGE", "mautic")
+    assert module.main() == 0
+    mautic_out = capsys.readouterr().out
+    assert "Preflight finished" in mautic_out
+    assert "Mautic stage does not start Elasticsearch" in mautic_out
+    monkeypatch.setenv("MARKETING_STAGE", "postiz")
+    assert module.main() == 2
+    postiz_out = capsys.readouterr().out
+    assert "vm.max_map_count is 65530" in postiz_out
+
+    dashboard = subprocess.run(
+        ["bash", str(root / "scripts/up-marketing.sh"), "--stage", "dashboard"],
+        cwd=root,
+        env={**os.environ, "MARKETING_APPROVED": "1"},
+        capture_output=True,
+        text=True,
+    )
+    assert dashboard.returncode == 3, dashboard.stdout + dashboard.stderr
+    assert "dashboard stays stopped" in dashboard.stdout
+    public = subprocess.run(["bash", str(root / "scripts/up-public-edge.sh")], cwd=root, capture_output=True, text=True)
+    assert public.returncode == 3, public.stdout + public.stderr
+    assert "Public HTTPS" in public.stdout
+
+
+def test_marketing_env_backup_round_trip(tmp_path):
+    import os
+    import stat
+    import subprocess
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[3]
+    secret = "mautic-db-pass-test-value-9f3c"
+    root_pass = "mautic-root-pass-test-value-9f3c"
+    command_key = "command-secret-key-test-value-9f3c"
+    admin = "correct horse battery"
+    passphrase = "test-passphrase-sixteen"
+    env_file = tmp_path / "checkout" / ".env"
+    env_file.parent.mkdir()
+    data = tmp_path / "surveycafe-marketing"
+    backup_root = tmp_path / "backups"
+    env_file.write_text(
+        "\n".join(
+            [
+                f"APPDATA={data}",
+                'HOME_MARKET="Bonita Springs, Florida"',
+                f"MAUTIC_DB_PASSWORD={secret}",
+                f"MAUTIC_DB_ROOT_PASSWORD={root_pass}",
+                f"COMMAND_SECRET_KEY={command_key}",
+                f'COMMAND_ADMIN_PASSWORD="{admin}"',
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    env_file.chmod(0o644)
+    original = env_file.read_bytes()
+    base = os.environ.copy()
+    base.update(
+        {
+            "MARKETING_ENV_FILE": str(env_file),
+            "MARKETING_ENV_BACKUP_DIR": str(backup_root),
+            "MARKETING_ENV_PASSPHRASE": passphrase,
+        }
+    )
+
+    def run(script, env, args=None):
+        return subprocess.run(
+            ["bash", str(root / "scripts" / script), *(args or [])],
+            cwd=root,
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+
+    refused = run("backup-marketing-env.sh", {**base, "MARKETING_ENV_BACKUP_APPROVED": "0"})
+    assert refused.returncode == 3, refused.stdout + refused.stderr
+    assert secret not in refused.stdout
+    assert passphrase not in refused.stdout
+    assert not backup_root.exists()
+
+    short = run(
+        "backup-marketing-env.sh",
+        {**base, "MARKETING_ENV_BACKUP_APPROVED": "1", "MARKETING_ENV_PASSPHRASE": "too-short"},
+    )
+    assert short.returncode == 1, short.stdout + short.stderr
+    assert not backup_root.exists()
+
+    inside_source = run(
+        "backup-marketing-env.sh",
+        {**base, "MARKETING_ENV_BACKUP_APPROVED": "1", "MARKETING_ENV_BACKUP_DIR": str(root / "not-a-backup")},
+    )
+    assert inside_source.returncode == 1, inside_source.stdout + inside_source.stderr
+    assert "source checkout" in inside_source.stdout
+    assert not (root / "not-a-backup").exists()
+
+    inside_data = run(
+        "backup-marketing-env.sh",
+        {**base, "MARKETING_ENV_BACKUP_APPROVED": "1", "MARKETING_ENV_BACKUP_DIR": str(data / "nested")},
+    )
+    assert inside_data.returncode == 1, inside_data.stdout + inside_data.stderr
+    assert "APPDATA" in inside_data.stdout
+
+    production = run(
+        "backup-marketing-env.sh",
+        {
+            **base,
+            "MARKETING_ENV_BACKUP_APPROVED": "1",
+            "MARKETING_ENV_FILE": "/mnt/cache/appdata/resto/.env",
+        },
+    )
+    assert production.returncode == 1, production.stdout + production.stderr
+    assert "production resto tree" in production.stdout
+
+    saved = run("backup-marketing-env.sh", {**base, "MARKETING_ENV_BACKUP_APPROVED": "1"})
+    assert saved.returncode == 0, saved.stdout + saved.stderr
+    combined = saved.stdout + saved.stderr
+    assert secret not in combined
+    assert root_pass not in combined
+    assert command_key not in combined
+    assert passphrase not in combined
+    assert admin not in combined
+    assert "Encrypted marketing .env:" in saved.stdout
+    assert stat.S_IMODE(env_file.stat().st_mode) == 0o600
+    enc = next(backup_root.glob("*/marketing.env.enc"))
+    blob = enc.read_bytes()
+    assert secret.encode() not in blob
+    assert passphrase.encode() not in blob
+    assert admin.encode() not in blob
+    assert stat.S_IMODE(enc.stat().st_mode) == 0o600
+    readme = (enc.parent / "README.txt").read_text(encoding="utf-8")
+    assert secret not in readme
+    assert passphrase not in readme
+    assert not str(enc).startswith(str(root))
+
+    restored = tmp_path / "restored.env"
+    restore_env = {**base, "MARKETING_ENV_FILE": str(restored), "MARKETING_ENV_RESTORE_APPROVED": "1"}
+    blocked = run("restore-marketing-env.sh", {**restore_env, "MARKETING_ENV_RESTORE_APPROVED": "0"}, [str(enc.parent)])
+    assert blocked.returncode == 3, blocked.stdout + blocked.stderr
+    assert not restored.exists()
+
+    wrong = run(
+        "restore-marketing-env.sh",
+        {**restore_env, "MARKETING_ENV_PASSPHRASE": "wrong-passphrase-value"},
+        [str(enc.parent)],
+    )
+    assert wrong.returncode == 1, wrong.stdout + wrong.stderr
+    assert not restored.exists()
+    assert secret not in wrong.stdout
+
+    checksum = enc.parent / "marketing.env.enc.sha256"
+    checksum_text = checksum.read_text(encoding="utf-8")
+    checksum.write_text("0" * 64 + "\n", encoding="utf-8")
+    damaged = run("restore-marketing-env.sh", restore_env, [str(enc.parent)])
+    assert damaged.returncode == 1, damaged.stdout + damaged.stderr
+    assert "checksum" in damaged.stdout
+    assert not restored.exists()
+    checksum.write_text(checksum_text, encoding="utf-8")
+
+    good = run("restore-marketing-env.sh", restore_env, [str(enc.parent)])
+    assert good.returncode == 0, good.stdout + good.stderr
+    assert secret not in good.stdout
+    assert passphrase not in good.stdout
+    assert restored.read_bytes() == original
+    assert stat.S_IMODE(restored.stat().st_mode) == 0o600
+
+    restored.write_text(restored.read_text(encoding="utf-8").replace(secret, "changed-password-value-xx"), encoding="utf-8")
+    kept = run("restore-marketing-env.sh", restore_env, [str(enc.parent)])
+    assert kept.returncode == 1, kept.stdout + kept.stderr
+    assert "changed-password-value-xx" in restored.read_text(encoding="utf-8")
+
+    replaced = run(
+        "restore-marketing-env.sh",
+        {**restore_env, "MARKETING_ENV_RESTORE_OVERWRITE": "1"},
+        [str(enc.parent)],
+    )
+    assert replaced.returncode == 0, replaced.stdout + replaced.stderr
+    assert restored.read_bytes() == original
+    assert secret not in replaced.stdout
+
+    inside_appdata = data / ".env"
+    nested = run(
+        "restore-marketing-env.sh",
+        {**restore_env, "MARKETING_ENV_FILE": str(inside_appdata), "MARKETING_ENV_RESTORE_OVERWRITE": "1"},
+        [str(enc.parent)],
+    )
+    assert nested.returncode == 1, nested.stdout + nested.stderr
+    assert "APPDATA" in nested.stdout
+    assert not inside_appdata.exists()
+
+    prod_restore = run(
+        "restore-marketing-env.sh",
+        {**restore_env, "MARKETING_ENV_FILE": "/mnt/cache/appdata/resto/.env", "MARKETING_ENV_RESTORE_OVERWRITE": "1"},
+        [str(enc.parent)],
+    )
+    assert prod_restore.returncode == 1, prod_restore.stdout + prod_restore.stderr
+    assert "production resto tree" in prod_restore.stdout
+    assert not Path("/mnt/cache/appdata/resto/.env").exists()

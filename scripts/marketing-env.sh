@@ -1,4 +1,26 @@
 #!/usr/bin/env bash
+# Print one value from an env file. Does not execute the file.
+# Strips one matching pair of single or double quotes.
+marketing_env_value() {
+  local file="$1"
+  local key="$2"
+  local line value
+  [ -f "$file" ] || return 0
+  line="$(grep -E "^${key}=" "$file" | head -1 || true)"
+  value="${line#"${key}="}"
+  case "$value" in
+    \"*\")
+      value="${value#\"}"
+      value="${value%\"}"
+      ;;
+    \'*\')
+      value="${value#\'}"
+      value="${value%\'}"
+      ;;
+  esac
+  printf '%s\n' "$value"
+}
+
 # Fills marketing secrets that are missing or still placeholders.
 # Prints key names only. Does not print values and does not touch existing passwords.
 fill_marketing_secrets() {

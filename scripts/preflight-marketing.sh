@@ -8,10 +8,14 @@ cd "$ROOT"
 source "$ROOT/scripts/marketing-guard.sh"
 marketing_refuse_production "$ROOT"
 
-if [ -f "$ROOT/.env" ]; then
+ENV_FILE="${MARKETING_ENV_FILE:-$ROOT/.env}"
+if [ -n "${MARKETING_ENV_FILE:-}" ]; then
+  marketing_refuse_production "$ENV_FILE"
+fi
+if [ -f "$ENV_FILE" ]; then
   set -a
   # shellcheck disable=SC1091
-  source "$ROOT/.env"
+  source "$ENV_FILE"
   set +a
 fi
 
