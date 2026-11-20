@@ -14,6 +14,14 @@ trap 'rm -rf "$tmp"' EXIT
 cp "$ROOT/.env.example" "$tmp/.env"
 chmod 600 "$tmp/.env"
 
+data_root="/mnt/cache/appdata/surveycafe-marketing"
+snapshot_dirs() {
+  if [ -d "$data_root" ]; then
+    find "$data_root" -type d | LC_ALL=C sort
+  fi
+}
+snapshot_dirs > "$tmp/dirs-before"
+
 env -i PATH="$PATH" HOME="$tmp" bash --noprofile --norc -c '
 set -euo pipefail
 set -a
@@ -85,8 +93,13 @@ if not any(str(item.get("published")) == "8084" and item.get("host_ip") == "100.
 print("Compose config validated for the Mautic service. No container was started.")
 PY
 
-if [ -d /mnt/cache/appdata/surveycafe-marketing ]; then
+snapshot_dirs > "$tmp/dirs-after"
+if ! cmp -s "$tmp/dirs-before" "$tmp/dirs-after"; then
   echo "Refusing: compose config created marketing data. That was not supposed to happen."
+  diff -u "$tmp/dirs-before" "$tmp/dirs-after" || true
   exit 1
+fi
+if [ -s "$tmp/dirs-before" ]; then
+  echo "Marketing data directory already existed. Compose config did not add directories."
 fi
 echo "First-run env and compose check finished. No container was started."

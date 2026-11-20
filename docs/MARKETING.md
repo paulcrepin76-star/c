@@ -162,7 +162,9 @@ MARKETING_APPROVED=1 ./scripts/up-marketing.sh --stage mautic
 MARKETING_ENV_BACKUP_APPROVED=1 ./scripts/backup-marketing-env.sh
 ```
 
-`check-marketing-firstrun.sh` copies `.env.example` to a temporary directory, sources that copy in an isolated shell, and runs `docker compose config`. It does not write the checkout `.env` and it does not start a container. Run the env backup after the up script fills the placeholder passwords. The passphrase has to be at least 16 characters. Store it outside the server. A later database dump still does not contain this file.
+`check-marketing-firstrun.sh` copies `.env.example` to a temporary directory, sources that copy in an isolated shell, and runs `docker compose config`. It does not write the checkout `.env` and it does not start a container. A later run is safe after `/mnt/cache/appdata/surveycafe-marketing` exists: the checker fails only when compose config creates a directory that was not already there.
+
+`scripts/deploy-mautic-phase1.sh` is the Mautic-only install. It checks that the checkout contains `d82e03f39aaa74d34c59ea009d7a4b8fb15a170a`, runs preflight, and stops without writing `.env` or starting a container when RAM, CPU, the resto network, storage, or port 8084 fails. The only containers it starts are Mautic, MySQL, cron, and the worker. Set `MARKETING_ENV_PASSPHRASE` in the shell before the run when the encrypted backup should be created in the same step. The passphrase is not written on the server. Run the env backup after the up script fills the placeholder passwords if it was not set. The passphrase has to be at least 16 characters. Store it outside the server. A later database dump still does not contain this file.
 
 Postiz and the dashboard are separate approvals. The public Caddy file stays unstarted. `BIND_ADDR` must be the Tailscale address. `127.0.0.1` is refused on Unraid because a phone cannot open it. `0.0.0.0` and a LAN address are refused.
 

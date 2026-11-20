@@ -468,6 +468,7 @@ def test_fresh_env_example_sources_and_mautic_preflight_can_finish(tmp_path, mon
     assert "Compose config validated for the Mautic service. No container was started." in first.stdout
     assert "docker compose up" not in (root / "scripts/check-marketing-firstrun.sh").read_text(encoding="utf-8")
     assert not Path("/mnt/cache/appdata/surveycafe-marketing").exists()
+    assert "already existed" not in first.stdout
 
     broken = tmp_path / "unquoted.env"
     broken.write_text(
@@ -754,3 +755,58 @@ def test_marketing_env_backup_round_trip(tmp_path):
     assert prod_restore.returncode == 1, prod_restore.stdout + prod_restore.stderr
     assert "production resto tree" in prod_restore.stdout
     assert not Path("/mnt/cache/appdata/resto/.env").exists()
+
+
+def test_firstrun_checker_reruns_when_marketing_data_exists():
+    import subprocess
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[3]
+    data = Path("/mnt/cache/appdata/surveycafe-marketing")
+    created = False
+    if not data.exists():
+        subprocess.run(["sudo", "mkdir", "-p", str(data / "mautic" / "config")], check=True)
+        created = True
+    try:
+        result = subprocess.run(
+            ["bash", str(root / "scripts/check-marketing-firstrun.sh")],
+            cwd=root,
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert "Marketing data directory already existed. Compose config did not add directories." in result.stdout
+        assert "No container was started." in result.stdout
+        assert data.is_dir()
+    finally:
+        if created:
+            subprocess.run(["sudo", "rm", "-rf", str(data)], check=True)
+
+
+def test_mautic_phase1_stops_when_preflight_fails(tmp_path):
+    import os
+    import subprocess
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[3]
+    script = root / "scripts/deploy-mautic-phase1.sh"
+    text = script.read_text(encoding="utf-8")
+    assert "d82e03f39aaa74d34c59ea009d7a4b8fb15a170a" in text
+    assert "--stage mautic" in text
+    assert "--stage postiz" not in text
+    assert "docker network create" not in text
+    assert "sysctl" not in text
+    assert "vm.max_map_count" not in text
+    held = subprocess.run(["bash", str(script)], cwd=root, capture_output=True, text=True)
+    assert held.returncode == 3, held.stdout + held.stderr
+    assert "Nothing was started." in held.stdout
+    env = os.environ.copy()
+    env["MARKETING_PHASE1_APPROVED"] = "1"
+    env.pop("MARKETING_MEMORY_ACK", None)
+    env.pop("MARKETING_LOAD_ACK", None)
+    refused = subprocess.run(["bash", str(script)], cwd=root, env=env, capture_output=True, text=True)
+    assert refused.returncode == 1, refused.stdout + refused.stderr
+    assert "Preflight failed. No container was started." in refused.stdout
+    assert "No marketing .env was installed." in refused.stdout
+    assert not (root / ".env").exists()
+    assert "Approved Mautic commit d82e03f39aaa74d34c59ea009d7a4b8fb15a170a is contained" in refused.stdout
