@@ -318,6 +318,13 @@ def test_unraid_inspect_script_is_read_only():
         assert banned not in code
     assert "/tmp/unraid-marketing-inspect.txt" in text
     assert "git -C" in text
+    assert "bash <<'UNRAID_INSPECT'" in text
+    assert text.strip().endswith("UNRAID_INSPECT")
+    assert "export GIT_OPTIONAL_LOCKS=0" in text
+    assert "docker network inspect $ids --format" in text
+    assert "sed -n '1,200p' /etc/docker/daemon.json" not in text
+    assert "git diff\n" not in text
+    assert "git diff --cached\n" not in text
 
 
 def test_marketing_stages_do_not_start_without_approval():

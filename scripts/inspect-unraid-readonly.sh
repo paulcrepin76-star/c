@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
 # Read-only Unraid inspection. Paste this on the server.
-# It does not check out files, start containers, create networks, or change ZFS.
-# The only file it writes is /tmp/unraid-marketing-inspect.txt.
+# The child shell owns set -u and the tee redirection, so the interactive shell stays as it was.
+# The only file written is /tmp/unraid-marketing-inspect.txt.
+bash <<'UNRAID_INSPECT'
 set -u
+export GIT_OPTIONAL_LOCKS=0
 
 exec > >(tee /tmp/unraid-marketing-inspect.txt) 2>&1
 
-echo "READ ONLY. No git checkout, pull, reset, docker run, network create, compose, zfs, or sysctl."
+echo "READ ONLY. No checkout, pull, reset, container start, network create, storage change, or sysctl."
 echo "The only write is /tmp/unraid-marketing-inspect.txt."
+echo "GIT_OPTIONAL_LOCKS=${GIT_OPTIONAL_LOCKS}"
 date --iso-8601=seconds
 hostname
 echo
@@ -18,11 +21,11 @@ if git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   git -C "$ROOT" status --short --branch
   echo "HEAD $(git -C "$ROOT" rev-parse HEAD)"
   git -C "$ROOT" branch -vv
-  echo "--- unstaged ---"
+  echo "--- unstaged names ---"
   git -C "$ROOT" diff --stat
-  echo "--- staged ---"
+  echo "--- staged names ---"
   git -C "$ROOT" diff --cached --stat
-  echo "--- untracked ---"
+  echo "--- untracked names ---"
   git -C "$ROOT" ls-files --others --exclude-standard
 else
   echo "Not a git checkout: $ROOT"
@@ -61,11 +64,15 @@ echo
 
 echo "===== docker networks ====="
 docker network ls || true
-echo "===== docker network inspect ====="
+echo "===== docker network subnets ====="
 ids="$(docker network ls -q 2>/dev/null || true)"
 if [ -n "$ids" ]; then
+  # Names, drivers, subnets, and attached addresses only. Labels and options are omitted.
   # shellcheck disable=SC2086
-  docker network inspect $ids || true
+  docker network inspect $ids --format 'network {{.Name}} driver {{.Driver}} scope {{.Scope}}
+{{range .IPAM.Config}}subnet {{.Subnet}} gateway {{.Gateway}} range {{.IPRange}}
+{{end}}{{range .Containers}}attached {{.Name}} {{.IPv4Address}}
+{{end}}' || true
 else
   echo "no docker networks"
 fi
@@ -73,17 +80,19 @@ echo
 
 echo "===== address pools ====="
 docker info 2>/dev/null | awk 'BEGIN{p=0} /Default Address Pool/{p=1} p{print} p && /^[^ ]/{if(!/Default Address Pool/){exit}}' || true
-echo "--- /etc/docker/daemon.json ---"
-if [ -f /etc/docker/daemon.json ]; then
-  sed -n '1,200p' /etc/docker/daemon.json
+echo "--- daemon address pools ---"
+if [ -f /etc/docker/daemon.json ] && command -v python3 >/dev/null 2>&1; then
+  python3 -c 'import json; d=json.load(open("/etc/docker/daemon.json")); p=d.get("default-address-pools"); print("default-address-pools="+json.dumps(p) if p else "default-address-pools absent; other daemon.json keys omitted")'
+elif [ -f /etc/docker/daemon.json ]; then
+  echo "daemon.json present; contents omitted. python3 is absent, so its address pools were not extracted."
 else
-  echo "absent"
+  echo "daemon.json absent"
 fi
-echo "--- /boot/config/docker.cfg ---"
+echo "--- docker.cfg storage keys ---"
 if [ -f /boot/config/docker.cfg ]; then
-  sed -n '1,200p' /boot/config/docker.cfg
+  grep -E '^(DOCKER_ENABLED|DOCKER_CUSTOM_NETWORKS|DOCKER_IMAGE_FILE|DOCKER_IMAGE_SIZE|DOCKER_APP_CONFIG_PATH)=' /boot/config/docker.cfg || echo "none of the storage keys were set"
 else
-  echo "absent"
+  echo "docker.cfg absent"
 fi
 echo
 
@@ -138,3 +147,4 @@ find /mnt -maxdepth 5 -type d \( \
 \) -print 2>/dev/null || true
 echo
 echo "END. Paste this whole transcript back. Nothing was started."
+UNRAID_INSPECT
