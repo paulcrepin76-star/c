@@ -64,7 +64,7 @@ export function Shell({ email, onLogout }: { email: string; onLogout: () => void
             </button>
           </nav>
         )}
-        <main className="rise mx-auto max-w-6xl px-4 py-6 pb-16 md:px-8">
+        <main className="rise mx-auto max-w-7xl px-4 py-6 pb-16 md:px-8">
           <Outlet />
         </main>
       </div>

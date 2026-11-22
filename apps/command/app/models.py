@@ -86,6 +86,7 @@ class SocialPost(Base):
     remote_state: Mapped[str] = mapped_column(String(40), default="")
     release_url: Mapped[str] = mapped_column(String(500), default="")
     detail: Mapped[str] = mapped_column(Text, default="")
+    analytics_json: Mapped[str] = mapped_column(Text, default="{}")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
@@ -152,6 +153,17 @@ class Event(Base):
     promo_source: Mapped[str] = mapped_column(String(40), default="")
     status: Mapped[str] = mapped_column(String(40), default="draft")
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class MetricSample(Base):
+    __tablename__ = "metric_samples"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    metric: Mapped[str] = mapped_column(String(80))
+    value: Mapped[int] = mapped_column(Integer)
+    captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    source: Mapped[str] = mapped_column(String(200), default="")
+    detail: Mapped[str] = mapped_column(Text, default="")
 
 
 class Notification(Base):

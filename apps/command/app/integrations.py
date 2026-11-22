@@ -162,6 +162,10 @@ def _runtime(db: Session) -> list[dict]:
             row["detail"] = "No official write API is connected. Nothing is marked reachable."
         if row["id"] == "ollama" and not row["configured"]:
             row["detail"] = "OLLAMA_BASE_URL is empty. Existing Ollama containers were not contacted."
+        if row["id"] == "postiz":
+            row["detail"] = f"{row['detail']} A reachable homepage is not a passed public API authentication test."
+        if row["id"] == "n8n" and row["reachable"] is False:
+            row["detail"] = f"{row['detail']} Workflows are not activated from this dashboard."
     return rows
 
 

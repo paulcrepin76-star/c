@@ -20,6 +20,7 @@ from app.models import (
     Event,
     MenuDocument,
     MenuItem,
+    MetricSample,
     Notification,
     Review,
     SocialPost,
@@ -424,9 +425,12 @@ def submit_post(db: Session, post_id: int, mode: str) -> dict:
     return post_out(row)
 
 
-def refresh_posts(db: Session) -> dict:
-    start = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    end = datetime.now(timezone.utc).replace(hour=23, minute=59, second=59, microsecond=0)
+def refresh_posts(db: Session, start: datetime | None = None, end: datetime | None = None) -> dict:
+    now = datetime.now(timezone.utc)
+    if start is None:
+        start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    if end is None:
+        end = now.replace(hour=23, minute=59, second=59, microsecond=0)
     result = postiz.request(
         db,
         "GET",
@@ -445,6 +449,7 @@ def refresh_posts(db: Session) -> dict:
             continue
         row.remote_state = str(item.get("state") or "")
         row.release_url = str(item.get("releaseURL") or "")
+        row.analytics_json = dump(_post_analytics(item))
         row.status = "published" if row.remote_state == "PUBLISHED" or row.release_url else postiz.map_remote_state(row.remote_state)
         if row.remote_state == "ERROR":
             row.detail = str(item.get("error") or "Postiz reported an error.")
@@ -453,6 +458,40 @@ def refresh_posts(db: Session) -> dict:
         updated += 1
     db.commit()
     return {"ok": True, "detail": f"Matched {updated} posts with Postiz.", "updated": updated}
+
+
+def _post_analytics(item: dict) -> dict:
+    stats = {}
+    for key in ("likes", "comments", "impressions", "reach", "engagement"):
+        value = item.get(key)
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            stats[key] = value
+    return stats
+
+
+def refresh_contact_total(db: Session) -> dict:
+    result = mautic.request(db, "GET", "/api/contacts?limit=1")
+    if not result.ok:
+        return {"ok": False, "stored": False, "detail": result.detail}
+    total = mautic.contact_total(result.payload)
+    if total is None:
+        return {"ok": False, "stored": False, "detail": "Mautic answered without a contact total. Nothing was stored."}
+    db.add(
+        MetricSample(
+            metric="mautic_contact_total",
+            value=total,
+            captured_at=utcnow(),
+            source="Mautic GET /api/contacts?limit=1",
+            detail="Contact total. Not new contacts.",
+        )
+    )
+    db.commit()
+    return {
+        "ok": True,
+        "stored": True,
+        "contacts": total,
+        "detail": "Stored the Mautic contact total. It was not stored as new contacts.",
+    }
 
 
 def delete_post(db: Session, post_id: int) -> dict:

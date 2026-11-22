@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { api, money } from "./api";
-import type { CafeEvent, Campaign, Capability, Channel, IntegrationProof, MenuItem, Overview as OverviewData, Post, Profile, Review, RuntimeProbe, SecretField, Status } from "./types";
+import type { CafeEvent, Campaign, Capability, Channel, IntegrationProof, MenuItem, Overview as OverviewData, PerformanceChart, PerformanceMetric, PerformanceReport, Post, Profile, Review, RuntimeProbe, SecretField, Status } from "./types";
 import { Banner, Bars, Card, PageTitle, StatusDot, useError } from "./ui";
 
 const DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
@@ -34,100 +34,253 @@ export function Login({ onSuccess }: { onSuccess: (email: string) => void }) {
 }
 
 export function Overview() {
-  const [data, setData] = useState<OverviewData | null>(null);
+  const [data, setData] = useState<PerformanceReport | null>(null);
+  const [statuses, setStatuses] = useState<Status[]>([]);
+  const [days, setDays] = useState<7 | 30 | 90 | "custom">(30);
+  const [start, setStart] = useState("");
+  const [end, setEnd] = useState("");
+  const [note, setNote] = useState("");
   const { error, run } = useError();
+
+  function query() {
+    if (days === "custom") return `start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
+    return `days=${days}`;
+  }
+
+  async function load() {
+    if (days === "custom" && (!start || !end)) {
+      setData(null);
+      return;
+    }
+    const [report, overview] = await Promise.all([
+      api<PerformanceReport>(`/api/performance?${query()}`),
+      api<OverviewData>("/api/overview"),
+    ]);
+    setData(report);
+    setStatuses(overview.statuses);
+  }
+
   useEffect(() => {
-    void run(async () => setData(await api<OverviewData>("/api/overview")));
-    const timer = window.setInterval(() => {
-      void api<OverviewData>("/api/overview").then(setData).catch(() => undefined);
-    }, 30000);
-    return () => window.clearInterval(timer);
-  }, []);
+    void run(load);
+  }, [days, start, end]);
+
   return (
     <>
-      <PageTitle kicker="Survey Café" title="Marketing command" text="Counts come from records on this server or from an API that answered. A blank section means that source has not reported anything. Nothing on this page is a sample." />
+      <PageTitle
+        kicker="Survey Café"
+        title="Marketing performance"
+        text="Figures come from records stored on this server. A dash means that source has not reported a usable number. Comparisons appear only when the previous period has the same kind of observation."
+      />
       {error && <Banner text={error} tone="bad" />}
+      <div className="mb-4 flex flex-wrap items-end gap-2">
+        {([7, 30, 90] as const).map((value) => (
+          <button key={value} className={days === value ? "btn" : "btn secondary"} type="button" onClick={() => setDays(value)}>
+            {value} days
+          </button>
+        ))}
+        <button className={days === "custom" ? "btn" : "btn secondary"} type="button" onClick={() => setDays("custom")}>Custom</button>
+        {days === "custom" && (
+          <>
+            <label className="text-xs text-[var(--muted)]">Start<input className="field mt-1" type="date" value={start} onChange={(event) => setStart(event.target.value)} /></label>
+            <label className="text-xs text-[var(--muted)]">End<input className="field mt-1" type="date" value={end} onChange={(event) => setEnd(event.target.value)} /></label>
+            <span className="pb-2 text-xs text-[var(--muted)]">Custom dates are UTC calendar days.</span>
+          </>
+        )}
+        <button
+          className="btn secondary"
+          type="button"
+          onClick={() => {
+            void run(async () => {
+              if (days === "custom" && (!start || !end)) return;
+              const report = await api<PerformanceReport>(`/api/performance/refresh?${query()}`, { method: "POST" });
+              setData(report);
+              setNote([report.refresh?.contacts.detail, report.refresh?.posts.detail].filter(Boolean).join(" "));
+              const overview = await api<OverviewData>("/api/overview");
+              setStatuses(overview.statuses);
+            });
+          }}
+        >
+          Refresh sources
+        </button>
+      </div>
+      {days === "custom" && (!start || !end) && <Banner text="Choose a start date and an end date. Nothing is shown until both are set." />}
+      {note && <div className="mb-4"><Banner text={note} /></div>}
       {data && (
         <div className="space-y-4">
+          <p className="text-xs text-[var(--muted)]">
+            {when(data.start)} through {when(data.end)}. Previous period {when(data.previous_start)} through {when(data.previous_end)}. Report built {when(data.generated_at)}.
+          </p>
+          {data.blockers.map((item) => <Banner key={item} text={item} tone="bad" />)}
           <div className="flex flex-wrap gap-2">
-            <Link className="btn" to="/social">New social draft</Link>
-            <Link className="btn secondary" to="/marketing">New email draft</Link>
-            <Link className="btn secondary" to="/assistant">Ask the assistant</Link>
-            <Link className="btn secondary" to="/events">New event</Link>
+            <Link className="btn" to="/social">Social</Link>
+            <Link className="btn secondary" to="/marketing">Email</Link>
+            <Link className="btn secondary" to="/ads">Advertising</Link>
+            <Link className="btn secondary" to="/reviews">Reviews</Link>
+            <Link className="btn secondary" to="/events">Events</Link>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {data.statuses.map((row) => <StatusCard key={row.service} row={row} />)}
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+            {data.kpis.map((metric) => <MetricCard key={metric.id} metric={metric} large />)}
           </div>
-          <div className="grid gap-4 lg:grid-cols-3">
+          <div className="grid gap-3 lg:grid-cols-2">
+            {data.charts.map((chart) => <ChartCard key={chart.id} chart={chart} />)}
+          </div>
+          <div>
+            <h2 className="mb-2 font-display text-2xl">Channels</h2>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {data.channels.map((metric) => <MetricCard key={metric.id} metric={metric} />)}
+            </div>
+          </div>
+          <div className="grid gap-4 lg:grid-cols-2">
             <Card>
-              <h2 className="font-display text-2xl">Activity</h2>
-              <dl className="mt-3 space-y-2 text-sm">
-                <Row label="Scheduled posts" value={data.counts.posts_scheduled} />
-                <Row label="Published posts" value={data.counts.posts_published} />
-                <Row label="Failed posts" value={data.counts.posts_failed} />
-                <Row label="Draft campaigns" value={data.counts.campaigns_draft} />
-                <Row label="Reviews awaiting a decision" value={data.counts.reviews_pending} />
-                <Row label="Unread notes" value={data.counts.notifications_unread} />
+              <h2 className="font-display text-2xl">Content</h2>
+              <div className="mt-3 grid gap-3">
+                <MetricCard metric={data.content.scheduled} />
+                <MetricCard metric={data.content.published} />
+                <MetricCard metric={data.content.engagement} />
+              </div>
+            </Card>
+            <Card>
+              <h2 className="font-display text-2xl">Local reputation</h2>
+              <p className="mt-2 text-xs uppercase tracking-wide text-[var(--muted)]">{data.reputation.status}</p>
+              <dl className="mt-3 grid grid-cols-3 gap-3 text-center">
+                <ReputationStat label="Reviews" value={data.reputation.count === null ? "—" : String(data.reputation.count)} />
+                <ReputationStat label="Average" value={data.reputation.average_rating === null ? "—" : data.reputation.average_rating.toFixed(2)} />
+                <ReputationStat label="Unresolved" value={data.reputation.unresolved_negative === null ? "—" : String(data.reputation.unresolved_negative)} />
               </dl>
-            </Card>
-            <Card>
-              <h2 className="font-display text-2xl">Posts</h2>
-              <div className="mt-3"><Bars rows={data.posts_by_status.map((row) => ({ label: row.status, value: row.count }))} /></div>
-            </Card>
-            <Card>
-              <h2 className="font-display text-2xl">Subscribers</h2>
-              <p className="mt-3 text-sm text-[var(--muted)]">
-                {data.customer_activity
-                  ? `${data.customer_activity.contacts} contacts reported by Mautic. ${data.customer_activity.detail}`
-                  : "Mautic has not reported a contact total."}
-              </p>
-              <p className="mt-3 text-sm text-[var(--muted)]">Engagement opens and clicks are not shown. Mautic has not reported them on this page.</p>
-            </Card>
-          </div>
-          <div className="grid gap-4 lg:grid-cols-2">
-            <Card>
-              <h2 className="font-display text-2xl">Scheduled and published</h2>
-              <ul className="mt-3 space-y-3 text-sm">
-                {data.scheduled_posts.length === 0 && data.published_posts.length === 0 && <li className="text-[var(--muted)]">No scheduled or published posts are stored.</li>}
-                {data.scheduled_posts.map((post) => <li key={`s-${post.id}`}><strong>Scheduled</strong> <span className="text-[var(--muted)]">{post.scheduled_for || "no time"} · {post.body.slice(0, 80) || "No caption"}</span></li>)}
-                {data.published_posts.map((post) => <li key={`p-${post.id}`}><strong>Published</strong> <span className="text-[var(--muted)]">{post.body.slice(0, 80) || "No caption"}</span></li>)}
-              </ul>
-            </Card>
-            <Card>
-              <h2 className="font-display text-2xl">Email drafts</h2>
-              <ul className="mt-3 space-y-3 text-sm">
-                {data.campaigns.length === 0 && <li className="text-[var(--muted)]">No campaigns are stored.</li>}
-                {data.campaigns.map((row) => <li key={row.id}><strong>{row.name}</strong> <span className="text-[var(--muted)]">{row.status}</span></li>)}
-              </ul>
-            </Card>
-          </div>
-          <div className="grid gap-4 lg:grid-cols-2">
-            <Card>
-              <h2 className="font-display text-2xl">Advertising</h2>
-              {data.ad_spend.length === 0 && <p className="mt-3 text-sm text-[var(--muted)]">No advertising report has been stored.</p>}
-              <div className="mt-3"><Bars rows={data.ad_spend.map((row) => ({ label: row.platform, value: row.spend_cents }))} /></div>
-              {data.ad_spend.length > 0 && <p className="mt-2 text-xs text-[var(--muted)]">Bar length is spend in cents from the latest pull.</p>}
-            </Card>
-            <Card>
-              <h2 className="font-display text-2xl">Errors and notes</h2>
-              <ul className="mt-3 space-y-3 text-sm">
-                {data.failed_posts.length === 0 && data.notifications.length === 0 && <li className="text-[var(--muted)]">No failed posts or notes.</li>}
-                {data.failed_posts.map((post) => <li key={post.id}><strong>Failed post</strong> <span className="text-[var(--muted)]">{post.detail || post.body.slice(0, 80)}</span></li>)}
-                {data.notifications.map((note) => (
-                  <li key={note.id}>
-                    <button className="text-left" type="button" onClick={() => void api(`/api/notifications/${note.id}/read`, { method: "POST" })}>
-                      <strong>{note.title}</strong>
-                      <div className="text-[var(--muted)]">{note.body}</div>
-                    </button>
-                  </li>
+              <p className="mt-3 text-xs text-[var(--muted)]">{data.reputation.detail}</p>
+              <Provenance source={data.reputation.source} refreshed={data.reputation.refreshed_at} />
+              <ul className="mt-3 space-y-2 text-sm">
+                {data.reputation.reviews.map((review, index) => (
+                  <li key={`${review.platform}-${index}`}><strong className="capitalize">{review.platform}</strong> {review.rating} · {review.author || "No name"} <span className="text-[var(--muted)]">{review.body.slice(0, 90)}</span></li>
                 ))}
               </ul>
             </Card>
+          </div>
+          <Card>
+            <h2 className="font-display text-2xl">Action center</h2>
+            <p className="mt-1 text-xs text-[var(--muted)]">{data.actions.scope}</p>
+            <div className="mt-3 grid gap-4 md:grid-cols-2">
+              <ActionList title="Failed posts" empty="No failed posts are stored." href="/social">
+                {data.actions.failed_posts.map((row) => <li key={row.id}>{row.detail || row.body.slice(0, 100) || "Failed post"}</li>)}
+              </ActionList>
+              <ActionList title="Pending reviews" empty="No reviews are waiting for a decision." href="/reviews">
+                {data.actions.pending_reviews.map((row) => <li key={row.id}>{row.platform} · {row.body.slice(0, 100) || "No text"}</li>)}
+              </ActionList>
+              <ActionList title="Unsent email drafts" empty="No local or Mautic drafts are waiting." href="/marketing">
+                {data.actions.unsent_drafts.map((row) => <li key={row.id}>{row.name} · {row.status}</li>)}
+              </ActionList>
+              <ActionList title="Upcoming events" empty="No future events are stored." href="/events">
+                {data.actions.upcoming_events.map((row) => <li key={`${row.name}-${row.starts_at}`}>{row.name} · {when(row.starts_at)}</li>)}
+              </ActionList>
+            </div>
+          </Card>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {statuses.map((row) => <StatusCard key={row.service} row={row} />)}
           </div>
         </div>
       )}
     </>
   );
+}
+
+function MetricCard({ metric, large = false }: { metric: PerformanceMetric; large?: boolean }) {
+  return (
+    <Card>
+      <div className="flex items-start justify-between gap-3">
+        <h3 className="text-sm text-[var(--muted)]">{metric.label}</h3>
+        <span className="text-[10px] uppercase tracking-wide text-[var(--muted)]">{metric.status}</span>
+      </div>
+      <div className={large ? "mt-2 font-display text-4xl tabular-nums" : "mt-2 text-2xl tabular-nums"}>{figure(metric)}</div>
+      <Comparison metric={metric} />
+      <p className="mt-2 text-xs text-[var(--muted)]">{metric.detail}</p>
+      <Provenance source={metric.source} refreshed={metric.refreshed_at} />
+    </Card>
+  );
+}
+
+function ChartCard({ chart }: { chart: PerformanceChart }) {
+  return (
+    <Card>
+      <div className="flex items-start justify-between gap-3">
+        <h2 className="font-display text-2xl">{chart.label}</h2>
+        <span className="text-[10px] uppercase tracking-wide text-[var(--muted)]">{chart.status}</span>
+      </div>
+      <div className="mt-3">{chart.series === "none" || chart.points.length === 0 ? <p className="text-sm text-[var(--muted)]">{chart.detail}</p> : <Series chart={chart} />}</div>
+      {chart.comparison && <ChartDelta comparison={chart.comparison} />}
+      <Provenance source={chart.source} refreshed={chart.refreshed_at} />
+    </Card>
+  );
+}
+
+function Series({ chart }: { chart: PerformanceChart }) {
+  const width = 360;
+  const height = 140;
+  const pad = 12;
+  const values = chart.points.map((point) => point.value);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const coords = chart.points.map((point, index) => {
+    const x = chart.points.length === 1 ? width / 2 : pad + (index / (chart.points.length - 1)) * (width - pad * 2);
+    const y = max === min ? height / 2 : pad + (1 - (point.value - min) / (max - min)) * (height - pad * 2);
+    return { ...point, x, y };
+  });
+  const path = coords.map((point, index) => `${index === 0 ? "M" : "L"}${point.x},${point.y}`).join(" ");
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} className="h-36 w-full text-[var(--accent)]" role="img" aria-label={chart.label}>
+      {chart.series === "line" && <path d={path} fill="none" stroke="currentColor" strokeWidth="2" />}
+      {coords.map((point, index) => <circle key={`${point.at}-${index}`} cx={point.x} cy={point.y} r="3.5" fill="currentColor"><title>{`${point.label || point.at}: ${point.value}`}</title></circle>)}
+    </svg>
+  );
+}
+
+function Comparison({ metric }: { metric: PerformanceMetric }) {
+  const comparison = metric.comparison;
+  if (!comparison) return null;
+  const tone = comparison.tone === "good" ? "text-[var(--good)]" : comparison.tone === "bad" ? "text-[var(--bad)]" : "text-[var(--muted)]";
+  const amount = metric.unit === "cents" ? money(Math.abs(comparison.delta)) : String(Math.abs(comparison.delta));
+  const sign = comparison.delta > 0 ? "+" : comparison.delta < 0 ? "−" : "";
+  return <p className={`mt-1 text-sm ${tone}`}>{sign}{amount} versus the previous period</p>;
+}
+
+function ChartDelta({ comparison }: { comparison: NonNullable<PerformanceChart["comparison"]> }) {
+  const tone = comparison.tone === "good" ? "text-[var(--good)]" : comparison.tone === "bad" ? "text-[var(--bad)]" : "text-[var(--muted)]";
+  const sign = comparison.delta > 0 ? "+" : comparison.delta < 0 ? "−" : "";
+  return <p className={`mt-2 text-sm ${tone}`}>{sign}{Math.abs(comparison.delta)} versus the previous stored total</p>;
+}
+
+function Provenance({ source, refreshed }: { source: string; refreshed: string | null }) {
+  return <p className="mt-2 text-[11px] leading-4 text-[var(--muted)]">{source} Last refresh: {refreshed ? when(refreshed) : "not recorded"}.</p>;
+}
+
+function ReputationStat({ label, value }: { label: string; value: string }) {
+  return <div><dt className="text-[11px] uppercase tracking-wide text-[var(--muted)]">{label}</dt><dd className="font-display text-3xl tabular-nums">{value}</dd></div>;
+}
+
+function ActionList({ title, empty, href, children }: { title: string; empty: string; href: string; children: ReactNode }) {
+  const items = Array.isArray(children) ? children : [children];
+  const present = items.filter(Boolean);
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-sm">{title}</h3>
+        <Link className="text-xs text-[var(--accent)]" to={href}>Open</Link>
+      </div>
+      <ul className="mt-2 space-y-2 text-sm text-[var(--muted)]">{present.length === 0 ? <li>{empty}</li> : children}</ul>
+    </div>
+  );
+}
+
+function figure(metric: PerformanceMetric) {
+  if (metric.value === null || metric.status !== "actual") return "—";
+  if (metric.unit === "cents") return money(metric.value);
+  return String(metric.value);
+}
+
+function when(value: string | null) {
+  if (!value) return "no successful refresh";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return `${date.toLocaleString("en-US", { timeZone: "America/New_York", dateStyle: "medium", timeStyle: "short" })} ET`;
 }
 
 function StatusCard({ row }: { row: Status }) {
@@ -138,10 +291,6 @@ function StatusCard({ row }: { row: Status }) {
       <p className="mt-2 text-xs text-[var(--muted)]">{row.detail}. {auth}. {row.ms} ms.</p>
     </Card>
   );
-}
-
-function Row({ label, value }: { label: string; value: number }) {
-  return <div className="flex justify-between gap-4"><dt className="text-[var(--muted)]">{label}</dt><dd className="tabular-nums">{value}</dd></div>;
 }
 
 export function Profiles() {

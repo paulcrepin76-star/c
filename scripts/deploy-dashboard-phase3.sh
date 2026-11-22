@@ -198,8 +198,15 @@ require_running resto-mautic-worker
 require_healthy resto-postiz
 require_running resto-postiz-postgres
 require_running resto-postiz-redis
-require_healthy resto-temporal
-echo "Mautic and Postiz are healthy. Their containers will not be recreated."
+temporal_health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' resto-temporal 2>/dev/null || echo missing)"
+if [ "$temporal_health" != "healthy" ]; then
+  echo "Refusing: resto-temporal health is ${temporal_health}."
+  echo "The healthcheck is: temporal operator cluster health --address 127.0.0.1:7233."
+  echo "A running container is not enough. Phase 3 does not restart Temporal and does not start the dashboard."
+  stop 1
+fi
+echo "Mautic and Postiz containers are healthy. Postiz homepage health is not the public API authentication test. That test is still unresolved."
+echo "Their containers will not be recreated."
 kept_before="$(kept_ids)"
 
 stamp="$(date +%Y%m%d-%H%M%S)"
@@ -316,5 +323,6 @@ if [ "$login_code" != "401" ]; then
 fi
 require_kept_unchanged
 echo "Dashboard is answering on http://${want_bind}:8090/. Mautic, Postiz, Temporal, and production containers were not recreated."
+echo "Postiz container health is not the public API authentication test. Do not treat this start as that test."
 "$ROOT/scripts/measure-marketing.sh" dashboard
 echo "Public HTTPS was not started."

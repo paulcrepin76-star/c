@@ -134,6 +134,61 @@ export type Overview = {
   ad_spend: { platform: string; spend_cents: number }[];
 };
 
+export type PerformanceMetric = {
+  id: string;
+  label: string;
+  status: string;
+  value: number | null;
+  unit: string;
+  source: string;
+  refreshed_at: string | null;
+  detail: string;
+  comparison: { previous: number; delta: number; tone: "good" | "bad" | "neutral" } | null;
+};
+
+export type PerformanceChart = {
+  id: string;
+  label: string;
+  status: string;
+  series: string;
+  points: { at: string; value: number; label?: string }[];
+  source: string;
+  refreshed_at: string | null;
+  detail: string;
+  comparison?: PerformanceMetric["comparison"];
+};
+
+export type PerformanceReport = {
+  generated_at: string;
+  start: string;
+  end: string;
+  previous_start: string;
+  previous_end: string;
+  kpis: PerformanceMetric[];
+  charts: PerformanceChart[];
+  channels: PerformanceMetric[];
+  content: { scheduled: PerformanceMetric; published: PerformanceMetric; engagement: PerformanceMetric };
+  reputation: {
+    status: string;
+    count: number | null;
+    average_rating: number | null;
+    unresolved_negative: number | null;
+    source: string;
+    refreshed_at: string | null;
+    detail: string;
+    reviews: { platform: string; author: string; rating: number; body: string }[];
+  };
+  actions: {
+    scope: string;
+    failed_posts: { id: number; body: string; detail: string }[];
+    pending_reviews: { id: number; platform: string; body: string }[];
+    unsent_drafts: { id: number; name: string; status: string }[];
+    upcoming_events: { name: string; starts_at: string | null; status: string }[];
+  };
+  blockers: string[];
+  refresh?: { contacts: { ok: boolean; detail: string }; posts: { ok: boolean; detail: string } };
+};
+
 export type SecretField = {
   group: string;
   name: string;

@@ -3,6 +3,7 @@ from __future__ import annotations
 import hmac
 import time
 from collections import defaultdict
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
@@ -10,6 +11,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app import ai, domain
+from app import performance as performance_report
 from app.capabilities import CAPABILITIES
 from app.integrations import report as integration_report
 from app.config import settings
@@ -159,6 +161,31 @@ def me(request: Request):
 @router.get("/overview")
 def overview(db: Session = Depends(get_db), _: str = Depends(require_user)):
     return domain.overview(db)
+
+
+@router.get("/performance")
+def performance(days: int | None = None, start: str = "", end: str = "", db: Session = Depends(get_db), _: str = Depends(require_user)):
+    window = _performance_window(days, start, end)
+    return performance_report.from_db(db, *window)
+
+
+@router.post("/performance/refresh")
+def performance_refresh(days: int | None = 30, start: str = "", end: str = "", db: Session = Depends(get_db), _: str = Depends(require_user)):
+    window = _performance_window(days, start, end)
+    contacts = domain.refresh_contact_total(db)
+    posts = domain.refresh_posts(db, window[0], window[1])
+    body = performance_report.from_db(db, *window)
+    body["refresh"] = {"contacts": contacts, "posts": posts}
+    return body
+
+
+def _performance_window(days: int | None, start: str, end: str):
+    try:
+        if days is None and not start and not end:
+            days = 30
+        return performance_report.parse_window(datetime.now(timezone.utc), days, start, end)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/status")
