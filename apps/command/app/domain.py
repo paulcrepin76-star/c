@@ -490,6 +490,49 @@ def campaign_out(row: Campaign) -> dict:
     }
 
 
+def update_campaign(db: Session, campaign_id: int, data: dict) -> dict:
+    row = db.get(Campaign, campaign_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    if row.status == "mautic_published":
+        raise HTTPException(
+            status_code=409,
+            detail="This campaign is published in Mautic. This dashboard does not edit or send it.",
+        )
+    if "name" in data and (data.get("name") or "").strip():
+        row.name = data["name"].strip()
+    if "subject" in data:
+        row.subject = (data.get("subject") or "").strip()
+    if "body" in data:
+        row.body = (data.get("body") or "").strip()
+    row.updated_at = utcnow()
+    if row.mautic_id:
+        result = mautic.request(
+            db,
+            "PATCH",
+            f"/api/campaigns/{row.mautic_id}/edit",
+            json={"name": row.name, "description": row.body, "isPublished": False},
+        )
+        if not result.ok:
+            row.detail = f"Saved here. Mautic did not accept the draft update. {result.detail}"
+        else:
+            payload = result.payload if isinstance(result.payload, dict) else {}
+            campaign = payload.get("campaign") if isinstance(payload.get("campaign"), dict) else payload
+            published = bool(campaign.get("isPublished"))
+            row.status = "mautic_published" if published else "mautic_draft"
+            row.detail = (
+                "Mautic reports this campaign as published. This dashboard did not request that."
+                if published
+                else "Mautic accepted the draft update. The campaign is not published."
+            )
+    else:
+        row.status = "local"
+        row.detail = "Saved on this server. Mautic has not received it."
+    audit(db, "campaign.edit", f"{row.id} {row.status}")
+    db.commit()
+    return campaign_out(row)
+
+
 def create_campaign(db: Session, data: dict) -> dict:
     name = (data.get("name") or "").strip()
     if not name:
@@ -512,6 +555,13 @@ def push_campaign(db: Session, campaign_id: int) -> dict:
     row = db.get(Campaign, campaign_id)
     if row is None:
         raise HTTPException(status_code=404, detail="Campaign not found")
+    if row.status == "mautic_published":
+        raise HTTPException(
+            status_code=409,
+            detail="This campaign is already published in Mautic. This dashboard does not send it.",
+        )
+    if row.mautic_id:
+        return update_campaign(db, campaign_id, {"name": row.name, "subject": row.subject, "body": row.body})
     result = mautic.request(
         db,
         "POST",
@@ -886,6 +936,65 @@ def announce(db: Session, data: dict) -> dict:
     return {"published": False, "event_id": event["id"], **queued}
 
 
+def audience(db: Session) -> dict:
+    if not (get_secret(db, "mautic_username") and get_secret(db, "mautic_password")):
+        return {
+            "ok": False,
+            "contacts": None,
+            "segments": None,
+            "detail": "Mautic API credentials are not saved. No contact or segment count is shown.",
+        }
+    contacts = mautic.request(db, "GET", "/api/contacts?limit=1")
+    segments = mautic.request(db, "GET", "/api/segments?limit=100")
+    contact_total = mautic.contact_total(contacts.payload) if contacts.ok else None
+    segment_list = mautic.segment_rows(segments.payload) if segments.ok else None
+    if not contacts.ok and not segments.ok:
+        detail = contacts.detail or segments.detail
+        return {"ok": False, "contacts": None, "segments": None, "detail": detail}
+    parts = []
+    if contacts.ok:
+        parts.append("Mautic returned the contact total." if contact_total is not None else "Mautic answered, without a contact total.")
+    else:
+        parts.append(f"Contacts were not returned. {contacts.detail}")
+    if segments.ok and segment_list is not None:
+        parts.append("Mautic returned the segment list.")
+    elif segments.ok:
+        parts.append("Mautic answered, without a segment list.")
+    else:
+        parts.append(f"Segments were not returned. {segments.detail}")
+    return {
+        "ok": True,
+        "contacts": contact_total,
+        "segments": segment_list,
+        "detail": " ".join(parts),
+    }
+
+
+def save_assistant_draft(db: Session, purpose: str, text: str) -> dict:
+    body = text.strip()
+    if not body:
+        raise HTTPException(status_code=400, detail="There is no draft to save.")
+    if purpose == "campaign":
+        saved = create_campaign(db, {"name": "Assistant draft", "subject": "Survey Café", "body": body})
+        return {"published": False, "kind": "campaign", "record": saved}
+    if purpose in {"social", "event", "ideas", "review"}:
+        row = SocialPost(
+            body=body,
+            channels_json="[]",
+            media_json="[]",
+            status="draft",
+            detail="Saved from the assistant. It has not been sent to Postiz.",
+            created_at=utcnow(),
+            updated_at=utcnow(),
+        )
+        db.add(row)
+        audit(db, "assistant.save", purpose)
+        db.commit()
+        db.refresh(row)
+        return {"published": False, "kind": "post", "record": post_out(row)}
+    raise HTTPException(status_code=400, detail="That draft cannot be saved.")
+
+
 def customer_activity(db: Session) -> dict | None:
     result = mautic.request(db, "GET", "/api/contacts?limit=1")
     if not result.ok:
@@ -903,6 +1012,9 @@ def overview(db: Session) -> dict:
     for row in posts:
         counts[row.status] = counts.get(row.status, 0) + 1
     in_progress = [row for row in posts if row.status in {"draft", "submitted"}]
+    scheduled = [row for row in posts if row.status in {"draft", "submitted"} and row.scheduled_for]
+    published = [row for row in posts if row.status == "published"]
+    failed = [row for row in posts if row.status == "error"]
     reviews = db.query(Review).order_by(Review.id.desc()).limit(6).all()
     events = db.query(Event).order_by(Event.starts_at.asc()).limit(6).all()
     campaigns = db.query(Campaign).order_by(Campaign.id.desc()).limit(6).all()
@@ -916,13 +1028,21 @@ def overview(db: Session) -> dict:
         "customer_activity": customer_activity(db) if mautic_row.get("authenticated") else None,
         "counts": {
             "posts_in_progress": len(in_progress),
+            "posts_scheduled": len(scheduled),
+            "posts_published": len(published),
+            "posts_failed": len(failed),
             "campaigns": db.query(Campaign).count(),
+            "campaigns_draft": db.query(Campaign).filter(Campaign.status.in_(["local", "mautic_draft"])).count(),
             "reviews_pending": db.query(Review).filter(Review.approval == "pending").count(),
             "events": db.query(Event).count(),
             "notifications_unread": db.query(Notification).filter(Notification.read.is_(False)).count(),
         },
         "posts_by_status": [{"status": key, "count": value} for key, value in sorted(counts.items())],
         "posts": [post_out(row) for row in in_progress[:6]],
+        "scheduled_posts": [post_out(row) for row in scheduled[:6]],
+        "published_posts": [post_out(row) for row in published[:6]],
+        "failed_posts": [post_out(row) for row in failed[:6]],
+        "engagement": None,
         "campaigns": [campaign_out(row) for row in campaigns],
         "reviews": [review_out(row) for row in reviews],
         "events": [event_out(row) for row in events],

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { api, money } from "./api";
-import type { CafeEvent, Campaign, Capability, Channel, IntegrationProof, MenuItem, Overview as OverviewData, Post, Profile, Review, SecretField, Status } from "./types";
+import type { CafeEvent, Campaign, Capability, Channel, IntegrationProof, MenuItem, Overview as OverviewData, Post, Profile, Review, RuntimeProbe, SecretField, Status } from "./types";
 import { Banner, Bars, Card, PageTitle, StatusDot, useError } from "./ui";
 
 const DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
@@ -44,54 +45,74 @@ export function Overview() {
   }, []);
   return (
     <>
-      <PageTitle kicker="Tonight" title="The house at a glance" text="Live checks come from the containers. Counts come from records stored here. A blank chart means a platform has not reported anything yet." />
+      <PageTitle kicker="Survey Café" title="Marketing command" text="Counts come from records on this server or from an API that answered. A blank section means that source has not reported anything. Nothing on this page is a sample." />
       {error && <Banner text={error} tone="bad" />}
       {data && (
         <div className="space-y-4">
+          <div className="flex flex-wrap gap-2">
+            <Link className="btn" to="/social">New social draft</Link>
+            <Link className="btn secondary" to="/marketing">New email draft</Link>
+            <Link className="btn secondary" to="/assistant">Ask the assistant</Link>
+            <Link className="btn secondary" to="/events">New event</Link>
+          </div>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {data.statuses.map((row) => <StatusCard key={row.service} row={row} />)}
           </div>
           <div className="grid gap-4 lg:grid-cols-3">
             <Card>
-              <h2 className="font-display text-2xl">In the book</h2>
+              <h2 className="font-display text-2xl">Activity</h2>
               <dl className="mt-3 space-y-2 text-sm">
-                <Row label="Posts in progress" value={data.counts.posts_in_progress} />
-                <Row label="Campaigns" value={data.counts.campaigns} />
+                <Row label="Scheduled posts" value={data.counts.posts_scheduled} />
+                <Row label="Published posts" value={data.counts.posts_published} />
+                <Row label="Failed posts" value={data.counts.posts_failed} />
+                <Row label="Draft campaigns" value={data.counts.campaigns_draft} />
                 <Row label="Reviews awaiting a decision" value={data.counts.reviews_pending} />
-                <Row label="Events" value={data.counts.events} />
                 <Row label="Unread notes" value={data.counts.notifications_unread} />
               </dl>
             </Card>
             <Card>
-              <h2 className="font-display text-2xl">Posts by state</h2>
+              <h2 className="font-display text-2xl">Posts</h2>
               <div className="mt-3"><Bars rows={data.posts_by_status.map((row) => ({ label: row.status, value: row.count }))} /></div>
             </Card>
             <Card>
-              <h2 className="font-display text-2xl">Guests and ads</h2>
+              <h2 className="font-display text-2xl">Subscribers</h2>
               <p className="mt-3 text-sm text-[var(--muted)]">
                 {data.customer_activity
-                  ? `${data.customer_activity.contacts} contacts reported by Mautic.`
+                  ? `${data.customer_activity.contacts} contacts reported by Mautic. ${data.customer_activity.detail}`
                   : "Mautic has not reported a contact total."}
               </p>
-              <div className="mt-4">
-                <Bars rows={data.ad_spend.map((row) => ({ label: row.platform, value: row.spend_cents }))} />
-                {data.ad_spend.length > 0 && <p className="mt-2 text-xs text-[var(--muted)]">Bar length is spend in cents from the latest pull.</p>}
-              </div>
+              <p className="mt-3 text-sm text-[var(--muted)]">Engagement opens and clicks are not shown. Mautic has not reported them on this page.</p>
             </Card>
           </div>
           <div className="grid gap-4 lg:grid-cols-2">
             <Card>
-              <h2 className="font-display text-2xl">Coming up</h2>
+              <h2 className="font-display text-2xl">Scheduled and published</h2>
               <ul className="mt-3 space-y-3 text-sm">
-                {data.events.length === 0 && <li className="text-[var(--muted)]">No events yet.</li>}
-                {data.events.map((event) => <li key={event.id}><strong>{event.name}</strong> <span className="text-[var(--muted)]">{event.starts_at || "Date not set"} · {event.status}</span></li>)}
-                {data.posts.map((post) => <li key={post.id}><strong>Post {post.status}</strong> <span className="text-[var(--muted)]">{post.body.slice(0, 80) || "No caption"}</span></li>)}
+                {data.scheduled_posts.length === 0 && data.published_posts.length === 0 && <li className="text-[var(--muted)]">No scheduled or published posts are stored.</li>}
+                {data.scheduled_posts.map((post) => <li key={`s-${post.id}`}><strong>Scheduled</strong> <span className="text-[var(--muted)]">{post.scheduled_for || "no time"} · {post.body.slice(0, 80) || "No caption"}</span></li>)}
+                {data.published_posts.map((post) => <li key={`p-${post.id}`}><strong>Published</strong> <span className="text-[var(--muted)]">{post.body.slice(0, 80) || "No caption"}</span></li>)}
               </ul>
             </Card>
             <Card>
-              <h2 className="font-display text-2xl">Notes</h2>
+              <h2 className="font-display text-2xl">Email drafts</h2>
               <ul className="mt-3 space-y-3 text-sm">
-                {data.notifications.length === 0 && <li className="text-[var(--muted)]">No notes.</li>}
+                {data.campaigns.length === 0 && <li className="text-[var(--muted)]">No campaigns are stored.</li>}
+                {data.campaigns.map((row) => <li key={row.id}><strong>{row.name}</strong> <span className="text-[var(--muted)]">{row.status}</span></li>)}
+              </ul>
+            </Card>
+          </div>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Card>
+              <h2 className="font-display text-2xl">Advertising</h2>
+              {data.ad_spend.length === 0 && <p className="mt-3 text-sm text-[var(--muted)]">No advertising report has been stored.</p>}
+              <div className="mt-3"><Bars rows={data.ad_spend.map((row) => ({ label: row.platform, value: row.spend_cents }))} /></div>
+              {data.ad_spend.length > 0 && <p className="mt-2 text-xs text-[var(--muted)]">Bar length is spend in cents from the latest pull.</p>}
+            </Card>
+            <Card>
+              <h2 className="font-display text-2xl">Errors and notes</h2>
+              <ul className="mt-3 space-y-3 text-sm">
+                {data.failed_posts.length === 0 && data.notifications.length === 0 && <li className="text-[var(--muted)]">No failed posts or notes.</li>}
+                {data.failed_posts.map((post) => <li key={post.id}><strong>Failed post</strong> <span className="text-[var(--muted)]">{post.detail || post.body.slice(0, 80)}</span></li>)}
                 {data.notifications.map((note) => (
                   <li key={note.id}>
                     <button className="text-left" type="button" onClick={() => void api(`/api/notifications/${note.id}/read`, { method: "POST" })}>
@@ -99,9 +120,6 @@ export function Overview() {
                       <div className="text-[var(--muted)]">{note.body}</div>
                     </button>
                   </li>
-                ))}
-                {data.reviews.slice(0, 3).map((review) => (
-                  <li key={review.id} className="text-[var(--muted)]">{review.platform} · {review.rating} · {review.body.slice(0, 90)}</li>
                 ))}
               </ul>
             </Card>
@@ -266,6 +284,15 @@ export function Social() {
           await load();
         })}>Save draft</button>
       </Card>
+      <Card className="mt-4">
+        <h2 className="font-display text-2xl">Calendar</h2>
+        <ul className="mt-3 space-y-2 text-sm">
+          {posts.filter((post) => post.scheduled_for).length === 0 && <li className="text-[var(--muted)]">No dated posts are stored.</li>}
+          {posts.filter((post) => post.scheduled_for).map((post) => (
+            <li key={post.id}><strong>{post.scheduled_for}</strong> <span className="capitalize text-[var(--muted)]">{post.status}</span> {post.body.slice(0, 90)}</li>
+          ))}
+        </ul>
+      </Card>
       <div className="mt-4 space-y-3">
         {posts.map((post) => (
           <Card key={post.id}>
@@ -292,18 +319,32 @@ export function Social() {
 
 export function Marketing() {
   const [rows, setRows] = useState<Campaign[]>([]);
+  const [audience, setAudience] = useState<{ contacts: number | null; segments: { id: string; name: string; published: boolean }[] | null; detail: string } | null>(null);
   const [name, setName] = useState("");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [note, setNote] = useState("");
   const { error, run } = useError();
-  async function load() { setRows((await api<{ campaigns: Campaign[] }>("/api/campaigns")).campaigns); }
+  async function load() {
+    setRows((await api<{ campaigns: Campaign[] }>("/api/campaigns")).campaigns);
+    setAudience(await api("/api/audience"));
+  }
   useEffect(() => { void run(load); }, []);
   return (
     <>
-      <PageTitle kicker="Mautic" title="Marketing automation" text="Campaigns are created in Mautic as unpublished. n8n can queue an event draft, and it does not send the email. Turn a campaign on inside Mautic when you are ready." />
+      <PageTitle kicker="Mautic" title="Marketing automation" text="Campaigns are created in Mautic as unpublished. This page cannot send or activate one. Turn a campaign on inside Mautic when you decide to. n8n can queue a draft, and it does not send the email." />
       {error && <Banner text={error} tone="bad" />}
       {note && <div className="mb-3"><Banner text={note} /></div>}
+      <Card className="mb-4">
+        <h2 className="font-display text-2xl">Contacts and segments</h2>
+        <p className="mt-2 text-sm text-[var(--muted)]">{audience?.detail || "Mautic has not been asked yet."}</p>
+        <p className="mt-2 text-sm">{audience?.contacts === null || audience?.contacts === undefined ? "No contact total." : `${audience.contacts} contacts reported by Mautic.`}</p>
+        <ul className="mt-3 space-y-1 text-sm">
+          {audience?.segments === null && <li className="text-[var(--muted)]">No segment list was returned.</li>}
+          {audience?.segments?.length === 0 && <li className="text-[var(--muted)]">Mautic returned an empty segment list.</li>}
+          {audience?.segments?.map((segment) => <li key={segment.id || segment.name}>{segment.name} · {segment.published ? "published in Mautic" : "not published"}</li>)}
+        </ul>
+      </Card>
       <Card>
         <div className="grid gap-3">
           <input className="field" placeholder="Campaign name" value={name} onChange={(event) => setName(event.target.value)} />
@@ -319,12 +360,18 @@ export function Marketing() {
         {rows.map((row) => (
           <Card key={row.id}>
             <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <strong>{row.name}</strong>
-                <p className="text-sm text-[var(--muted)]">{row.status}{row.mautic_id ? ` · Mautic ${row.mautic_id}` : ""}</p>
+              <div className="min-w-0 flex-1">
+                <input className="field" aria-label="Campaign name" value={row.name} onChange={(event) => setRows(rows.map((item) => item.id === row.id ? { ...item, name: event.target.value } : item))} />
+                <input className="field mt-2" aria-label="Subject" value={row.subject} onChange={(event) => setRows(rows.map((item) => item.id === row.id ? { ...item, subject: event.target.value } : item))} />
+                <textarea className="field mt-2" aria-label="Email body" value={row.body} onChange={(event) => setRows(rows.map((item) => item.id === row.id ? { ...item, body: event.target.value } : item))} />
+                <p className="mt-2 text-sm text-[var(--muted)]">{row.status}{row.mautic_id ? ` · Mautic ${row.mautic_id}` : ""}</p>
                 <p className="mt-1 text-sm">{row.detail}</p>
               </div>
-              {row.status === "local" && <button className="btn" type="button" onClick={() => void run(async () => { const saved = await api<Campaign>(`/api/campaigns/${row.id}/push`, { method: "POST" }); setNote(saved.detail); await load(); })}>Create in Mautic</button>}
+              <div className="flex flex-wrap gap-2">
+                {row.status !== "mautic_published" && <button className="btn secondary" type="button" onClick={() => void run(async () => { const saved = await api<Campaign>(`/api/campaigns/${row.id}`, { method: "PATCH", body: JSON.stringify({ name: row.name, subject: row.subject, body: row.body }) }); setNote(saved.detail); await load(); })}>Save draft</button>}
+                {row.status === "local" && <button className="btn" type="button" onClick={() => void run(async () => { const saved = await api<Campaign>(`/api/campaigns/${row.id}/push`, { method: "POST" }); setNote(saved.detail); await load(); })}>Create unpublished in Mautic</button>}
+                <button className="btn secondary" type="button" onClick={() => void run(async () => { await api(`/api/campaigns/${row.id}/activate`, { method: "POST" }); })}>Activate</button>
+              </div>
             </div>
           </Card>
         ))}
@@ -473,22 +520,77 @@ export function Events() {
   );
 }
 
+function probeWord(value: boolean | null, yes: string, no: string, unknown: string) {
+  if (value === null) return unknown;
+  return value ? yes : no;
+}
+
+export function Assistant() {
+  const [purpose, setPurpose] = useState("social");
+  const [brief, setBrief] = useState("");
+  const [draft, setDraft] = useState<{ text: string; source: string; detail: string; published: boolean } | null>(null);
+  const { error, run } = useError();
+  return (
+    <>
+      <PageTitle kicker="Optional" title="Marketing assistant" text="A draft is created only when Ollama answers. Saving it keeps a local copy. Nothing is sent to Postiz, Mautic, or a review site from this page." />
+      {error && <Banner text={error} tone="bad" />}
+      <Card>
+        <select className="field" value={purpose} onChange={(event) => setPurpose(event.target.value)}>
+          <option value="social">Social post</option>
+          <option value="review">Review reply</option>
+          <option value="campaign">Email campaign</option>
+          <option value="event">Event announcement</option>
+          <option value="ideas">Ideas from the brief</option>
+        </select>
+        <textarea className="field mt-3" placeholder="Facts you want used. Prices and dates you do not type here will not be invented when the model is off." value={brief} onChange={(event) => setBrief(event.target.value)} />
+        <button className="btn mt-3" type="button" onClick={() => void run(async () => setDraft(await api("/api/assistant/draft", { method: "POST", body: JSON.stringify({ purpose, brief }) })))}>Draft</button>
+        {draft && (
+          <div className="mt-4">
+            <p className="text-sm text-[var(--muted)]">{draft.detail} Source: {draft.source}. Published: {draft.published ? "yes" : "no"}.</p>
+            <textarea className="field mt-2" value={draft.text} onChange={(event) => setDraft({ ...draft, text: event.target.value })} />
+            <button className="btn secondary mt-3" type="button" disabled={!draft.text} onClick={() => void run(async () => {
+              const saved = await api<{ published: boolean }>("/api/assistant/save", { method: "POST", body: JSON.stringify({ purpose, text: draft.text }) });
+              setDraft({ ...draft, detail: saved.published ? "Published." : "Saved as a draft. Nothing was published.", published: saved.published });
+            })}>Save draft for approval</button>
+          </div>
+        )}
+      </Card>
+    </>
+  );
+}
+
 export function Connections() {
   const [rows, setRows] = useState<IntegrationProof[]>([]);
+  const [runtime, setRuntime] = useState<RuntimeProbe[]>([]);
   const [note, setNote] = useState("");
   const { error, run } = useError();
   useEffect(() => {
     void run(async () => {
-      const body = await api<{ note: string; live_calls_made: boolean; integrations: IntegrationProof[] }>("/api/integrations");
+      const body = await api<{ note: string; live_calls_made: boolean; integrations: IntegrationProof[]; runtime: RuntimeProbe[] }>("/api/integrations");
       setNote(body.note);
       setRows(body.integrations);
+      setRuntime(body.runtime);
     });
   }, []);
   return (
     <>
-      <PageTitle kicker="Proof" title="Connections" text="One desk for every platform. A row stays unverified until that platform answers. Saving a key, or passing a unit test, is not a sync." />
+      <PageTitle kicker="Proof" title="Connections" text="Configured, reachable, and authorized describe this server right now. Genuinely tested stays no until a real account action succeeds. A unit test does not change that." />
       {error && <Banner text={error} tone="bad" />}
       {note && <Banner text={note} />}
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        {runtime.map((row) => (
+          <Card key={row.id}>
+            <h2 className="font-display text-2xl">{row.name}</h2>
+            <dl className="mt-2 space-y-1 text-sm">
+              <div className="flex justify-between gap-3"><dt className="text-[var(--muted)]">Configured</dt><dd>{row.configured ? "yes" : "no"}</dd></div>
+              <div className="flex justify-between gap-3"><dt className="text-[var(--muted)]">Reachable</dt><dd>{probeWord(row.reachable, "yes", "no", "not probed")}</dd></div>
+              <div className="flex justify-between gap-3"><dt className="text-[var(--muted)]">Authorized</dt><dd>{probeWord(row.authorized, "yes", "no", "not probed")}</dd></div>
+              <div className="flex justify-between gap-3"><dt className="text-[var(--muted)]">Genuinely tested</dt><dd>{row.genuinely_tested ? "yes" : "no"}</dd></div>
+            </dl>
+            <p className="mt-2 text-sm text-[var(--muted)]">{row.detail}</p>
+          </Card>
+        ))}
+      </div>
       <div className="mt-4 space-y-3">
         {rows.map((row) => (
           <Card key={row.id}>

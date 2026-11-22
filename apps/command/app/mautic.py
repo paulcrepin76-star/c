@@ -71,6 +71,32 @@ def contact_total(payload: object) -> int | None:
         return None
 
 
+def segment_rows(payload: object) -> list[dict] | None:
+    if not isinstance(payload, dict):
+        return None
+    raw = payload.get("segments")
+    if raw is None:
+        raw = payload.get("lists")
+    if raw is None:
+        return None
+    rows: list = list(raw.values()) if isinstance(raw, dict) else raw if isinstance(raw, list) else []
+    if not isinstance(raw, (dict, list)):
+        return None
+    cleaned = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        published = row.get("isPublished")
+        cleaned.append(
+            {
+                "id": str(row.get("id") or ""),
+                "name": row.get("name") or "Untitled",
+                "published": bool(published) if published is not None else False,
+            }
+        )
+    return [row for row in cleaned if row["id"] or row["name"]]
+
+
 def campaign_rows(payload: object) -> list[dict]:
     if not isinstance(payload, dict):
         return []

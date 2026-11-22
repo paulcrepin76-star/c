@@ -1,3 +1,13 @@
+export type RuntimeProbe = {
+  id: string;
+  name: string;
+  configured: boolean;
+  reachable: boolean | null;
+  authorized: boolean | null;
+  genuinely_tested: boolean;
+  detail: string;
+};
+
 export type IntegrationProof = {
   id: string;
   name: string;
@@ -113,6 +123,10 @@ export type Overview = {
   counts: Record<string, number>;
   posts_by_status: { status: string; count: number }[];
   posts: Post[];
+  scheduled_posts: Post[];
+  published_posts: Post[];
+  failed_posts: Post[];
+  engagement: null;
   campaigns: Campaign[];
   reviews: Review[];
   events: CafeEvent[];

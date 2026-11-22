@@ -18,8 +18,12 @@ def test_login_and_overview_have_no_invented_activity(owner):
     assert overview.status_code == 200
     body = overview.json()
     assert body["customer_activity"] is None
+    assert body["engagement"] is None
     assert body["ad_spend"] == []
     assert body["counts"]["posts_in_progress"] == 0
+    assert body["counts"]["posts_published"] == 0
+    assert body["scheduled_posts"] == []
+    assert body["failed_posts"] == []
     statuses = {row["service"]: row for row in body["statuses"]}
     assert statuses["n8n"]["reachable"] is False
     assert statuses["dashboard database"]["reachable"] is True
@@ -224,6 +228,13 @@ def test_integrations_are_not_marked_live(owner):
     assert rows["mautic"]["verification"] == "not_run_live"
     assert all(row["live_verified"] is False for row in body["integrations"])
     assert all(row["authorized_api_test"] is False for row in body["integrations"])
+    assert body["functional_from_unit_tests"] is False
+    runtime = {row["id"]: row for row in body["runtime"]}
+    assert runtime["mautic"]["configured"] is False
+    assert runtime["mautic"]["genuinely_tested"] is False
+    assert runtime["postiz"]["authorized"] is None
+    assert runtime["google_ads"]["reachable"] is None
+    assert all(row["genuinely_tested"] is False for row in body["runtime"])
 
 
 def test_storage_and_resource_guards():
@@ -1070,6 +1081,87 @@ def test_phase2_rollback_removes_postiz_and_leaves_mautic(tmp_path):
     assert "rm -f resto-postgres" not in text
     assert "rm -f mealie" not in text
     assert "Mautic was not removed." in result.stdout
+
+
+def test_campaign_edit_and_activation_do_not_send(owner, monkeypatch):
+    def explode(*args, **kwargs):
+        raise AssertionError("Mautic should not be called for a local draft edit")
+
+    monkeypatch.setattr("app.mautic.request", explode)
+    created = owner.post("/api/campaigns", json={"name": "Paella", "subject": "Tonight", "body": "Two seatings"})
+    assert created.status_code == 200
+    edited = owner.patch(f"/api/campaigns/{created.json()['id']}", json={"name": "Paella night", "body": "Two seatings"})
+    assert edited.status_code == 200
+    assert edited.json()["status"] == "local"
+    assert edited.json()["mautic_id"] == ""
+    blocked = owner.post(f"/api/campaigns/{created.json()['id']}/activate")
+    assert blocked.status_code == 409
+    audience = owner.get("/api/audience")
+    assert audience.status_code == 200
+    assert audience.json()["contacts"] is None
+    assert audience.json()["segments"] is None
+
+
+def test_assistant_draft_is_not_published_without_a_model(owner):
+    draft = owner.post("/api/assistant/draft", json={"purpose": "social", "brief": "Paella on Friday"})
+    assert draft.status_code == 200
+    body = draft.json()
+    assert body["published"] is False
+    assert body["source"] == "unconfigured"
+    assert body["text"] == ""
+    saved = owner.post("/api/assistant/save", json={"purpose": "social", "text": "Friday paella"})
+    assert saved.status_code == 200
+    assert saved.json()["published"] is False
+    assert saved.json()["record"]["status"] == "draft"
+
+
+def test_phase3_stops_before_docker_and_rollback_removes_only_the_dashboard(tmp_path):
+    import os
+    import stat
+    import subprocess
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[3]
+    script = root / "scripts/deploy-dashboard-phase3.sh"
+    text = script.read_text(encoding="utf-8")
+    assert text.index("backup-marketing-env.sh") < text.index("docker compose")
+    assert "--no-deps --no-recreate command" in text
+    assert "docker network create" not in text
+    assert "sysctl -w" not in text
+    assert "compose.public-edge.yml" not in text
+    plain = subprocess.run(["bash", str(script)], cwd=root, capture_output=True, text=True)
+    assert plain.returncode == 3, plain.stdout + plain.stderr
+    assert "Nothing was started." in plain.stdout
+
+    log = tmp_path / "docker.log"
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    fake = bindir / "docker"
+    fake.write_text(
+        "#!/bin/sh\n"
+        f'echo "$@" >> "{log}"\n'
+        'if [ "$1" = "inspect" ] && [ "$2" = "resto-command" ]; then\n'
+        "  exit 0\n"
+        "fi\n"
+        'if [ "$1" = "inspect" ]; then\n'
+        "  exit 1\n"
+        "fi\n"
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
+    env = os.environ.copy()
+    env["PATH"] = f"{bindir}{os.pathsep}{env.get('PATH', '')}"
+    env["MARKETING_PHASE3_ROLLBACK_APPROVED"] = "1"
+    env["MARKETING_PHASE3_ROLLBACK_DELETE_DATA"] = "0"
+    env.pop("APPDATA", None)
+    rolled = subprocess.run(["bash", str(root / "scripts/rollback-dashboard-phase3.sh")], cwd=root, env=env, capture_output=True, text=True)
+    assert rolled.returncode == 0, rolled.stdout + rolled.stderr
+    calls = log.read_text(encoding="utf-8")
+    assert "rm -f resto-command\n" in calls
+    assert "rm -f resto-mautic" not in calls
+    assert "rm -f resto-postiz" not in calls
+    assert "Mautic and Postiz were not removed." in rolled.stdout
 
 
 def _map_count_env(tmp_path, go_text, runtime="65530"):

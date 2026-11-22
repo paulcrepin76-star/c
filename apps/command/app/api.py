@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app import domain
+from app import ai, domain
 from app.capabilities import CAPABILITIES
 from app.integrations import report as integration_report
 from app.config import settings
@@ -46,6 +46,18 @@ class CampaignIn(BaseModel):
     name: str
     subject: str = ""
     body: str = ""
+
+
+class CampaignPatch(BaseModel):
+    name: str | None = None
+    subject: str | None = None
+    body: str | None = None
+
+
+class AssistantIn(BaseModel):
+    purpose: str
+    brief: str = ""
+    text: str = ""
 
 
 class ReviewIn(BaseModel):
@@ -160,8 +172,8 @@ def capabilities(_: str = Depends(require_user)):
 
 
 @router.get("/integrations")
-def integrations(_: str = Depends(require_user)):
-    return integration_report()
+def integrations(db: Session = Depends(get_db), _: str = Depends(require_user)):
+    return integration_report(db)
 
 
 @router.get("/profiles")
@@ -271,6 +283,34 @@ def campaigns(db: Session = Depends(get_db), _: str = Depends(require_user)):
 @router.post("/campaigns")
 def add_campaign(body: CampaignIn, db: Session = Depends(get_db), _: str = Depends(require_user)):
     return domain.create_campaign(db, body.model_dump())
+
+
+@router.patch("/campaigns/{campaign_id}")
+def edit_campaign(campaign_id: int, body: CampaignPatch, db: Session = Depends(get_db), _: str = Depends(require_user)):
+    return domain.update_campaign(db, campaign_id, body.model_dump(exclude_unset=True))
+
+
+@router.post("/campaigns/{campaign_id}/activate")
+def activate_campaign(campaign_id: int, _: str = Depends(require_user)):
+    raise HTTPException(
+        status_code=409,
+        detail="Sending and activation stay off until you approve them in Mautic. This dashboard does not publish the campaign.",
+    )
+
+
+@router.get("/audience")
+def audience(db: Session = Depends(get_db), _: str = Depends(require_user)):
+    return domain.audience(db)
+
+
+@router.post("/assistant/draft")
+def assistant_draft(body: AssistantIn, _: str = Depends(require_user)):
+    return ai.marketing_draft(body.purpose, body.brief)
+
+
+@router.post("/assistant/save")
+def assistant_save(body: AssistantIn, db: Session = Depends(get_db), _: str = Depends(require_user)):
+    return domain.save_assistant_draft(db, body.purpose, body.text)
 
 
 @router.post("/campaigns/pull")
