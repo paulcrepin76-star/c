@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { Link } from "react-router-dom";
 import { api, money } from "./api";
-import type { CafeEvent, Campaign, Capability, Channel, IntegrationProof, MenuItem, Overview as OverviewData, Post, Profile, Review, SecretField, Status } from "./types";
+import type { CafeEvent, Campaign, Capability, Channel, IntegrationProof, MenuItem, Overview as OverviewData, PerformanceChart, PerformanceMetric, PerformanceReport, Post, Profile, Review, RuntimeProbe, SecretField, Status } from "./types";
 import { Banner, Bars, Card, PageTitle, StatusDot, useError } from "./ui";
 
 const DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
@@ -33,83 +34,253 @@ export function Login({ onSuccess }: { onSuccess: (email: string) => void }) {
 }
 
 export function Overview() {
-  const [data, setData] = useState<OverviewData | null>(null);
+  const [data, setData] = useState<PerformanceReport | null>(null);
+  const [statuses, setStatuses] = useState<Status[]>([]);
+  const [days, setDays] = useState<7 | 30 | 90 | "custom">(30);
+  const [start, setStart] = useState("");
+  const [end, setEnd] = useState("");
+  const [note, setNote] = useState("");
   const { error, run } = useError();
+
+  function query() {
+    if (days === "custom") return `start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
+    return `days=${days}`;
+  }
+
+  async function load() {
+    if (days === "custom" && (!start || !end)) {
+      setData(null);
+      return;
+    }
+    const [report, overview] = await Promise.all([
+      api<PerformanceReport>(`/api/performance?${query()}`),
+      api<OverviewData>("/api/overview"),
+    ]);
+    setData(report);
+    setStatuses(overview.statuses);
+  }
+
   useEffect(() => {
-    void run(async () => setData(await api<OverviewData>("/api/overview")));
-    const timer = window.setInterval(() => {
-      void api<OverviewData>("/api/overview").then(setData).catch(() => undefined);
-    }, 30000);
-    return () => window.clearInterval(timer);
-  }, []);
+    void run(load);
+  }, [days, start, end]);
+
   return (
     <>
-      <PageTitle kicker="Tonight" title="The house at a glance" text="Live checks come from the containers. Counts come from records stored here. A blank chart means a platform has not reported anything yet." />
+      <PageTitle
+        kicker="Survey Café"
+        title="Marketing performance"
+        text="Figures come from records stored on this server. A dash means that source has not reported a usable number. Comparisons appear only when the previous period has the same kind of observation."
+      />
       {error && <Banner text={error} tone="bad" />}
+      <div className="mb-4 flex flex-wrap items-end gap-2">
+        {([7, 30, 90] as const).map((value) => (
+          <button key={value} className={days === value ? "btn" : "btn secondary"} type="button" onClick={() => setDays(value)}>
+            {value} days
+          </button>
+        ))}
+        <button className={days === "custom" ? "btn" : "btn secondary"} type="button" onClick={() => setDays("custom")}>Custom</button>
+        {days === "custom" && (
+          <>
+            <label className="text-xs text-[var(--muted)]">Start<input className="field mt-1" type="date" value={start} onChange={(event) => setStart(event.target.value)} /></label>
+            <label className="text-xs text-[var(--muted)]">End<input className="field mt-1" type="date" value={end} onChange={(event) => setEnd(event.target.value)} /></label>
+            <span className="pb-2 text-xs text-[var(--muted)]">Custom dates are UTC calendar days.</span>
+          </>
+        )}
+        <button
+          className="btn secondary"
+          type="button"
+          onClick={() => {
+            void run(async () => {
+              if (days === "custom" && (!start || !end)) return;
+              const report = await api<PerformanceReport>(`/api/performance/refresh?${query()}`, { method: "POST" });
+              setData(report);
+              setNote([report.refresh?.contacts.detail, report.refresh?.posts.detail].filter(Boolean).join(" "));
+              const overview = await api<OverviewData>("/api/overview");
+              setStatuses(overview.statuses);
+            });
+          }}
+        >
+          Refresh sources
+        </button>
+      </div>
+      {days === "custom" && (!start || !end) && <Banner text="Choose a start date and an end date. Nothing is shown until both are set." />}
+      {note && <div className="mb-4"><Banner text={note} /></div>}
       {data && (
         <div className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {data.statuses.map((row) => <StatusCard key={row.service} row={row} />)}
+          <p className="text-xs text-[var(--muted)]">
+            {when(data.start)} through {when(data.end)}. Previous period {when(data.previous_start)} through {when(data.previous_end)}. Report built {when(data.generated_at)}.
+          </p>
+          {data.blockers.map((item) => <Banner key={item} text={item} tone="bad" />)}
+          <div className="flex flex-wrap gap-2">
+            <Link className="btn" to="/social">Social</Link>
+            <Link className="btn secondary" to="/marketing">Email</Link>
+            <Link className="btn secondary" to="/ads">Advertising</Link>
+            <Link className="btn secondary" to="/reviews">Reviews</Link>
+            <Link className="btn secondary" to="/events">Events</Link>
           </div>
-          <div className="grid gap-4 lg:grid-cols-3">
-            <Card>
-              <h2 className="font-display text-2xl">In the book</h2>
-              <dl className="mt-3 space-y-2 text-sm">
-                <Row label="Posts in progress" value={data.counts.posts_in_progress} />
-                <Row label="Campaigns" value={data.counts.campaigns} />
-                <Row label="Reviews awaiting a decision" value={data.counts.reviews_pending} />
-                <Row label="Events" value={data.counts.events} />
-                <Row label="Unread notes" value={data.counts.notifications_unread} />
-              </dl>
-            </Card>
-            <Card>
-              <h2 className="font-display text-2xl">Posts by state</h2>
-              <div className="mt-3"><Bars rows={data.posts_by_status.map((row) => ({ label: row.status, value: row.count }))} /></div>
-            </Card>
-            <Card>
-              <h2 className="font-display text-2xl">Guests and ads</h2>
-              <p className="mt-3 text-sm text-[var(--muted)]">
-                {data.customer_activity
-                  ? `${data.customer_activity.contacts} contacts reported by Mautic.`
-                  : "Mautic has not reported a contact total."}
-              </p>
-              <div className="mt-4">
-                <Bars rows={data.ad_spend.map((row) => ({ label: row.platform, value: row.spend_cents }))} />
-                {data.ad_spend.length > 0 && <p className="mt-2 text-xs text-[var(--muted)]">Bar length is spend in cents from the latest pull.</p>}
-              </div>
-            </Card>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+            {data.kpis.map((metric) => <MetricCard key={metric.id} metric={metric} large />)}
+          </div>
+          <div className="grid gap-3 lg:grid-cols-2">
+            {data.charts.map((chart) => <ChartCard key={chart.id} chart={chart} />)}
+          </div>
+          <div>
+            <h2 className="mb-2 font-display text-2xl">Channels</h2>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {data.channels.map((metric) => <MetricCard key={metric.id} metric={metric} />)}
+            </div>
           </div>
           <div className="grid gap-4 lg:grid-cols-2">
             <Card>
-              <h2 className="font-display text-2xl">Coming up</h2>
-              <ul className="mt-3 space-y-3 text-sm">
-                {data.events.length === 0 && <li className="text-[var(--muted)]">No events yet.</li>}
-                {data.events.map((event) => <li key={event.id}><strong>{event.name}</strong> <span className="text-[var(--muted)]">{event.starts_at || "Date not set"} · {event.status}</span></li>)}
-                {data.posts.map((post) => <li key={post.id}><strong>Post {post.status}</strong> <span className="text-[var(--muted)]">{post.body.slice(0, 80) || "No caption"}</span></li>)}
-              </ul>
+              <h2 className="font-display text-2xl">Content</h2>
+              <div className="mt-3 grid gap-3">
+                <MetricCard metric={data.content.scheduled} />
+                <MetricCard metric={data.content.published} />
+                <MetricCard metric={data.content.engagement} />
+              </div>
             </Card>
             <Card>
-              <h2 className="font-display text-2xl">Notes</h2>
-              <ul className="mt-3 space-y-3 text-sm">
-                {data.notifications.length === 0 && <li className="text-[var(--muted)]">No notes.</li>}
-                {data.notifications.map((note) => (
-                  <li key={note.id}>
-                    <button className="text-left" type="button" onClick={() => void api(`/api/notifications/${note.id}/read`, { method: "POST" })}>
-                      <strong>{note.title}</strong>
-                      <div className="text-[var(--muted)]">{note.body}</div>
-                    </button>
-                  </li>
-                ))}
-                {data.reviews.slice(0, 3).map((review) => (
-                  <li key={review.id} className="text-[var(--muted)]">{review.platform} · {review.rating} · {review.body.slice(0, 90)}</li>
+              <h2 className="font-display text-2xl">Local reputation</h2>
+              <p className="mt-2 text-xs uppercase tracking-wide text-[var(--muted)]">{data.reputation.status}</p>
+              <dl className="mt-3 grid grid-cols-3 gap-3 text-center">
+                <ReputationStat label="Reviews" value={data.reputation.count === null ? "—" : String(data.reputation.count)} />
+                <ReputationStat label="Average" value={data.reputation.average_rating === null ? "—" : data.reputation.average_rating.toFixed(2)} />
+                <ReputationStat label="Unresolved" value={data.reputation.unresolved_negative === null ? "—" : String(data.reputation.unresolved_negative)} />
+              </dl>
+              <p className="mt-3 text-xs text-[var(--muted)]">{data.reputation.detail}</p>
+              <Provenance source={data.reputation.source} refreshed={data.reputation.refreshed_at} />
+              <ul className="mt-3 space-y-2 text-sm">
+                {data.reputation.reviews.map((review, index) => (
+                  <li key={`${review.platform}-${index}`}><strong className="capitalize">{review.platform}</strong> {review.rating} · {review.author || "No name"} <span className="text-[var(--muted)]">{review.body.slice(0, 90)}</span></li>
                 ))}
               </ul>
             </Card>
+          </div>
+          <Card>
+            <h2 className="font-display text-2xl">Action center</h2>
+            <p className="mt-1 text-xs text-[var(--muted)]">{data.actions.scope}</p>
+            <div className="mt-3 grid gap-4 md:grid-cols-2">
+              <ActionList title="Failed posts" empty="No failed posts are stored." href="/social">
+                {data.actions.failed_posts.map((row) => <li key={row.id}>{row.detail || row.body.slice(0, 100) || "Failed post"}</li>)}
+              </ActionList>
+              <ActionList title="Pending reviews" empty="No reviews are waiting for a decision." href="/reviews">
+                {data.actions.pending_reviews.map((row) => <li key={row.id}>{row.platform} · {row.body.slice(0, 100) || "No text"}</li>)}
+              </ActionList>
+              <ActionList title="Unsent email drafts" empty="No local or Mautic drafts are waiting." href="/marketing">
+                {data.actions.unsent_drafts.map((row) => <li key={row.id}>{row.name} · {row.status}</li>)}
+              </ActionList>
+              <ActionList title="Upcoming events" empty="No future events are stored." href="/events">
+                {data.actions.upcoming_events.map((row) => <li key={`${row.name}-${row.starts_at}`}>{row.name} · {when(row.starts_at)}</li>)}
+              </ActionList>
+            </div>
+          </Card>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {statuses.map((row) => <StatusCard key={row.service} row={row} />)}
           </div>
         </div>
       )}
     </>
   );
+}
+
+function MetricCard({ metric, large = false }: { metric: PerformanceMetric; large?: boolean }) {
+  return (
+    <Card>
+      <div className="flex items-start justify-between gap-3">
+        <h3 className="text-sm text-[var(--muted)]">{metric.label}</h3>
+        <span className="text-[10px] uppercase tracking-wide text-[var(--muted)]">{metric.status}</span>
+      </div>
+      <div className={large ? "mt-2 font-display text-4xl tabular-nums" : "mt-2 text-2xl tabular-nums"}>{figure(metric)}</div>
+      <Comparison metric={metric} />
+      <p className="mt-2 text-xs text-[var(--muted)]">{metric.detail}</p>
+      <Provenance source={metric.source} refreshed={metric.refreshed_at} />
+    </Card>
+  );
+}
+
+function ChartCard({ chart }: { chart: PerformanceChart }) {
+  return (
+    <Card>
+      <div className="flex items-start justify-between gap-3">
+        <h2 className="font-display text-2xl">{chart.label}</h2>
+        <span className="text-[10px] uppercase tracking-wide text-[var(--muted)]">{chart.status}</span>
+      </div>
+      <div className="mt-3">{chart.series === "none" || chart.points.length === 0 ? <p className="text-sm text-[var(--muted)]">{chart.detail}</p> : <Series chart={chart} />}</div>
+      {chart.comparison && <ChartDelta comparison={chart.comparison} />}
+      <Provenance source={chart.source} refreshed={chart.refreshed_at} />
+    </Card>
+  );
+}
+
+function Series({ chart }: { chart: PerformanceChart }) {
+  const width = 360;
+  const height = 140;
+  const pad = 12;
+  const values = chart.points.map((point) => point.value);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const coords = chart.points.map((point, index) => {
+    const x = chart.points.length === 1 ? width / 2 : pad + (index / (chart.points.length - 1)) * (width - pad * 2);
+    const y = max === min ? height / 2 : pad + (1 - (point.value - min) / (max - min)) * (height - pad * 2);
+    return { ...point, x, y };
+  });
+  const path = coords.map((point, index) => `${index === 0 ? "M" : "L"}${point.x},${point.y}`).join(" ");
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} className="h-36 w-full text-[var(--accent)]" role="img" aria-label={chart.label}>
+      {chart.series === "line" && <path d={path} fill="none" stroke="currentColor" strokeWidth="2" />}
+      {coords.map((point, index) => <circle key={`${point.at}-${index}`} cx={point.x} cy={point.y} r="3.5" fill="currentColor"><title>{`${point.label || point.at}: ${point.value}`}</title></circle>)}
+    </svg>
+  );
+}
+
+function Comparison({ metric }: { metric: PerformanceMetric }) {
+  const comparison = metric.comparison;
+  if (!comparison) return null;
+  const tone = comparison.tone === "good" ? "text-[var(--good)]" : comparison.tone === "bad" ? "text-[var(--bad)]" : "text-[var(--muted)]";
+  const amount = metric.unit === "cents" ? money(Math.abs(comparison.delta)) : String(Math.abs(comparison.delta));
+  const sign = comparison.delta > 0 ? "+" : comparison.delta < 0 ? "−" : "";
+  return <p className={`mt-1 text-sm ${tone}`}>{sign}{amount} versus the previous period</p>;
+}
+
+function ChartDelta({ comparison }: { comparison: NonNullable<PerformanceChart["comparison"]> }) {
+  const tone = comparison.tone === "good" ? "text-[var(--good)]" : comparison.tone === "bad" ? "text-[var(--bad)]" : "text-[var(--muted)]";
+  const sign = comparison.delta > 0 ? "+" : comparison.delta < 0 ? "−" : "";
+  return <p className={`mt-2 text-sm ${tone}`}>{sign}{Math.abs(comparison.delta)} versus the previous stored total</p>;
+}
+
+function Provenance({ source, refreshed }: { source: string; refreshed: string | null }) {
+  return <p className="mt-2 text-[11px] leading-4 text-[var(--muted)]">{source} Last refresh: {refreshed ? when(refreshed) : "not recorded"}.</p>;
+}
+
+function ReputationStat({ label, value }: { label: string; value: string }) {
+  return <div><dt className="text-[11px] uppercase tracking-wide text-[var(--muted)]">{label}</dt><dd className="font-display text-3xl tabular-nums">{value}</dd></div>;
+}
+
+function ActionList({ title, empty, href, children }: { title: string; empty: string; href: string; children: ReactNode }) {
+  const items = Array.isArray(children) ? children : [children];
+  const present = items.filter(Boolean);
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-sm">{title}</h3>
+        <Link className="text-xs text-[var(--accent)]" to={href}>Open</Link>
+      </div>
+      <ul className="mt-2 space-y-2 text-sm text-[var(--muted)]">{present.length === 0 ? <li>{empty}</li> : children}</ul>
+    </div>
+  );
+}
+
+function figure(metric: PerformanceMetric) {
+  if (metric.value === null || metric.status !== "actual") return "—";
+  if (metric.unit === "cents") return money(metric.value);
+  return String(metric.value);
+}
+
+function when(value: string | null) {
+  if (!value) return "no successful refresh";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return `${date.toLocaleString("en-US", { timeZone: "America/New_York", dateStyle: "medium", timeStyle: "short" })} ET`;
 }
 
 function StatusCard({ row }: { row: Status }) {
@@ -120,10 +291,6 @@ function StatusCard({ row }: { row: Status }) {
       <p className="mt-2 text-xs text-[var(--muted)]">{row.detail}. {auth}. {row.ms} ms.</p>
     </Card>
   );
-}
-
-function Row({ label, value }: { label: string; value: number }) {
-  return <div className="flex justify-between gap-4"><dt className="text-[var(--muted)]">{label}</dt><dd className="tabular-nums">{value}</dd></div>;
 }
 
 export function Profiles() {
@@ -266,6 +433,15 @@ export function Social() {
           await load();
         })}>Save draft</button>
       </Card>
+      <Card className="mt-4">
+        <h2 className="font-display text-2xl">Calendar</h2>
+        <ul className="mt-3 space-y-2 text-sm">
+          {posts.filter((post) => post.scheduled_for).length === 0 && <li className="text-[var(--muted)]">No dated posts are stored.</li>}
+          {posts.filter((post) => post.scheduled_for).map((post) => (
+            <li key={post.id}><strong>{post.scheduled_for}</strong> <span className="capitalize text-[var(--muted)]">{post.status}</span> {post.body.slice(0, 90)}</li>
+          ))}
+        </ul>
+      </Card>
       <div className="mt-4 space-y-3">
         {posts.map((post) => (
           <Card key={post.id}>
@@ -292,18 +468,32 @@ export function Social() {
 
 export function Marketing() {
   const [rows, setRows] = useState<Campaign[]>([]);
+  const [audience, setAudience] = useState<{ contacts: number | null; segments: { id: string; name: string; published: boolean }[] | null; detail: string } | null>(null);
   const [name, setName] = useState("");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [note, setNote] = useState("");
   const { error, run } = useError();
-  async function load() { setRows((await api<{ campaigns: Campaign[] }>("/api/campaigns")).campaigns); }
+  async function load() {
+    setRows((await api<{ campaigns: Campaign[] }>("/api/campaigns")).campaigns);
+    setAudience(await api("/api/audience"));
+  }
   useEffect(() => { void run(load); }, []);
   return (
     <>
-      <PageTitle kicker="Mautic" title="Marketing automation" text="Campaigns are created in Mautic as unpublished. n8n can queue an event draft, and it does not send the email. Turn a campaign on inside Mautic when you are ready." />
+      <PageTitle kicker="Mautic" title="Marketing automation" text="Campaigns are created in Mautic as unpublished. This page cannot send or activate one. Turn a campaign on inside Mautic when you decide to. n8n can queue a draft, and it does not send the email." />
       {error && <Banner text={error} tone="bad" />}
       {note && <div className="mb-3"><Banner text={note} /></div>}
+      <Card className="mb-4">
+        <h2 className="font-display text-2xl">Contacts and segments</h2>
+        <p className="mt-2 text-sm text-[var(--muted)]">{audience?.detail || "Mautic has not been asked yet."}</p>
+        <p className="mt-2 text-sm">{audience?.contacts === null || audience?.contacts === undefined ? "No contact total." : `${audience.contacts} contacts reported by Mautic.`}</p>
+        <ul className="mt-3 space-y-1 text-sm">
+          {audience?.segments === null && <li className="text-[var(--muted)]">No segment list was returned.</li>}
+          {audience?.segments?.length === 0 && <li className="text-[var(--muted)]">Mautic returned an empty segment list.</li>}
+          {audience?.segments?.map((segment) => <li key={segment.id || segment.name}>{segment.name} · {segment.published ? "published in Mautic" : "not published"}</li>)}
+        </ul>
+      </Card>
       <Card>
         <div className="grid gap-3">
           <input className="field" placeholder="Campaign name" value={name} onChange={(event) => setName(event.target.value)} />
@@ -319,12 +509,18 @@ export function Marketing() {
         {rows.map((row) => (
           <Card key={row.id}>
             <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <strong>{row.name}</strong>
-                <p className="text-sm text-[var(--muted)]">{row.status}{row.mautic_id ? ` · Mautic ${row.mautic_id}` : ""}</p>
+              <div className="min-w-0 flex-1">
+                <input className="field" aria-label="Campaign name" value={row.name} onChange={(event) => setRows(rows.map((item) => item.id === row.id ? { ...item, name: event.target.value } : item))} />
+                <input className="field mt-2" aria-label="Subject" value={row.subject} onChange={(event) => setRows(rows.map((item) => item.id === row.id ? { ...item, subject: event.target.value } : item))} />
+                <textarea className="field mt-2" aria-label="Email body" value={row.body} onChange={(event) => setRows(rows.map((item) => item.id === row.id ? { ...item, body: event.target.value } : item))} />
+                <p className="mt-2 text-sm text-[var(--muted)]">{row.status}{row.mautic_id ? ` · Mautic ${row.mautic_id}` : ""}</p>
                 <p className="mt-1 text-sm">{row.detail}</p>
               </div>
-              {row.status === "local" && <button className="btn" type="button" onClick={() => void run(async () => { const saved = await api<Campaign>(`/api/campaigns/${row.id}/push`, { method: "POST" }); setNote(saved.detail); await load(); })}>Create in Mautic</button>}
+              <div className="flex flex-wrap gap-2">
+                {row.status !== "mautic_published" && <button className="btn secondary" type="button" onClick={() => void run(async () => { const saved = await api<Campaign>(`/api/campaigns/${row.id}`, { method: "PATCH", body: JSON.stringify({ name: row.name, subject: row.subject, body: row.body }) }); setNote(saved.detail); await load(); })}>Save draft</button>}
+                {row.status === "local" && <button className="btn" type="button" onClick={() => void run(async () => { const saved = await api<Campaign>(`/api/campaigns/${row.id}/push`, { method: "POST" }); setNote(saved.detail); await load(); })}>Create unpublished in Mautic</button>}
+                <button className="btn secondary" type="button" onClick={() => void run(async () => { await api(`/api/campaigns/${row.id}/activate`, { method: "POST" }); })}>Activate</button>
+              </div>
             </div>
           </Card>
         ))}
@@ -473,22 +669,77 @@ export function Events() {
   );
 }
 
+function probeWord(value: boolean | null, yes: string, no: string, unknown: string) {
+  if (value === null) return unknown;
+  return value ? yes : no;
+}
+
+export function Assistant() {
+  const [purpose, setPurpose] = useState("social");
+  const [brief, setBrief] = useState("");
+  const [draft, setDraft] = useState<{ text: string; source: string; detail: string; published: boolean } | null>(null);
+  const { error, run } = useError();
+  return (
+    <>
+      <PageTitle kicker="Optional" title="Marketing assistant" text="A draft is created only when Ollama answers. Saving it keeps a local copy. Nothing is sent to Postiz, Mautic, or a review site from this page." />
+      {error && <Banner text={error} tone="bad" />}
+      <Card>
+        <select className="field" value={purpose} onChange={(event) => setPurpose(event.target.value)}>
+          <option value="social">Social post</option>
+          <option value="review">Review reply</option>
+          <option value="campaign">Email campaign</option>
+          <option value="event">Event announcement</option>
+          <option value="ideas">Ideas from the brief</option>
+        </select>
+        <textarea className="field mt-3" placeholder="Facts you want used. Prices and dates you do not type here will not be invented when the model is off." value={brief} onChange={(event) => setBrief(event.target.value)} />
+        <button className="btn mt-3" type="button" onClick={() => void run(async () => setDraft(await api("/api/assistant/draft", { method: "POST", body: JSON.stringify({ purpose, brief }) })))}>Draft</button>
+        {draft && (
+          <div className="mt-4">
+            <p className="text-sm text-[var(--muted)]">{draft.detail} Source: {draft.source}. Published: {draft.published ? "yes" : "no"}.</p>
+            <textarea className="field mt-2" value={draft.text} onChange={(event) => setDraft({ ...draft, text: event.target.value })} />
+            <button className="btn secondary mt-3" type="button" disabled={!draft.text} onClick={() => void run(async () => {
+              const saved = await api<{ published: boolean }>("/api/assistant/save", { method: "POST", body: JSON.stringify({ purpose, text: draft.text }) });
+              setDraft({ ...draft, detail: saved.published ? "Published." : "Saved as a draft. Nothing was published.", published: saved.published });
+            })}>Save draft for approval</button>
+          </div>
+        )}
+      </Card>
+    </>
+  );
+}
+
 export function Connections() {
   const [rows, setRows] = useState<IntegrationProof[]>([]);
+  const [runtime, setRuntime] = useState<RuntimeProbe[]>([]);
   const [note, setNote] = useState("");
   const { error, run } = useError();
   useEffect(() => {
     void run(async () => {
-      const body = await api<{ note: string; live_calls_made: boolean; integrations: IntegrationProof[] }>("/api/integrations");
+      const body = await api<{ note: string; live_calls_made: boolean; integrations: IntegrationProof[]; runtime: RuntimeProbe[] }>("/api/integrations");
       setNote(body.note);
       setRows(body.integrations);
+      setRuntime(body.runtime);
     });
   }, []);
   return (
     <>
-      <PageTitle kicker="Proof" title="Connections" text="One desk for every platform. A row stays unverified until that platform answers. Saving a key, or passing a unit test, is not a sync." />
+      <PageTitle kicker="Proof" title="Connections" text="Configured, reachable, and authorized describe this server right now. Genuinely tested stays no until a real account action succeeds. A unit test does not change that." />
       {error && <Banner text={error} tone="bad" />}
       {note && <Banner text={note} />}
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        {runtime.map((row) => (
+          <Card key={row.id}>
+            <h2 className="font-display text-2xl">{row.name}</h2>
+            <dl className="mt-2 space-y-1 text-sm">
+              <div className="flex justify-between gap-3"><dt className="text-[var(--muted)]">Configured</dt><dd>{row.configured ? "yes" : "no"}</dd></div>
+              <div className="flex justify-between gap-3"><dt className="text-[var(--muted)]">Reachable</dt><dd>{probeWord(row.reachable, "yes", "no", "not probed")}</dd></div>
+              <div className="flex justify-between gap-3"><dt className="text-[var(--muted)]">Authorized</dt><dd>{probeWord(row.authorized, "yes", "no", "not probed")}</dd></div>
+              <div className="flex justify-between gap-3"><dt className="text-[var(--muted)]">Genuinely tested</dt><dd>{row.genuinely_tested ? "yes" : "no"}</dd></div>
+            </dl>
+            <p className="mt-2 text-sm text-[var(--muted)]">{row.detail}</p>
+          </Card>
+        ))}
+      </div>
       <div className="mt-4 space-y-3">
         {rows.map((row) => (
           <Card key={row.id}>

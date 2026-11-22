@@ -215,6 +215,26 @@ Phase 2 exit status:
 
 There is no exit 5. Phase 2 does not continue without a verified backup.
 
+Phase 3 is `scripts/deploy-dashboard-phase3.sh`. It starts only `resto-command` on `100.116.48.120:8090` after Mautic and Postiz are healthy. It backs up the Mautic and Postiz databases and encrypts the working `.env` before preflight. It checks that the `command` role can read the `command` database on the existing Postiz Postgres. If that database is missing, it creates the role and database with `docker exec` and does not recreate `resto-postiz-postgres`. `docker compose` is called with `--no-deps --no-recreate` for the `command` service only. Mautic, Postiz, Temporal, production containers, `vm.max_map_count`, ZFS, Docker networks, and Caddy stay untouched. `scripts/rollback-dashboard-phase3.sh` removes only `resto-command`.
+
+Phase 3 exit status:
+
+| Code | Meaning |
+| --- | --- |
+| 0 | The dashboard answered on port 8090 and an unsigned `/api/me` was rejected. Existing container ids were unchanged. |
+| 1 | Refused before the dashboard container was created. The commit, paths, health of Mautic or Postiz, or the command database check failed. |
+| 2 | Preflight failed. `resto-command` was not started. |
+| 3 | `MARKETING_PHASE3_APPROVED` was not set. Nothing was started. |
+| 4 | Partial installation. Docker was invoked and the dashboard did not finish, or another container id changed. |
+| 6 | The backup passphrase was missing or rejected. Nothing was started. |
+| 7 | A database backup or the encrypted configuration backup could not be verified. The dashboard was not started. |
+
+Phase 3 is not ready to run on the server until two checks are true. `resto-temporal` has to be healthy, not merely running. Its healthcheck is `temporal operator cluster health --address 127.0.0.1:7233`. A five-second Docker timeout made that command look failed while the process was still starting, so the timeout in `compose.marketing.yml` is 15 seconds and the start period is 90 seconds. Applying that compose change restarts nothing by itself. Do not recreate Temporal until you approve a later deploy. Postiz answering on port 4007 is not the public API authentication test. That test stays unresolved until a saved public API key is accepted by `/api/public/v1/integrations`. The dashboard does not treat homepage reachability as that success.
+
+The homepage reads stored reports for the selected 7, 30, 90, or custom dates. Advertising spend, campaign clicks, published posts, and dated Google or Yelp reviews appear only when those records exist. Reservations, marketing-attributed revenue, and ROI stay unavailable. Mautic's contact total is stored only by Refresh and is never shown as new contacts. A scheduled post is not counted as published. Each figure names its source. A comparison appears only when the previous window has the same kind of observation, and green or red is used only for a direction that has a meaning.
+
+The dashboard reads Mautic and Postiz with credentials saved in its own encrypted store. Those calls are real HTTP requests. A page stays empty when the API has not answered. Sending a campaign and publishing a post stay behind separate buttons, and campaign activation from this dashboard is refused. Ollama is used only when `OLLAMA_BASE_URL` and `OLLAMA_TEXT_MODEL` are set. The installer does not start or change Ollama containers. n8n workflows are not imported by Phase 3.
+
 Social accounts stay disconnected in this phase. Meta, TikTok, and the other OAuth providers reject a Tailscale URL. Postiz builds each redirect as `{FRONTEND_URL}/integrations/social/{provider}`. For a later public name `https://social.example.com` the callbacks are:
 
 | Provider | Redirect URI | Credentials already in `.env` |

@@ -6,6 +6,12 @@ and a unit test that stubs HTTP is not a call to Google, Meta, Yelp, or Mautic.
 
 from __future__ import annotations
 
+from sqlalchemy.orm import Session
+
+from app.config import settings
+from app.probes import service_status
+from app.vault import configured
+
 PROOFS: list[dict] = [
     {
         "id": "mautic",
@@ -114,15 +120,66 @@ PROOFS: list[dict] = [
 ]
 
 
-def report() -> dict:
+def _runtime(db: Session) -> list[dict]:
+    statuses = {row["service"]: row for row in service_status(db)}
+    mautic = statuses.get("mautic", {})
+    postiz = statuses.get("postiz", {})
+    n8n = statuses.get("n8n", {})
+    specs = [
+        ("mautic", "Mautic", configured(db, "mautic_username") and configured(db, "mautic_password"), mautic),
+        ("postiz", "Postiz", configured(db, "postiz_api_key"), postiz),
+        ("n8n", "n8n", bool(settings.n8n_internal_url), n8n),
+        ("ollama", "Local AI drafts", bool(settings.ollama_base_url and settings.ollama_text_model), {}),
+        ("google", "Google Business Profile", configured(db, "google_access_token") and configured(db, "google_location_id"), {}),
+        ("google_ads", "Google Ads", configured(db, "google_ads_developer_token") and configured(db, "google_ads_customer_id"), {}),
+        ("meta_ads", "Meta Ads", configured(db, "meta_access_token") and configured(db, "meta_ad_account_id"), {}),
+        ("facebook", "Facebook", False, {}),
+        ("instagram", "Instagram", False, {}),
+        ("tiktok", "TikTok", False, {}),
+        ("yelp", "Yelp", configured(db, "yelp_api_key") and configured(db, "yelp_business_id"), {}),
+        ("tripadvisor", "Tripadvisor", False, {}),
+        ("apple", "Apple Business Connect", False, {}),
+    ]
+    rows = []
+    for key, name, is_configured, probe in specs:
+        reachable = probe.get("reachable") if probe else None
+        authorized = probe.get("authenticated") if probe else None
+        rows.append(
+            {
+                "id": key,
+                "name": name,
+                "configured": bool(is_configured),
+                "reachable": reachable if probe else None,
+                "authorized": authorized if probe else None,
+                "genuinely_tested": False,
+                "detail": probe.get("detail") if probe else "This server has not probed that API.",
+            }
+        )
+    for row in rows:
+        if row["id"] in {"facebook", "instagram", "tiktok"}:
+            row["detail"] = "A connected account is shown only when Postiz returns it on the Social page."
+        if row["id"] in {"tripadvisor", "apple"}:
+            row["detail"] = "No official write API is connected. Nothing is marked reachable."
+        if row["id"] == "ollama" and not row["configured"]:
+            row["detail"] = "OLLAMA_BASE_URL is empty. Existing Ollama containers were not contacted."
+        if row["id"] == "postiz":
+            row["detail"] = f"{row['detail']} A reachable homepage is not a passed public API authentication test."
+        if row["id"] == "n8n" and row["reachable"] is False:
+            row["detail"] = f"{row['detail']} Workflows are not activated from this dashboard."
+    return rows
+
+
+def report(db: Session) -> dict:
     return {
         "live_calls_made": False,
+        "functional_from_unit_tests": False,
         "note": (
-            "Nothing in this report contacted Google, Meta, Yelp, Tripadvisor, Apple, TikTok, Mautic, or Postiz. "
-            "Unit tests stub HTTP. A saved credential is not a successful sync. "
-            "authorized_api_test stays false until that platform accepts a call made with your credentials. "
-            "Reachability on the overview is a separate local probe and does not mean a post, email, or listing was accepted."
+            "Unit tests do not mark an integration functional. "
+            "configured, reachable, and authorized below are this server's current reading. "
+            "genuinely_tested stays false until a real account action succeeds outside this screen. "
+            "A saved credential, a mocked test, or a health check is not a published post, a sent email, or an ad report."
         ),
+        "runtime": _runtime(db),
         "integrations": [
             {**row, "live_verified": False, "authorized_api_test": False}
             for row in PROOFS

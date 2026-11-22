@@ -74,6 +74,38 @@ def event_promo(name: str, kind: str, starts_at: str, description: str) -> dict:
     return {"text": text, "source": "ollama", "detail": f"Drafted by {model}."}
 
 
+def marketing_draft(purpose: str, brief: str) -> dict:
+    prompts = {
+        "social": "Draft one social caption for Survey Café. Use only the facts in the brief. Do not invent prices, dates, or menu items.",
+        "review": "Draft a reply from Survey Café. Do not invent compensation, staff names, or dishes that are not in the brief.",
+        "campaign": "Draft an unpublished email for Survey Café. Use only the facts in the brief. Do not invent offers.",
+        "event": "Draft an event announcement for Survey Café. Use only the facts in the brief. Do not invent ticket links or prices.",
+        "ideas": "Suggest three marketing ideas for Survey Café grounded in the brief. Mark anything the brief does not support as unknown.",
+    }
+    instruction = prompts.get(purpose)
+    if instruction is None:
+        return {
+            "text": "",
+            "source": "refused",
+            "published": False,
+            "detail": "That draft type is not available.",
+        }
+    text, model = _generate(f"{instruction}\n\nBrief:\n{brief.strip()}")
+    if text is None:
+        return {
+            "text": "",
+            "source": "unconfigured",
+            "published": False,
+            "detail": "No local model is configured. Nothing was drafted, and nothing was published.",
+        }
+    return {
+        "text": text,
+        "source": "ollama",
+        "published": False,
+        "detail": f"Drafted by {model}. It is not published. Approve it before it goes to Postiz or Mautic.",
+    }
+
+
 def read_menu_image(blob: bytes) -> tuple[str | None, str]:
     if not settings.ollama_vision_model:
         return None, "No vision model is configured. The image is stored and was not read."
